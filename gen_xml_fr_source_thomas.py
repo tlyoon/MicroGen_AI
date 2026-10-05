@@ -6,7 +6,7 @@ gen_xml_fr_source_thomas.py  — hardened
 
 - Auto-detects input (source.pdf → source.txt)
 - Extracts problem-set slice from chapter text
-- Calls Gemini 2.5 Pro to produce <quiz> XML with <problemset title=...>
+- Calls Gemini 3.1 Pro Preview to produce <quiz> XML with <problemset title=...>
 - Enforces <quiz> root, titles, and question IDs
 - NEW: XML preflight normalizer replaces risky HTML entities/symbols with XML-safe numeric/ASCII
 - NEW: run_sanitize() only fails on __error*.xml files created in this run
@@ -23,9 +23,9 @@ import xml.etree.ElementTree as ET
 import argparse
 
 # ------------------------------
-# Model init (Gemini 2.5 Pro)
+# Model init (Gemini 3.1 Pro Preview)
 # ------------------------------
-model_name = "gemini-2.5-pro"
+model_name = "gemini-3.1-pro-preview"
 
 try:
     env_path = Path(__file__).resolve().parent / ".env"

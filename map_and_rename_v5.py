@@ -15,7 +15,7 @@ from google.genai import types
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-MODEL_NAME = os.environ.get("MICROVID_FIGURE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-2.5-pro"
+MODEL_NAME = os.environ.get("MICROVID_FIGURE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"
 BATCH_SIZE = 4
 
 

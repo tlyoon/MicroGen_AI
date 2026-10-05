@@ -130,6 +130,16 @@ On Windows, `pdf2image` also requires Poppler to be installed and available on `
 
 The figure-size threshold `ikB` in `crop_figs_v3.py` may need to be adjusted for a textbook family. For example, Thomas' Calculus 13th edition has been run successfully with a threshold around 4.0 kB.
 
+## Default Gemini model
+
+MicroGen_AI now uses **Gemini 3.1 Pro Preview** as the package-wide default LLM for the active figure-mapping, slide-generation, and narration stages:
+
+```text
+gemini-3.1-pro-preview
+```
+
+This model ID is the current Gemini API endpoint for Gemini 3.1 Pro. The default can be overridden globally with `MICROGEN_LLM_MODEL` or per stage with `MICROVID_FIGURE_MODEL`, `MICROVID_SLIDE_MODEL`, and `MICROVID_NARRATION_MODEL`. If no override is supplied, the package uses `gemini-3.1-pro-preview`.
+
 ## Credentials
 
 Credentials are deliberately kept outside the repository.

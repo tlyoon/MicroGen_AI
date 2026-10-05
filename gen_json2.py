@@ -37,7 +37,7 @@ client       = None
 
 if api_key_gemini:
     model_choice = 'gemini'
-    model_name   = "gemini-2.5-pro"
+    model_name   = "gemini-3.1-pro-preview"
     genai.configure(api_key=api_key_gemini)
 elif api_key_oai:
     model_choice = 'openai'

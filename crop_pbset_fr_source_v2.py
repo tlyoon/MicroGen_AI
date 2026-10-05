@@ -346,7 +346,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--in",  dest="pdf_in",  default="source.pdf")
 ap.add_argument("--out", dest="pdf_out", default="problems.pdf")
 ap.add_argument("--llm", dest="llm_backend", default=os.getenv("CROP_LLM", "gemini"))
-ap.add_argument("--model", dest="model_name", default=os.getenv("CROP_MODEL", "gemini-2.5-flash-lite"))
+ap.add_argument("--model", dest="model_name", default=os.getenv("CROP_MODEL", "gemini-3.1-pro-preview"))
 ap.add_argument("--debug", action="store_true")
 args = ap.parse_args()
 

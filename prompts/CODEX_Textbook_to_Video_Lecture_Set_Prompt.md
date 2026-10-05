@@ -108,16 +108,16 @@ V7_DEFAULT
 
 At the time this prompt was written, the package defaults are approximately:
 
-- figure mapping: `gemini-2.5-pro`,
-- slide generation: `gemini-2.5-pro`,
-- narration generation: `gemini-flash-latest`.
+- figure mapping: `gemini-3.1-pro-preview`,
+- slide generation: `gemini-3.1-pro-preview`,
+- narration generation: `gemini-3.1-pro-preview`.
 
 Treat the code package itself as authoritative if those defaults later change.
 
 If `LLM_MODEL` is changed to an explicit model name, for example:
 
 ```text
-LLM_MODEL = "gemini-2.5-pro"
+LLM_MODEL = "gemini-3.1-pro-preview"
 ```
 
 apply it as the common runtime override by setting:

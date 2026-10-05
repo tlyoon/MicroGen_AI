@@ -12,7 +12,7 @@ except Exception:
 
 
 # ------------------- Model init ----------------
-model_name = "gemini-2.5-pro"; model_choice = "gemini"
+model_name = "gemini-3.1-pro-preview"; model_choice = "gemini"
 
 def _microvid_config_dir() -> Path:
     configured = os.environ.get("MICROVID_CONFIG_DIR")

@@ -50,7 +50,7 @@ CFG = CFG()
 # ------------------- Model init ----------------
 # Follows your v3 pattern (env + model_choice)
 # You can flip these defaults if you want.
-model_name = "gemini-2.5-pro"; model_choice = "gemini"
+model_name = "gemini-3.1-pro-preview"; model_choice = "gemini"
 # model_name = "gpt-4o"; model_choice = "openai"
 # model_name = "o4-mini"; model_choice = "openai"
 # model_name = "deepseek-reasoner"; model_choice = "deepseek"

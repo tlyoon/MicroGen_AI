@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 import sys
 import re
 import fix_latex
@@ -15,7 +15,7 @@ if hasattr(sys.stdout, "reconfigure"):
 #model_name = "gpt-4o"    ; model_choice = 'openai'  
 #model_name = "gpt-5-mini"    ; model_choice = 'openai'  
 #model_name = "gpt-5"    ; model_choice = 'openai'  
-model_name = "gemini-2.5-pro"    ; model_choice = 'gemini'  
+model_name = "gemini-3.1-pro-preview"; model_choice = 'gemini'
 ########  end of specify model_name, must be consistent with model_choice ######## 
 
 # Load API credentials from the shared per-user Microvid configuration directory.
@@ -48,7 +48,7 @@ if model_choice == 'gemini':
     api_key = api_key_gemini
     print(f'model_choice: {model_choice}; model_name: {model_name}')
     if not api_key:
-        print("❌ No valid API key found")
+        print("âŒ No valid API key found")
         sys.exit()
     client = genai.Client(api_key=api_key)
     
@@ -56,7 +56,7 @@ elif model_choice == 'openai':
     api_key = api_key_oai
     print(f'model_choice: {model_choice}; model_name: {model_name}')
     if not api_key:
-        print("❌ No valid API key found")
+        print("âŒ No valid API key found")
         sys.exit()
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
@@ -65,7 +65,7 @@ elif model_choice == 'deepseek':
     api_key = api_key_dsk
     print(f'model_choice: {model_choice}; model_name: {model_name}')
     if not api_key:
-        print("❌ No valid API key found")
+        print("âŒ No valid API key found")
         sys.exit()
     from openai import OpenAI
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
@@ -131,7 +131,7 @@ def clean_pause_in_place(path: str = "slides.tex") -> None:
 # -*- coding: utf-8 -*-
 
 """
-clean_slides.py — collapse extra blank lines in a LaTeX file named 'slides.tex'
+clean_slides.py â€” collapse extra blank lines in a LaTeX file named 'slides.tex'
 
 What it does (default behavior):
 - Reads 'slides.tex' from the current directory.
@@ -367,10 +367,10 @@ for attempt in range(1, 5):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
     )
     if result.returncode == 0:
-        print(f"✅ pdflatex compilation succeeded for '{tex_file}' at attempt {attempt}")
+        print(f"âœ… pdflatex compilation succeeded for '{tex_file}' at attempt {attempt}")
         compile_ok = True
         break
-    print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")
+    print(f"âŒ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")
     if attempt == 1:
         fix_latex.clean_tex_file(tex_file)
     elif attempt == 2:

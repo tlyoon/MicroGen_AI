@@ -22,7 +22,7 @@ import google.generativeai as genai
 # Set your API key in environment variable:
 #   export GEMINI_API_KEY="your_key_here"
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-MODEL_NAME = "gemini-2.5-pro"   # adjust if your endpoint uses a slightly different name
+MODEL_NAME = "gemini-3.1-pro-preview"   # adjust if your endpoint uses a slightly different name
 
 
 # ---------------------------------------------------
@@ -103,7 +103,7 @@ def generate_latex_mcq_from_xml(
     questions_per_xml: int = 1,
 ) -> str:
     """
-    Reads XML question banks + LaTeX template, calls Gemini 2.5 Pro once,
+    Reads XML question banks + LaTeX template, calls Gemini 3.1 Pro Preview once,
     and returns the generated LaTeX test document as a string.
     Also saves it to `output_tex_path`.
     """

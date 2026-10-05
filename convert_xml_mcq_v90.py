@@ -40,7 +40,7 @@ except ImportError:
 model_name = "gpt-4o"    ; model_choice = 'openai'       ### worked, use this as default
 #model_name = "gpt-5"    ; model_choice = 'openai'        ### does not work
 #model_name = "gpt-5-mini"    ; model_choice = 'openai'   ### does not work
-#model_name = "gemini-2.5-pro"    ; model_choice = 'gemini'  ### avoid this. work but badly
+#model_name = "gemini-3.1-pro-preview"    ; model_choice = 'gemini'  ### package-standard Gemini alternative
 ########  end of specify model_name, must be consistent with model_choice ########
 
 # Load environment variables

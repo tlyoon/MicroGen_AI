@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 # --- LLM CONFIGURATION ---
 load_dotenv()
-model_name = "gemini-2.5-flash"  ### best with flash version; pro may not work as robustly
+model_name = "gemini-3.1-pro-preview"  ### package-wide default model
 api_key_gemini = os.getenv("GEMINI_API_KEY")
 
 if not api_key_gemini:
