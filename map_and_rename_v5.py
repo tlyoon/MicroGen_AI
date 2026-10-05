@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from PIL import Image
 from google import genai
 from google.genai import types
+from gemini_lane import call_with_retry, gemini_lane
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -46,7 +47,10 @@ def image_part(path: Path):
 
 
 def generate(parts):
-    response = client.models.generate_content(model=MODEL_NAME, contents=parts)
+    response = call_with_retry(
+        lambda: client.models.generate_content(model=MODEL_NAME, contents=parts),
+        label=f"figure mapping ({MODEL_NAME})",
+    )
     text = (response.text or "").strip()
     if not text:
         raise RuntimeError("Gemini returned an empty response")
@@ -177,6 +181,7 @@ Extracted caption text:
 if __name__ == "__main__":
     import merge_lettered_figs_v2
     print("Starting Gemini figure mapping process...")
-    mapping()
+    with gemini_lane("figure_mapping", MODEL_NAME):
+        mapping()
     merge_lettered_figs_v2.main()
     print("Figure mapping completed.")

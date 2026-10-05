@@ -38,6 +38,8 @@ TARGET_SUBDIRECTORIES = "{{default: AUTO_FIRST_PARENT_ALL}}"
 
 MICROVID_CONFIG_DIR = "{{default: AUTO}}"
 
+GEMINI_LANE_DIRECTORY = "{{default: DISABLED; for multi-PC runs set the same synced directory on every worker}}"
+
 WORK_ROOT_DIRECTORY = "{{default: AUTO}}"
 ```
 
@@ -208,6 +210,22 @@ GEMINI_API_KEY=...
 The TTS stage expects a valid Google Cloud credential JSON file. Never copy credentials into the repository, source folders, generated outputs, logs, or chat messages.
 
 On non-Windows systems, choose a secure per-user credential directory and export `MICROVID_CONFIG_DIR` to that directory.
+
+### `GEMINI_LANE_DIRECTORY`
+
+For a normal single-PC run leave this disabled. For coordinated multi-PC generation, set this to the **same shared/synced directory on every participating computer**, for example:
+
+```text
+G:\My Drive\MicroGen_AI\coordination\gemini_lane
+```
+
+Then export it as:
+
+```text
+MICROGEN_GEMINI_LANE_DIR=<shared path>
+```
+
+The package will serialize the Gemini-heavy stages across the participating PCs while non-Gemini work can still proceed independently. Do not launch multi-PC Gemini work unless every worker is using the same lane directory. The package also applies exponential backoff for transient Gemini `429`/`503`/capacity failures.
 
 ### `WORK_ROOT_DIRECTORY`
 
@@ -539,6 +557,8 @@ pending -> figures -> slides -> narration -> tts -> video -> verified -> publish
 3. Do not restart a successfully completed subtopic unnecessarily.
 4. If Codex or the machine is interrupted, inspect existing verified outputs and staging state and resume from the earliest incomplete stage.
 5. Avoid simultaneous jobs on the same machine when Docling, LaTeX, TTS, or FFmpeg resource contention could reduce reliability. Parallelize only when the machine has sufficient resources or when separate machines/workers are intentionally available.
+6. For multi-PC generation against the same Gemini project, require all workers to use the same `MICROGEN_GEMINI_LANE_DIR`. Figure mapping, slide generation, and narration must enter the shared Gemini lane; do not bypass the lane with direct parallel Gemini calls. Non-Gemini stages may continue in parallel on different machines.
+7. Treat transient Gemini `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and capacity errors as retryable and use the package's exponential-backoff helper rather than immediately marking the subtopic permanently failed.
 
 ---
 
@@ -579,6 +599,7 @@ CODE_PACKAGE_REF = "main"
 LLM_MODEL = "V7_DEFAULT"
 TARGET_SUBDIRECTORIES = "AUTO_FIRST_PARENT_ALL"
 MICROVID_CONFIG_DIR = "AUTO"
+GEMINI_LANE_DIRECTORY = "DISABLED"
 WORK_ROOT_DIRECTORY = "AUTO"
 ```
 

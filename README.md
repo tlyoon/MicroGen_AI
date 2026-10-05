@@ -140,6 +140,20 @@ gemini-3.1-pro-preview
 
 This model ID is the current Gemini API endpoint for Gemini 3.1 Pro. The default can be overridden globally with `MICROGEN_LLM_MODEL` or per stage with `MICROVID_FIGURE_MODEL`, `MICROVID_SLIDE_MODEL`, and `MICROVID_NARRATION_MODEL`. If no override is supplied, the package uses `gemini-3.1-pro-preview`.
 
+## Multi-PC Gemini coordination
+
+When several computers generate subchapters against the same Gemini project, do not let the Gemini-heavy stages run independently. MicroGen_AI now includes `gemini_lane.py`, a cooperative FIFO lane that serializes figure mapping, slide generation, and narration across participating machines while still allowing Docling extraction, LaTeX compilation, Google Cloud TTS, PDF slicing, and FFmpeg work to proceed independently.
+
+Enable the lane by setting the same synced directory on every worker, for example on machines that share the same Google Drive mount:
+
+```text
+MICROGEN_GEMINI_LANE_DIR=G:\My Drive\MicroGen_AI\coordination\gemini_lane
+```
+
+The lane uses queue tickets, a synchronization settling window, a heartbeat, stale-ticket recovery, and a post-request cooldown. Gemini requests also use conservative exponential backoff for transient `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and related capacity errors. Useful tuning variables are `MICROGEN_GEMINI_LANE_SETTLE_SECONDS`, `MICROGEN_GEMINI_LANE_CLAIM_GRACE_SECONDS`, `MICROGEN_GEMINI_LANE_COOLDOWN_SECONDS`, `MICROGEN_GEMINI_LANE_STALE_SECONDS`, `MICROGEN_GEMINI_MAX_RETRIES`, `MICROGEN_GEMINI_BACKOFF_BASE_SECONDS`, and `MICROGEN_GEMINI_BACKOFF_MAX_SECONDS`.
+
+For a single-PC run, leave `MICROGEN_GEMINI_LANE_DIR` unset and the coordination layer is disabled. For multi-PC work, every participating machine must point it at the same shared directory; otherwise the workers are not in the same lane.
+
 ## Credentials
 
 Credentials are deliberately kept outside the repository.

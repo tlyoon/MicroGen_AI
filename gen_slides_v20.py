@@ -5,6 +5,7 @@ import fix_latex
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
+from gemini_lane import call_with_retry, gemini_lane
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -344,7 +345,11 @@ if model_choice in ('openai', 'deepseek'):
     latex_presentation = resp.choices[0].message.content
 else:  # gemini
     print("[INFO] Sending prompt to Gemini")
-    resp = client.models.generate_content(model=model_name, contents=prompt)
+    with gemini_lane("slide_generation", model_name):
+        resp = call_with_retry(
+            lambda: client.models.generate_content(model=model_name, contents=prompt),
+            label=f"slide generation ({model_name})",
+        )
     latex_presentation = resp.text
 
 # Clean code fences

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from gemini_lane import call_with_retry, gemini_lane
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -245,16 +246,19 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     prompt = _compose_prompt(slides, source_blocks)
-    text = ""
-    for attempt in range(3):
-        try:
-            chunks = client.models.generate_content_stream(model=MODEL_NAME, contents=prompt, config=config)
-            text = "".join(chunk.text or "" for chunk in chunks)
-            break
-        except Exception as exc:
-            if attempt == 2 or not _is_transient(exc):
-                raise RuntimeError(f"Hybrid narration generation failed for {MODEL_NAME}: {exc}") from exc
-            time.sleep(2**attempt)
+
+    def _stream_once() -> str:
+        chunks = client.models.generate_content_stream(model=MODEL_NAME, contents=prompt, config=config)
+        return "".join(chunk.text or "" for chunk in chunks)
+
+    try:
+        with gemini_lane("narration_generation", MODEL_NAME):
+            text = call_with_retry(
+                _stream_once,
+                label=f"narration generation ({MODEL_NAME})",
+            )
+    except Exception as exc:
+        raise RuntimeError(f"Hybrid narration generation failed for {MODEL_NAME}: {exc}") from exc
     if not text:
         raise RuntimeError(f"Hybrid narration model {MODEL_NAME} returned an empty response.")
     try:
