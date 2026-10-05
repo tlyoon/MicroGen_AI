@@ -20,7 +20,7 @@ TTS_SIDECAR = Path("script_tts.json")
 NARRATION_WPM = int(os.environ.get("MICROVID_NARRATION_WPM", "130"))
 MAX_SOURCE_CHARACTERS = int(os.environ.get("MICROVID_MAX_NARRATION_SOURCE_CHARS", "250000"))
 DEFAULT_BODY_SECONDS = int(os.environ.get("MICROVID_DEFAULT_SLIDE_SECONDS", "45"))
-MODEL_NAME = os.environ.get("MICROVID_NARRATION_MODEL", "gemini-flash-latest")
+MODEL_NAME = os.environ.get("MICROVID_NARRATION_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-flash-latest"
 THINKING_LEVEL = os.environ.get("MICROVID_THINKING_LEVEL", "high").upper()
 
 URL_RE = re.compile(r"\bhttps?://\S+|\bwww\.\S+", re.I)

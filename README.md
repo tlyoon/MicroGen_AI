@@ -188,6 +188,34 @@ python run_gen_slides_videos.py
 
 The package writes the generated outputs into the current working directory.
 
+## Codex batch-generation prompt
+
+For automated multi-subtopic production on a local PC, use:
+
+[`prompts/CODEX_Textbook_to_Video_Lecture_Set_Prompt.md`](prompts/CODEX_Textbook_to_Video_Lecture_Set_Prompt.md)
+
+This prompt is designed to be submitted directly to Codex. Normally the user only needs to define the local `SOURCE_ROOT_DIRECTORY`. By default it:
+
+- pulls the current `main` branch of this repository,
+- installs missing Python and external dependencies when possible,
+- uses the v7/hybrid model defaults,
+- selects all valid `source.pdf` subtopics under the first top-level source folder,
+- runs figure abstraction, slides, narration, TTS, and MP4 generation,
+- publishes verified outputs back into each source subtopic directory, and
+- removes `pages/`, `crops/`, numbered `slideN.pdf`, and numbered `slideN.wav` intermediates after successful verification to reduce storage use.
+
+The prompt also accepts explicit subtopic ranges, an alternate code-package URL/ref, and a common LLM override. The historical Drive template is retained in the prompt as a fallback location, while GitHub `main` is the default authoritative package source.
+
+### Runtime LLM override
+
+Leaving the Codex prompt at `LLM_MODEL = V7_DEFAULT` preserves the package's stage-specific defaults. To use one explicit model for the active Gemini stages during a run, set:
+
+```text
+MICROGEN_LLM_MODEL=<model-name>
+```
+
+Stage-specific variables such as `MICROVID_SLIDE_MODEL`, `MICROVID_FIGURE_MODEL`, and `MICROVID_NARRATION_MODEL` take precedence when deliberately supplied.
+
 ## Hybrid slide-generation approach
 
 The current slide-generation prompt intentionally merges two instruction systems rather than replacing one with the other.

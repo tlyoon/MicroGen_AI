@@ -15,7 +15,8 @@ if hasattr(sys.stdout, "reconfigure"):
 #model_name = "gpt-4o"    ; model_choice = 'openai'  
 #model_name = "gpt-5-mini"    ; model_choice = 'openai'  
 #model_name = "gpt-5"    ; model_choice = 'openai'  
-model_name = "gemini-2.5-pro"    ; model_choice = 'gemini'  
+model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-2.5-pro"
+model_choice = 'gemini'
 ########  end of specify model_name, must be consistent with model_choice ######## 
 
 # Load API credentials from the shared per-user Microvid configuration directory.
