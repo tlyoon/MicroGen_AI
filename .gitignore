@@ -1,0 +1,58 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+google_cloud_credentials.json
+*service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.envrc
+.pytest_cache/
+.mypy_cache/
+
+# Source material and generated educational outputs
+source.pdf
+problems.pdf
+pages/
+crops/
+Figure*.png
+FIGURE*.png
+fig_*.png
+slides.tex
+slides.pdf
+slides.mp4
+slides.log
+slides.aux
+slides.out
+slides.nav
+slides.snm
+slides.toc
+slides.synctex.gz
+slide[0-9]*.pdf
+slide[0-9]*.wav
+script.txt
+script_*.txt
+script_tts.json
+script_tts_*.json
+cleaned_slides.tex
+defective_slides.tex
+
+# Pipeline logs and temporary artifacts
+*.log
+_backup*/
+_before*/
+_test*/
+_hybrid_contact_sheet.png
+*.tmp
+*.bak
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

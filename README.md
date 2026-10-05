@@ -1,0 +1,282 @@
+# MicroGen_AI
+
+MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
+
+The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, Google Cloud text-to-speech audio, per-slide PDF/WAV assets, and a final narrated MP4 video.
+
+## Design goals
+
+MicroGen_AI is built around two complementary priorities:
+
+- **Source fidelity and completeness.** The v6/v7 lineage contributes strict subchapter isolation, source-order preservation, anti-omission checks, figure matching, deterministic output conventions, and LaTeX robustness.
+- **Pedagogical quality.** The newer hybrid instructions add learner orientation, big-picture framing, intuition before formalism, explicit technical bridges, equation interpretation, misconception handling, reasoning checks, visual teaching strategy, and continuous narration across slides.
+
+The result is intended to behave like a reproducible educational production pipeline rather than a generic slide-generation prompt.
+
+## Current active pipeline
+
+```text
+source.pdf
+   |
+   +--> Figure abstraction
+   |      crop_figs_v3.py
+   |      map_and_rename_v5.py
+   |      merge_lettered_figs_v2.py
+   |
+   +--> Hybrid slide generation
+   |      gen_slides_v20.py
+   |      gen_slides_prompt_v20_hybrid.txt
+   |
+   +--> Hybrid narration
+   |      gen_script_v13.py
+   |      gen_script_prompt_v8_hybrid.md
+   |      narration_polish.md
+   |      system_microcredential_architect.md
+   |
+   +--> TTS
+   |      text_to_speech_v25.py
+   |
+   +--> Per-slide PDF generation
+   |      slice_pdf_v21.py
+   |
+   +--> MP4 assembly
+          gen_video_v22.py
+          FFmpeg
+```
+
+`functions.py` resolves versioned modules automatically and selects the highest available `*_vNN.py` implementation for each pipeline stage.
+
+## Principal outputs
+
+A completed run normally produces:
+
+```text
+pages/                  page-level extraction workspace
+crops/                  retained image crops
+Figure *.png             mapped textbook figures
+slides.tex               generated Beamer source
+slides.pdf               complete slide deck
+script.txt               v7-compatible narration text
+script_tts.json          narration/TTS sidecar
+slide1.pdf ...            individual slide PDFs
+slide1.wav ...            individual narration audio
+slides.mp4               final narrated video
+```
+
+Generated artifacts are intentionally excluded from version control by `.gitignore`.
+
+## Main entry points
+
+For a full source-to-video run:
+
+```powershell
+python run_gen_slides_videos.py
+```
+
+This orchestrates the existing v7 stages:
+
+```text
+run_gen_slides.py
+  -> image abstraction
+  -> hybrid slide generation
+
+run_gen_video.py
+  -> hybrid narration
+  -> text-to-speech
+  -> slide splitting
+  -> MP4 generation
+```
+
+For staged execution, the two commands can also be run separately:
+
+```powershell
+python run_gen_slides.py
+python run_gen_video.py
+```
+
+## Installation
+
+MicroGen_AI is currently Windows-first and has been used with Windows 11, Python 3.11/3.12, MiKTeX and FFmpeg.
+
+### 1. Create an environment
+
+```powershell
+conda create -n microgen_ai python=3.11
+conda activate microgen_ai
+pip install -r requirements.txt
+```
+
+### 2. Install LaTeX and FFmpeg
+
+Install a LaTeX distribution that provides `pdflatex` (MiKTeX is currently used in production).
+
+Install FFmpeg or install `imageio-ffmpeg`. The video stage resolves FFmpeg in this order:
+
+1. `MICROVID_FFMPEG`
+2. packaged `imageio-ffmpeg`
+3. system `PATH`
+
+### 3. Figure abstraction dependencies
+
+`crop_figs_v3.py` uses Docling and `pdf2image` for textbook figure extraction. Docling can be dependency-sensitive, so a dedicated environment is sometimes preferable.
+
+Typical additional packages are:
+
+```powershell
+pip install docling pdf2image pillow
+```
+
+On Windows, `pdf2image` also requires Poppler to be installed and available on `PATH`.
+
+The figure-size threshold `ikB` in `crop_figs_v3.py` may need to be adjusted for a textbook family. For example, Thomas' Calculus 13th edition has been run successfully with a threshold around 4.0 kB.
+
+## Credentials
+
+Credentials are deliberately kept outside the repository.
+
+By default MicroGen_AI reads shared API configuration from:
+
+```text
+%LOCALAPPDATA%\Microvid\
+```
+
+The default files are:
+
+```text
+%LOCALAPPDATA%\Microvid\.env
+%LOCALAPPDATA%\Microvid\google_cloud_credentials.json
+```
+
+A minimal `.env` is:
+
+```text
+GEMINI_API_KEY=your_key_here
+```
+
+Optional legacy providers may also use:
+
+```text
+OPENAI_API_KEY=your_key_here
+DEEPSEEK_API_KEY=your_key_here
+```
+
+The credential directory can be overridden with:
+
+```text
+MICROVID_CONFIG_DIR
+```
+
+For Google Cloud TTS, `GOOGLE_APPLICATION_CREDENTIALS` takes precedence when explicitly set.
+
+**Never commit real API keys or Google Cloud service-account JSON files.**
+
+## Quick start
+
+Clone the repository and place a source PDF in the project directory:
+
+```powershell
+git clone https://github.com/tlyoon/MicroGen_AI.git
+cd MicroGen_AI
+Copy-Item C:\path\to\your\source.pdf .\source.pdf
+```
+
+Then run:
+
+```powershell
+python run_gen_slides_videos.py
+```
+
+The package writes the generated outputs into the current working directory.
+
+## Hybrid slide-generation approach
+
+The current slide-generation prompt intentionally merges two instruction systems rather than replacing one with the other.
+
+The v6/v7 framework remains authoritative for:
+
+- source isolation and content coverage
+- macro source order
+- anti-omission checks
+- figure identity and provenance
+- LaTeX/Beamer validity
+- density and overflow control
+- deterministic output structure
+
+The newer pedagogical layer adds:
+
+- an Orientation & Roadmap rather than a purely administrative outline
+- an explicit big idea and governing question
+- intuitive framing before formal derivation
+- technical bridge explanations between compressed reasoning steps
+- interpretation of equations, not just display of equations
+- source-supported misconception handling
+- deliberate visual-representation choices
+- reasoning-based concept checks
+- a conclusion that reconnects formalism to the motivating idea
+
+Major source units are not freely reordered. The system may insert local bridge, comparison, concept-check or figure-focus slides where they improve understanding without changing the source's substantive sequence.
+
+## Hybrid narration approach
+
+Narration preserves the v7 requirement of exactly one narration block per slide while using the stronger `pri`-style teaching logic.
+
+The narration stage therefore aims to:
+
+- remain grounded in `source.pdf`
+- correspond exactly to the fixed slide order
+- explain rather than merely read the slide
+- connect slides into a continuous lesson
+- interpret equations in spoken language
+- direct attention to important features of figures
+- make hidden reasoning steps explicit
+- produce TTS-friendly `tts_text`
+
+`script.txt` remains the v7-compatible human-readable output, while `script_tts.json` preserves structured narration and TTS-specific wording.
+
+## Video generation
+
+The current MP4 stage uses a pri-derived FFmpeg workflow adapted to v7's PDF-based slides:
+
+```text
+slideN.pdf + slideN.wav
+        -> rendered PNG
+        -> H.264/AAC segment
+        -> exact narration-duration constraint
+        -> FFmpeg concat
+        -> slides.mp4
+```
+
+Each segment duration is derived from the WAV sample count, avoiding the multi-second timing drift observed with older `-shortest` behavior on some FFmpeg versions.
+
+## Repository contents
+
+This repository intentionally contains both the active hybrid pipeline and selected legacy utilities from the v7 package. Some older modules remain for compatibility, rollback, MCQ/XML workflows, and historical utility functions.
+
+The active versions for the main video workflow are currently:
+
+- `map_and_rename_v5.py`
+- `gen_slides_v20.py`
+- `gen_script_v13.py`
+- `text_to_speech_v25.py`
+- `slice_pdf_v21.py`
+- `gen_video_v22.py`
+
+## Security and source-material policy
+
+This repository does **not** include textbook `source.pdf` files, generated textbook figures, finished videos, or credentials.
+
+Users are responsible for ensuring that any source material processed with MicroGen_AI is used in accordance with applicable copyright, licensing, institutional and privacy requirements.
+
+## Status
+
+MicroGen_AI is an actively evolving teaching/research automation package. The pipeline has been exercised on real university-level textbook subchapters and is being hardened through production runs. Some legacy scripts are less standardized than the current hybrid video workflow.
+
+## Author
+
+**Yoon Tiem Leong**  
+School of Physics  
+Universiti Sains Malaysia (USM)
+
+## License
+
+Released under the MIT License. See `LICENSE`.

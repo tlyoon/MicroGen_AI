@@ -1,0 +1,20 @@
+#conda create -n microgen_api python=3.11
+# conda activate microgen_api
+
+# requirements.txt
+spyder
+spyder-kernels==3.0.*
+hf_xet
+pymupdf==1.26.4
+pypdf2==3.0.1
+chromadb==1.1.0
+langchain_community
+openai 
+google-generativeai
+pypdf==4.3.*
+python-dotenv
+google-genai
+google-cloud-texttospeech
+imageio-ffmpeg
+contractions
+pywin32

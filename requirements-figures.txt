@@ -1,0 +1,5 @@
+# Additional dependencies for figure abstraction
+# Docling can be version-sensitive; pin locally if needed for reproducibility.
+docling
+pdf2image
+Pillow

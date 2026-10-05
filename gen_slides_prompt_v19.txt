@@ -1,0 +1,248 @@
+
+Sub-chapter content:
+{pdf_content}
+
+======================================================================
+Phase 0 — Preflight and Safety Rails
+======================================================================
+
+Goal: Set up strict anti-omission rules before extraction and slide generation.
+
+Hard constraints:
+- Use ONLY the text in InputText (no outside knowledge).
+- If boundaries or spans are ambiguous, do NOT invent content. Record a gap (see GapList) and continue.
+- Preserve every defined item: definitions, theorems/claims, laws/properties, examples, worked steps, named subsections, cautions/notes, and any explicitly labeled figures/tables/equations that fall within the target span.
+
+Mandatory planning outputs (not part of LaTeX; for your internal planning/audit only):
+- CoverageMap: compact list of included line ranges and page anchors.
+- GapList: any suspected omissions (empty if none).
+- FigureMap: figure IDs found and the derived PNG filenames to include (see figure policy).
+
+Inputs available to you:
+- InputText := the block labeled "Sub-chapter content" (string; contains residual headers/footers and adjacent sections).
+- TargetSectionNumber := the numeric identifier of the FIRST valid sub-topic title encountered in InputText (e.g., "22.3", "4.1.2"). You MUST NOT skip the first valid sub-topic title.
+
+======================================================================
+Phase 1 — High-Fidelity Sub-Chapter Content Isolation
+======================================================================
+
+Objective: Accurately isolate ONLY the text belonging to the first valid sub-chapter.
+
+1) Identify Sub-Topic Title Pattern (v6-preserved, stricter filtering)
+   - Title lines begin with a numeric identifier (e.g., "22.3", "22.4", "4.1.2") followed by title text on the same line.
+   - Explicitly exclude from titles:
+     • Chapter headers/footers (e.g., "Chapter 22 Electric Fields"), running heads, isolated page numbers like "593".
+     • Figure/Table captions (e.g., "Figure 22.6", "Fig. 22-6", "Figure P22.6", "FIGURE 23-7", "TP22.6").
+     • Standalone equation numbers or in-text references without a leading numeric-section title.
+
+2) Determine TargetSectionNumber
+   - Select the first valid sub-topic title encountered in InputText.
+   - Extract both the numeric id (TargetSectionNumber) and its title text (TargetTitleText).
+   - Mark the line as TargetTitleLine.
+
+3) Locate Next Title Line
+   - From the line after TargetTitleLine, find the next valid title whose number logically follows (e.g., Target "22.3" -> next could be "22.4", "22.3.1", or a new chapter like "23.1").
+   - Mark that as NextTitleLine if it exists.
+
+4) Determine Content Boundaries
+   - ContentStartLine = TargetTitleLine.
+   - ContentEndLine   = line just before NextTitleLine; if NextTitleLine not found, then ContentEndLine = last line of InputText.
+   - Page-Anchor Capture (NEW): record all apparent page numbers (standalone integers commonly seen near headers/footers) that fall within ContentStartLine..ContentEndLine as PageAnchors (e.g., [44,45,46,47]). Do not display anchors in slides; use for auditing only.
+
+5) Extract and Filter
+   - Select all lines from ContentStartLine..ContentEndLine inclusive.
+   - Remove obvious headers/footers that intrude (keep PageAnchors noted separately).
+   - Output the result as FilteredContent.
+
+6) Validation (Conceptual Check)
+   - FilteredContent begins with TargetTitleLine and reads as a cohesive unit focused on TargetSectionNumber.
+   - CoverageMap (NEW): record {line_start, line_end, TargetSectionNumber, TargetTitleText, PageAnchors, SubHeadingsFound} where SubHeadingsFound lists any internal subheadings like "22.3.1".
+   - If anything seems skipped internally (e.g., a missing subheading between found subheadings), add an entry to GapList.
+
+7) Noise and Artifact Removal (strict; do not alter math content)
+   - Remove residual reference/line anchors that are NOT part of math:
+     - Any square-bracketed token that contains ONLY digits, commas, spaces, and hyphen/en dash characters.
+       Examples to delete: [98], [260], [112, 132], [44–47], [44-47].
+     - Delete these tokens even when they appear mid-line or at line ends.
+   - Do NOT remove square brackets that enclose actual mathematical expressions (contain letters, operators, or units).
+     If an evaluation bracket is needed in math, render it as \(\left[ \cdots \right]\) inside math mode.
+
+Output of Phase 1:
+- FilteredContent (exact isolated span).
+- TargetSectionNumber (e.g., "22.3").
+- TargetTitleText (e.g., "Coulomb's Law").
+- CoverageMap := { line_start, line_end, PageAnchors: [...], SubHeadingsFound: [...] }.
+- GapList := [] if none; otherwise entries like {type: "boundary-uncertain" | "missing-subheading" | "figure-ref-without-caption", details: "...", approx_lines: [..]}.
+- FigureMap := [{id: "Figure 22.6", filename: "Figure 22.6.png"}, ...] discovered in FilteredContent.
+
+======================================================================
+Phase 1B — Span-Completeness Audit (MUST PASS BEFORE PHASE 2)
+======================================================================
+
+Run the following checks against FilteredContent. Do NOT modify FilteredContent text; the checks determine whether you must introduce a GapSlide later or revise slide planning to ensure coverage.
+
+1) Continuity check
+   - If SubHeadingsFound suggests an ordered sequence (e.g., 1,2,3) and a number is missing, add to GapList.
+
+2) Figure reference check
+   - For each Figure/FIGURE/Fig. reference within the span, confirm at least one descriptive sentence appears nearby. If not, add to GapList.
+
+3) Law/property enumeration
+   - Enumerate all named laws/properties/definitions (e.g., logarithm product, quotient, power, change-of-base). If the text references a named item that does not appear clearly in FilteredContent, add to GapList.
+
+4) Page-span check
+   - If PageAnchors include more than one number (e.g., 44..47), ensure each page span contributes at least one bullet/equation/figure mention in the SlidePlan. If a gap is suspected, add to GapList.
+
+Proceed to Phase 2 even if GapList is non-empty, but include a GapSlide (see below).
+
+======================================================================
+Phase 2 — LaTeX Beamer Presentation Generation (HARDENED)
+======================================================================
+
+Constraint: Use ONLY FilteredContent from Phase 1. Do NOT refer back to InputText or any outside information during slide writing.
+
+NON-NEGOTIABLE:
+- Output MUST begin with \documentclass{...} and MUST end with \end{document}.
+- Every \begin{X} has a matching \end{X}.
+- Inline math MUST use $...$; display math MUST use \[...\] or \begin{equation}...\end{equation}.
+- ASCII-only; no Unicode punctuation; straight quotes only.
+- No Markdown/HTML; no debug tokens (itestart, [citestart], [cite : ...], etc.).
+- In text, escape special ASCII:  %  $  #  &  _  {  }  ~  ^  as \%  \$  \#  \&  \_  \{  \}  \textasciitilde{}  \textasciicircum{}.
+- Use math arrows: replace '->'/'<-' with $\rightarrow$/$\leftarrow$ in math mode.
+- Forbidden artifacts: The LaTeX must contain no residual square-bracketed numeric anchors.
+  Before emitting, delete any token matching the pattern:
+  a single [...] where the inside matches only digits, commas, spaces, and hyphen/en dash.
+  (Examples: [98], [260], [112, 132], [44–47], [44-47]).
+
+
+ULTRA-CRITICAL: Comparison and arrow symbols
+    - ALWAYS typeset all comparison signs inside math mode.
+      Example: use `$>$` and `$<$` (or equivalently `\>` and `\<` inside math).
+    - NEVER output the plain characters ">", "<", or the Unicode variants “›”, “‹”, “＞”, “＜” in text mode.
+    - For logical expressions (e.g., W > 0, θ < 90°), write `\( W > 0 \)` and `\( \theta < 90^\circ \)`.
+    - For arrows indicating direction, continue to use `$\rightarrow$` and `$\leftarrow$`.
+    - Treat this as mandatory ASCII-safety: raw ">" or "<" outside math mode is forbidden.
+
+Initial Slides Template (v6 preserved exactly; adjust content only)
+- First line: \documentclass[10.5pt]{beamer}
+- \usetheme{Madrid}
+- \setbeamertemplate{frametitle}[default]
+- \definecolor{lightblue}{RGB}{173,216,230}
+- \setbeamercolor{frametitle}{bg=lightblue, fg=black}
+- \setbeamertemplate{headline}{%
+    \hfill%
+    \insertframenumber{} / \inserttotalframenumber%
+    \par%
+  }
+- \setbeamertemplate{footline}{}
+- \usepackage{amsmath}
+- \usepackage{amssymb}
+- \usepackage{amsfonts}
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \title{ Title }  % Use the exact number and title from Phase 1
+- \author{}
+- \date{}
+- \begin{document}
+- \begin{frame}\titlepage\end{frame}
+- \begin{frame}{Outline}
+  \textbf{Key Topics Covered:}
+  \begin{itemize}
+    \item Item 1 % Replace with actual key topics from FilteredContent
+    \item Item 2
+    \item $\cdots$
+  \end{itemize}
+  \end{frame}
+
+Content Density Rules
+- Each content frame: at most 1–2 main concepts.
+- Use 3–5 concise bullet items only.
+- A frame is overcrowded if: more than 5 bullets OR more than 8 lines (excluding title) OR the frame contains a figure AND either an equation environment OR more than 4 bullets.
+
+Overflow handling 
+- If a slide would exceed the limits, split into multiple frames using the same \frametitle{} with "(cont.)".
+
+Figure Policy 
+- Include a figure only if FilteredContent references it explicitly.
+- Derive filename literally from the reference, e.g.:
+  'Figure 22.6'   -> 'Figure 22.6.png'
+  'Fig. 22-6'     -> 'Fig. 22-6.png'
+  'Figure 23-7'   -> 'Figure 23-7.png'
+  'FIGURE 23-7'   -> 'FIGURE 23-7.png'
+- Always include with EXACT wrapper and sizing:
+  \IfFileExists{filename.png}{%
+    \begin{figure}
+      \centering
+      \includegraphics[height=0.25\textheight,keepaspectratio]{filename.png}
+    \end{figure}
+  }{}
+- Place after the itemize block.
+- If including the figure would violate density rules, create an immediate, figure-only slide titled "Figure <ID>" with the image and at most two short bullets.
+
+Equations 
+- Default unnumbered; number only if referenced on that slide.
+
+Concluding Slides 
+- Add a concise Summary frame (3–5 bullets).
+- Add one final frame with two thoughtful review questions tied to FilteredContent.
+
+Academic Quality 
+- Rigorous, clear, compact; suitable for strong undergraduate/early graduate level.
+- No Markdown contamination anywhere.
+
+Beamer Fragility 
+- Do not use \pause.
+- Every content frame must have \frametitle{...}.
+- Add [fragile] only if absolutely necessary.
+
+Minimal Packages 
+- If \includegraphics is used: ensure \usepackage{graphicx}.
+- If equation/align appears: ensure \usepackage{amsmath}.
+- If \mathbb or \mathfrak are used: ensure \usepackage{amssymb,amsfonts}.
+- Do NOT add extra packages.
+
+======================================================================
+Phase 2A — Slide Planning 
+======================================================================
+
+Before writing frames, produce an internal SlidePlan (do not print it) that maps one-to-one from logical units in FilteredContent to slides:
+- One plan entry per: definition, law/property, example/worked step, remark/caution, named subheading, figure mention, key equation.
+- Preserve original order of FilteredContent.
+- Ensure each SubHeadingsFound item receives at least one planned slide.
+- Ensure each PageAnchors span contributes at least one planned content item unless GapList will explain a missing span.
+
+======================================================================
+Phase 2B — GapSlide
+======================================================================
+
+If GapList is non-empty after Phase 1B checks:
+- Insert a frame titled "Potential Gaps Detected (for instructor review)".
+- List 2–4 bullets summarizing the suspected omissions; do NOT invent content.
+- Keep brevity; this slide is a transparency instrument for manual follow-up.
+
+======================================================================
+Phase 2C — Post-Generation Audit (MANDATORY)
+======================================================================
+
+Before emitting the final LaTeX code:
+- Density check: no frame violates the 3–5 bullets or line limits; no figure+equation with >4 bullets.
+- Environment check: all \begin{...}/\end{...} pairs match for frame, itemize, equation, align, align*, tabular.
+- ASCII check: replace curly quotes, en/em dashes with ASCII equivalents; ensure only ASCII characters.
+- CoverageMap check: each named item (definition, law, example, figure reference) in FilteredContent appears in SlidePlan and the final frames.
+- Page-span check: for multiple PageAnchors (e.g., 44..47), ensure content appears for each span unless GapSlide documents otherwise.
+- If any check fails, revise slides (split/merge frames, add missing unit slides, or add a GapSlide entry) and re-run this audit mentally. Only then emit the final LaTeX.
+- Anchor purge check: Search the final LaTeX for any occurrence of
+  \[[\s0-9,\-–]+\] outside math environments; none must remain.
+  If any are found, remove them and re-run this audit.
+
+======================================================================
+OUTPUT PROTOCOL 
+======================================================================
+
+- Output ONLY the final LaTeX Beamer document. No commentary, no fences, no planning artifacts.
+- Do NOT include CoverageMap, GapList, FigureMap, or SlidePlan in the LaTeX output.
+- Internally guarantee:
+  - CoverageMap is complete,
+  - GapList is empty OR a GapSlide is present,
+  - FigureMap includes each figure at most once,
+ 

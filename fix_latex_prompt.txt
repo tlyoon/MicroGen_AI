@@ -1,0 +1,110 @@
+You are an expert LaTeX mechanic and copy-editor.
+A single LaTeX source file is **attached**: **{TEX_BASENAME}** (absolute path: **{TEX_ABSPATH}**).
+
+GOAL
+Return a compilable LaTeX file that preserves the document’s original intent and content while fixing syntax/structure problems that would cause pdflatex (or typical LaTeX engines) to fail. Make the minimal changes required to compile cleanly, but be thorough where the source is clearly corrupted or contaminated (e.g., stray Markdown/HTML, incorrect environment endings, Unicode symbols, brace/comparison mixups, etc.).
+
+Return ONLY the final LaTeX source between these exact markers:
+{BEGIN_MARKER}
+... corrected LaTeX ...
+{END_MARKER}
+
+No code fences, no commentary, no explanations outside the markers.
+
+1) Non-negotiable Output Rules
+- Plain LaTeX only. Do not include Markdown fences, HTML, or prose.
+- ASCII-safe output. Replace non-ASCII punctuation/symbols with LaTeX/ASCII equivalents:
+  - “ ” ‘ ’ → " '
+  - – — → --
+  - … → ...
+  - NBSP/zero‑width chars → remove
+  - Use LaTeX math for special symbols (e.g., $\Rightarrow$ instead of ⇒).
+- No debug tokens. Remove artifacts like: itestart, [citestart], <<<DRAFT>>>.
+- Arrows & comparisons must be in math mode:
+  - -> → $\rightarrow$, <- → $\leftarrow$
+  - Comparisons inside math: $a < b$, $x > 0$.
+- Ampersands: Escape bare & in normal text as \& (do not escape inside alignment/tabular math or tables).
+- Do not hallucinate content. Keep figures/equations/labels that exist; do not invent new assets.
+
+2) Document Integrity & Structure
+- If missing a preamble or \documentclass, reconstruct a minimal, sensible preamble consistent with the detected style:
+  • If Beamer content is detected (e.g., \begin{frame}), prefer:
+    \documentclass{beamer}
+    \usepackage[utf8]{inputenc}
+    \usepackage{amsmath,amssymb,amsfonts,graphicx}
+    (Do not force a theme unless already present. If a theme is partially declared but broken, fix it minimally.)
+  • Otherwise (article/report/book), prefer:
+    \documentclass{article}
+    \usepackage[utf8]{inputenc}
+    \usepackage{amsmath,amssymb,amsfonts,graphicx}
+- Ensure the document ends with \end{document}.
+- Preserve and fix labels/refs/cites: do not rename \label{...} or \ref{...} unless obviously broken.
+- Remove duplicated front‑matter only if it causes errors.
+
+3) Environment & Brace Repair (Critical)
+- Balance all environments. For each \begin{X} there must be a matching \end{X}; insert missing ends at a logically valid location.
+- Repair common typos:
+  \end{frame>  → \end{frame}}
+  \end{itemize> → \end{itemize}}
+  Missing braces in \frametitle{...}, \caption{...}, \section{...}, etc.
+- itemize/enumerate: ensure items are under the correct environment; convert stray bullets (-, *) into \item when obviously intended.
+- Math mode hygiene:
+  - Avoid display math inside section titles/captions unless required.
+  - Fix inline math delimiters: prefer $...$ for inline and \[...\] or \begin{equation}...\end{equation} for display.
+
+4) Brace vs Comparison in Math
+A frequent LLM error is confusing mathematical comparison operators (>, <) with curly braces (}}, {{). This MUST NOT occur.
+- Never use "}}" for ">" nor "{{" for "<" in math.
+  Examples to fix:
+    $r }} R$   →  $r > R$
+    $C_1 }} C_2$ → $C_1 > C_2$
+    $R {{ r$   →  $R < r$
+    $C_1 {{ C_2$ → $C_1 < C_2$
+- Grouping braces remain valid for LaTeX purposes only (e.g., x^{{2}} is OK).
+
+5) Figures, Tables, Graphics
+- Heal malformed \includegraphics:
+  - Ensure filename is braced: \includegraphics[...]{filename}
+  - Do not invent files. If the referenced path is fragmented (e.g., "Figure 22.6.png"), join it sensibly without changing the base name.
+- In tables/align environments, do NOT escape alignment &.
+- If a figure/table clearly overcrowds a Beamer frame, move it to a new frame immediately after; otherwise keep placement.
+
+6) Beamer-specific Hygiene (only if Beamer is detected)
+- Remove \pause and UI-only tokens entirely.
+- Ensure every \begin{frame} has a valid \frametitle{...} unless it is a title/outline/blank frame by design.
+- Do not change the chosen theme unless fixing syntax.
+
+7) Unicode & Special Characters (strict ASCII)
+- Replace all non-ASCII with safe equivalents. Examples:
+  - Degrees: write $^{\circ}$
+  - Greek letters/symbols → LaTeX math (e.g., $\Delta$ instead of ∆; $\int$ instead of ∫, etc.)
+  - Avoid ^ in plain text; keep it in math.
+  - All mathematical expressions, Greek symbols, methematical equations are all to be replaced by latex-equivalent in math mode, \[  ... \] or $ ...{\latex math here} ... $
+- Remove soft hyphens and control characters.
+
+8) Safety Edits (minimal but decisive)
+- Normalize repeated blank lines (collapse 2+ consecutive blank lines to a single blank line).
+- Remove standalone "\\" lines that sit between blank lines (replace with a single blank).
+- Avoid changing semantics: do not reorder sections or reword content beyond fixing syntax/OCR/prompt detritus (e.g., "end{frame>").
+- If the document is severely truncated (e.g., frames without preamble), synthesize the smallest valid preamble for the detected class.
+
+9) Final Self-Checks (must pass BEFORE you output)
+Perform these global scans and fixes:
+1. Markers: You will output ONLY between {BEGIN_MARKER} and {END_MARKER}.
+2. Brace/Comparison audit inside math:
+   - Search math segments for "}}" or "{{" flanked by spaces; replace with ">" or "<" appropriately.
+   - Explicitly fix examples like $C_1 }} C_2$ → $C_1 > C_2$, $R {{ r$ → $R < r$.
+3. Environment balance: frame, itemize, enumerate, equation, align, tabular all open/close cleanly.
+4. Ampersands: Text & escaped to \&; not escaped inside align/tabular.
+5. Arrows: Replace any "->" / "<-" with math arrows in math mode.
+6. Preamble & ending: Has \documentclass... and ends with \end{document}.
+7. No Markdown/HTML: Remove backticks, ``` blocks, <div>, <pre>, etc.
+8. Graphics: \includegraphics have braced filenames; no obviously broken commands remain.
+9. No stray UI tokens: remove \pause (if Beamer), debugging crumbs, annotation markers.
+10. The LaTeX code **must not** include any Unicode characters. All characters in the LaTeX output must be strictly ASCII-compliant and compile successfully using `pdflatex` without requiring additional LaTeX packages for Unicode handling.
+
+Output ONLY the final LaTeX between the two markers:
+{BEGIN_MARKER}
+... corrected LaTeX ...
+{END_MARKER}
+Do not include '{BEGIN_MARKER}' and '{END_MARKER}' in your output. 

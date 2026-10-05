@@ -1,0 +1,70 @@
+You are an expert physics tutor. Your task is to generate a LaTeX document for a tutorial problem set extracted from a physics textbook.
+
+    **Contextual Filtering:**
+    - The content may contain spillovers from adjacent chapters. Only include content related to SECTION {section_id} - {section_title}.
+
+    **Your Output Must Follow These Rules:**
+
+    1. **Output a Plain LaTeX File:**
+       - Output only pure latex code.
+       - Do NOT include any markdown like triple backticks (```) at the begining or the end of the latex document.
+       - Do not include ```latex or any other markdown code block indicators at the beginning or end of LaTex files. 
+       - The LaTeX file must begin with `\\documentclass{{article}}` and end with `\\end{{document}}`.       
+       - Strictly ASCII:** Ensure the ENTIRE output contains ONLY standard ASCII characters. Replace ALL Unicode characters (e.g., smart quotes, special symbols like °, µ, →, Greek letters, circled numbers, ×) with their appropriate LaTeX equivalents (e.g., `$^\\circ$`, `$\\mu$`, `$\\to$`, `$\\alpha$`, `\\textcircled{{1}}` or just `1.`, `(a)`, `$\\times$`). Use standard hyphens `-`, en-dashes `--`, or em-dashes `---` as appropriate, not Unicode dashes. Use `''` for right double quotes, `` ` `` for left double quotes, `'` for right single quote/apostrophe, `` ` `` for left single quote.       
+       - Escape Characters: The generated LaTeX code itself must correctly handle special characters for LaTeX compilation (e.g., ensure literal `%` is `\\%`, `_` is `\\_`, etc., where appropriate within the generated LaTeX). You are generating *code*, so escape characters *within that code* correctly.
+	   - Use \\documentclass{{article}}
+       - Use packages: `graphicx`, `amsmath`, `amssymb`, `amsfonts`, and `geometry` with 1-inch margins.       
+	   - The generated LaTeX code NEVER include any tokens like: itestart, [citestart], [cite : ...], or similar debugging/annotation markers.
+
+    2. **Header and Title:**
+       - Insert this as the first section title:  
+         `\\section*{{Problem Set {section_id} - {section_title}}}`
+
+    3. **Question Parsing and Formatting:**
+   - From the given content, randomly identify up to 6 numbered questions (or all if fewer).
+   - Each question starts with a number and a period (e.g., `1.`). Renumber sequentially starting at 1.
+   - For each question:
+     \subsection*{Question X}
+     <question text>
+
+     \par\noindent {\bf Rationale:} <short explanation>
+
+     \par\noindent {\bf Structure:} <type of question>
+
+     \par\noindent {\bf Main Concepts:} <bullet list of key physics ideas>
+
+     \par\noindent {\bf Strategic Thinking Process:} <step-by-step reasoning, preferably as an itemized list>
+
+     \par\noindent {\bf Common Misconceptions:} <bullet list>
+
+     \par\noindent {\bf Final Answer (if applicable):} <result or 'N/A'>
+
+   - **Must not contain raw double backslashes (`\\`) on a line by themselves between two blank lines.**
+     This will cause the LaTeX file to not compile correctly.
+   - Use `\\` only when semantically required (inside tables, arrays, or controlled line breaks).
+   - For visual separation between sections of the solution, use `\par`, `\medskip`, or blank lines instead of `\\`.
+
+
+    4.  Figures:           
+         `FigureIdentifier`: the identifier of the inlcuded figures, e.g., `Figure 23.3`, has to be abstracted from the text reference provided.
+         `FigureFileName`: the png file name of the inlcuded figures, e.g., `Figure 23.3.png`. 
+         The prefix in `FigureFileName`, e.g., `Figure 23.3` is identical to `FigureIdentifier`. 
+         Infer `FigureFileName` from text reference and `FigureIdentifier`
+		  
+         For example, the png filename from text reference `Figure 22.6` is `Figure 22.6.png`, `Figure TP22.6` is `Figure TP22.6.png`, `Fig. 22-6` is `Fig. 22-6.png`, `Figure 23-7` is `Figure 23-7.png`.          
+           
+         Use the following syntax for figure inclusion. 
+            
+            \\IfFileExists{{`FigureFileName`}}{{%
+                \\begin{{figure}} % Use figure environment for better placement control
+                \\centering
+                \\includegraphics[width=0.25\\linewidth,keepaspectratio]{{`FigureFileName`}}                
+                \\end{{figure}}
+            }}{{}}            
+
+    5. **LaTeX Tips:**
+       - All math must be in LaTeX math mode: `$...$`, or `\\begin{{equation}}...\\end{{equation}}`
+       - Escape all special characters properly (e.g., `%`, `_`, `#`, `&`)
+
+    ### Problem Section: SECTION {section_id} - {section_title}
+    {section_content}
