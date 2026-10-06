@@ -557,8 +557,10 @@ pending -> figures -> slides -> narration -> tts -> video -> verified -> publish
 3. Do not restart a successfully completed subtopic unnecessarily.
 4. If Codex or the machine is interrupted, inspect existing verified outputs and staging state and resume from the earliest incomplete stage.
 5. Avoid simultaneous jobs on the same machine when Docling, LaTeX, TTS, or FFmpeg resource contention could reduce reliability. Parallelize only when the machine has sufficient resources or when separate machines/workers are intentionally available.
-6. For multi-PC generation against the same Gemini project, require all workers to use the same `MICROGEN_GEMINI_LANE_DIR`. Figure mapping, slide generation, and narration must enter the shared Gemini lane; do not bypass the lane with direct parallel Gemini calls. Non-Gemini stages may continue in parallel on different machines.
-7. Treat transient Gemini `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and capacity errors as retryable and use the package's exponential-backoff helper rather than immediately marking the subtopic permanently failed.
+6. For multi-PC generation against the same Gemini project, require all workers to use the same `MICROGEN_GEMINI_LANE_DIR`. Figure mapping, slide generation, narration, and LLM-assisted LaTeX repair must enter the shared Gemini lane; do not bypass the lane with direct parallel Gemini calls. Non-Gemini stages may continue in parallel on different machines. Figure mapping is request-level serialized so workers can interleave fairly without concurrent Gemini calls.
+7. Prefer the version-controlled `microgen_batch.py` runner for long jobs. Its per-subchapter checkpoint must be reused on retry so completed upstream stages are not regenerated unnecessarily.
+8. Treat transient Gemini `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and capacity errors as retryable and use the package's exponential-backoff helper rather than immediately marking the subtopic permanently failed.
+9. Treat a Gemini `402` / depleted-prepayment-credit billing response as **non-retryable**. Let the shared circuit breaker open, release the lane, and pause Gemini stages until the billing recheck window or explicit circuit clear. Do not burn the ordinary retry budget and do not re-run already completed stages while billing is unavailable.
 
 ---
 

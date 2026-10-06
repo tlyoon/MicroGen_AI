@@ -239,12 +239,38 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
         raise RuntimeError("The hybrid narration engine requires google-genai. Install requirements.txt.") from exc
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_json_schema=_gemini_compatible_schema(_schema([s["id"] for s in slides])),
-        thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL),
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-    )
+
+    # google-genai has changed ThinkingConfig across releases. Build the
+    # configuration defensively so an older worker does not fail before making
+    # the narration request. Newer SDKs use thinking_level; older releases may
+    # expose only thinking_budget.
+    config_kwargs: dict[str, Any] = {
+        "response_mime_type": "application/json",
+        "response_json_schema": _gemini_compatible_schema(_schema([s["id"] for s in slides])),
+    }
+    thinking_fields = getattr(types.ThinkingConfig, "model_fields", {})
+    if "thinking_level" in thinking_fields:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=THINKING_LEVEL)
+    else:
+        budget_raw = os.environ.get("MICROVID_THINKING_BUDGET", "").strip()
+        if budget_raw and "thinking_budget" in thinking_fields:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=int(budget_raw))
+        else:
+            print(
+                "[WARN] Installed google-genai does not support thinking_level; "
+                "continuing narration without an explicit thinking configuration.",
+                flush=True,
+            )
+    try:
+        config_kwargs["automatic_function_calling"] = types.AutomaticFunctionCallingConfig(disable=True)
+        config = types.GenerateContentConfig(**config_kwargs)
+    except Exception as exc:
+        # A second compatibility guard for older SDKs whose
+        # GenerateContentConfig schema predates automatic_function_calling.
+        config_kwargs.pop("automatic_function_calling", None)
+        print(f"[WARN] Falling back to a reduced google-genai config: {exc}", flush=True)
+        config = types.GenerateContentConfig(**config_kwargs)
+
     prompt = _compose_prompt(slides, source_blocks)
 
     def _stream_once() -> str:

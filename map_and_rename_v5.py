@@ -3,7 +3,8 @@
 """Gemini-native figure caption mapping for v7.
 
 Preserves map_and_rename_v4 output behavior while using the shared Microvid
-GEMINI_API_KEY and the modern google-genai SDK.
+GEMINI_API_KEY and the modern google-genai SDK. Gemini access is coordinated
+per request so long subchapters do not monopolize a multi-PC production lane.
 """
 import os, re, shutil, sys
 from pathlib import Path
@@ -11,13 +12,14 @@ from dotenv import load_dotenv
 from PIL import Image
 from google import genai
 from google.genai import types
-from gemini_lane import call_with_retry, gemini_lane
+from gemini_lane import GeminiBillingError, GeminiCircuitOpen, call_with_retry, gemini_lane
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 MODEL_NAME = os.environ.get("MICROVID_FIGURE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"
 BATCH_SIZE = 4
+FIGURE_COOLDOWN = float(os.environ.get("MICROGEN_GEMINI_FIGURE_COOLDOWN_SECONDS", "2"))
 
 
 def _microvid_config_dir() -> Path:
@@ -47,10 +49,11 @@ def image_part(path: Path):
 
 
 def generate(parts):
-    response = call_with_retry(
-        lambda: client.models.generate_content(model=MODEL_NAME, contents=parts),
-        label=f"figure mapping ({MODEL_NAME})",
-    )
+    with gemini_lane("figure_mapping_request", MODEL_NAME, cooldown=FIGURE_COOLDOWN):
+        response = call_with_retry(
+            lambda: client.models.generate_content(model=MODEL_NAME, contents=parts),
+            label=f"figure mapping ({MODEL_NAME})",
+        )
     text = (response.text or "").strip()
     if not text:
         raise RuntimeError("Gemini returned an empty response")
@@ -114,6 +117,8 @@ def mapping():
             caption_text = generate([CAPTION_PROMPT, image_part(full_page_image)])
             caption_file.write_text(caption_text, encoding="utf-8")
             print(f"Captions saved to: {caption_file.name}")
+        except (GeminiBillingError, GeminiCircuitOpen):
+            raise
         except Exception as exc:
             print(f"Caption extraction failed for {page_dir.name}: {exc}")
             continue
@@ -132,9 +137,9 @@ def mapping():
             prompt = f"""You are mapping extracted textbook figure crops back to the visible captions on the same page.
 Use only the provided files and the captions actually visible on the page. Never invent a figure number.
 For each crop, return exactly one line in this format:
-fig_2.png : \"Figure 1.7\" : Figure 1.7.png
+fig_2.png : "Figure 1.7" : Figure 1.7.png
 If a crop is not a formally captioned textbook figure, return:
-fig_2.png : \"UNLABELED\" : SKIP
+fig_2.png : "UNLABELED" : SKIP
 
 Files in this batch:
 {batch_names}
@@ -155,7 +160,7 @@ Extracted caption text:
                     if not m:
                         continue
                     src = page_dir / m.group(1)
-                    dest_text = m.group(2).strip().strip('`')
+                    dest_text = m.group(2).strip().strip(chr(96))
                     if dest_text.upper().startswith("SKIP") or not src.is_file():
                         continue
                     dst = safe_destination(dest_text, page_dir)
@@ -169,6 +174,8 @@ Extracted caption text:
                 for dst, srcs in mapped_pairs.items():
                     if len(srcs) > 1:
                         merge_images_horizontally(srcs, dst)
+            except (GeminiBillingError, GeminiCircuitOpen):
+                raise
             except Exception as exc:
                 print(f"Mapping batch failed on {page_dir.name}: {exc}")
 
@@ -181,7 +188,6 @@ Extracted caption text:
 if __name__ == "__main__":
     import merge_lettered_figs_v2
     print("Starting Gemini figure mapping process...")
-    with gemini_lane("figure_mapping", MODEL_NAME):
-        mapping()
+    mapping()
     merge_lettered_figs_v2.main()
     print("Figure mapping completed.")

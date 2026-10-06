@@ -13,7 +13,7 @@ openai
 google-generativeai
 pypdf==4.3.*
 python-dotenv
-google-genai
+google-genai>=2.25,<3
 google-cloud-texttospeech
 imageio-ffmpeg
 contractions

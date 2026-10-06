@@ -3,6 +3,7 @@ from pathlib import Path
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
 from google import genai
+from gemini_lane import call_with_retry, gemini_lane
 
 try:
     if hasattr(sys.stdout, "reconfigure"):
@@ -12,7 +13,7 @@ except Exception:
 
 
 # ------------------- Model init ----------------
-model_name = "gemini-3.1-pro-preview"; model_choice = "gemini"
+model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"; model_choice = "gemini"
 
 def _microvid_config_dir() -> Path:
     configured = os.environ.get("MICROVID_CONFIG_DIR")
@@ -181,13 +182,103 @@ def _call_llm(messages_or_prompt):
         )
         return (resp.choices[0].message.content or "").strip()
     else:
-        # Gemini
-        try:
-            r = client.models.generate_content(model=model_name, contents=messages_or_prompt)
-            return (getattr(r, "text", None) or "").strip()
-        except Exception as e:
-            log(f"Gemini API error: {e}", "ERR")
-            return ""
+        # Gemini. LaTeX repair participates in the same shared request lane as
+        # slide/narration generation and uses the common retry/circuit policy.
+        with gemini_lane("latex_repair", model_name):
+            r = call_with_retry(
+                lambda: client.models.generate_content(model=model_name, contents=messages_or_prompt),
+                label=f"LaTeX repair ({model_name})",
+            )
+        return (getattr(r, "text", None) or "").strip()
+
+
+def _error_line_from_pdflatex(output: str, tex_name: str) -> int | None:
+    """Extract the first source line reported by pdflatex -file-line-error."""
+    patterns = [
+        rf"(?:^|\n).*?{re.escape(tex_name)}:(\d+):",
+        r"(?:^|\n)l\.(\d+)\s",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, output or "", flags=re.I)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                pass
+    return None
+
+
+def _frame_bounds(lines: list[str], line_number: int) -> tuple[int, int] | None:
+    """Return 0-based [start,end] bounds of the frame containing line_number."""
+    if not lines:
+        return None
+    idx = min(max(0, line_number - 1), len(lines) - 1)
+    start = None
+    for i in range(idx, -1, -1):
+        if r"\begin{frame}" in lines[i]:
+            start = i
+            break
+    if start is None:
+        return None
+    for j in range(idx, len(lines)):
+        if r"\end{frame}" in lines[j]:
+            return start, j
+    return None
+
+
+def repair_compile_error(tex_file: str | Path, compile_output: str) -> bool:
+    """Repair only the Beamer frame implicated by the current pdflatex error.
+
+    This avoids sending the entire deck back to Gemini after a local compile
+    failure. Returns True only when a validated replacement frame was applied.
+    """
+    p = Path(tex_file).resolve()
+    src = _read_text(p)
+    lines = src.splitlines()
+    line_number = _error_line_from_pdflatex(compile_output, p.name)
+    if line_number is None:
+        log("Could not identify a pdflatex source line for targeted repair.", "INFO")
+        return False
+    bounds = _frame_bounds(lines, line_number)
+    if bounds is None:
+        log(f"pdflatex line {line_number} is not inside a Beamer frame.", "INFO")
+        return False
+    start, end = bounds
+    frame = "\n".join(lines[start:end + 1])
+    error_tail = "\n".join((compile_output or "").splitlines()[-45:])
+    prompt = f"""You are repairing one defective LaTeX Beamer frame.
+Fix only the supplied frame so that it compiles with pdflatex.
+Preserve its pedagogical content and source fidelity.
+Do not rewrite the rest of the presentation.
+Balance braces and environments, use valid math delimiters, and remove markdown fences.
+Return exactly one complete \\begin{{frame}} ... \\end{{frame}} block and no commentary.
+
+PDFLATEX ERROR CONTEXT:
+{error_tail}
+
+DEFECTIVE FRAME:
+{frame}
+"""
+    raw = _strip_md_fences(_call_llm(prompt))
+    m = re.search(r"(\\begin\{frame\}.*?\\end\{frame\})", raw, flags=re.S)
+    if not m:
+        log("Targeted repair response did not contain exactly a Beamer frame.", "WARN")
+        return False
+    repaired = m.group(1).strip()
+    replacement = repaired.splitlines()
+    new_lines = lines[:start] + replacement + lines[end + 1:]
+    backup = p.with_name(f"before_targeted_repair_line_{line_number}_{p.name}")
+    try:
+        _write_text(backup, src)
+    except Exception:
+        pass
+    _write_text(p, "\n".join(new_lines) + "\n")
+    log(
+        f"Applied targeted repair to frame containing pdflatex line {line_number}; "
+        f"backup -> {backup.name}",
+        "OK",
+    )
+    return True
 
 
 # =================== Public cleaning funcs ===================

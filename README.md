@@ -67,7 +67,13 @@ Generated artifacts are intentionally excluded from version control by `.gitigno
 
 ## Main entry points
 
-For a full source-to-video run:
+For long, resumable multi-subchapter production, prefer:
+
+```powershell
+python microgen_batch.py --help
+```
+
+For a simple one-directory source-to-video run:
 
 ```powershell
 python run_gen_slides_videos.py
@@ -105,6 +111,8 @@ conda create -n microgen_ai python=3.11
 conda activate microgen_ai
 pip install -r requirements.txt
 ```
+
+The requirements now constrain `google-genai>=2.25,<3`, matching the API surface tested on the current Yoga6/Dell/HP workers. Narration also contains a compatibility fallback for older SDKs that do not expose `ThinkingConfig.thinking_level`.
 
 ### 2. Install LaTeX and FFmpeg
 
@@ -153,6 +161,28 @@ MICROGEN_GEMINI_LANE_DIR=G:\My Drive\MicroGen_AI\coordination\gemini_lane
 The lane uses queue tickets, a synchronization settling window, a heartbeat, stale-ticket recovery, and a post-request cooldown. It also tolerates short Google Drive/Desktop mount interruptions by waiting for the shared lane path to reappear instead of immediately failing the subchapter. Gemini requests use conservative exponential backoff for transient `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and related capacity errors. Useful tuning variables are `MICROGEN_GEMINI_LANE_SETTLE_SECONDS`, `MICROGEN_GEMINI_LANE_CLAIM_GRACE_SECONDS`, `MICROGEN_GEMINI_LANE_COOLDOWN_SECONDS`, `MICROGEN_GEMINI_LANE_STALE_SECONDS`, `MICROGEN_GEMINI_MAX_RETRIES`, `MICROGEN_GEMINI_BACKOFF_BASE_SECONDS`, and `MICROGEN_GEMINI_BACKOFF_MAX_SECONDS`.
 
 For a single-PC run, leave `MICROGEN_GEMINI_LANE_DIR` unset and the coordination layer is disabled. For multi-PC work, every participating machine must point it at the same shared directory; otherwise the workers are not in the same lane.
+
+Billing/prepayment failures are treated differently from ordinary rate or capacity limits. A Gemini `402` prepayment-credit failure is non-retryable: the first worker that encounters it opens a shared circuit breaker, releases the lane immediately, and causes the other workers to pause Gemini stages instead of wasting repeated API calls. The circuit automatically allows a serialized probe after `MICROGEN_GEMINI_BILLING_RECHECK_SECONDS` (default 1800 seconds), and it can also be inspected or cleared manually with `python gemini_lane.py --status` or `python gemini_lane.py --clear-circuit`.
+
+Figure mapping now acquires the lane per Gemini request rather than for an entire subchapter. This preserves the one-request-at-a-time safety rule while allowing fairer interleaving across Yoga6, Dell-115, HP, or other workers.
+
+## Resumable batch runner
+
+`microgen_batch.py` is the preferred entry point for long multi-subchapter production. It keeps a persistent `.microgen_checkpoint.json` for every subchapter and resumes at the earliest incomplete stage. A narration failure therefore does **not** repeat Docling extraction, figure mapping, or slide generation; similarly, a TTS/video failure resumes only from the failed downstream stage.
+
+Example:
+
+```powershell
+python microgen_batch.py \
+  --source-root "G:\My Drive\Textbook_Project" \
+  --work-root "$env:LOCALAPPDATA\MicroGen_AI_runs\batch_01" \
+  --targets "1.1,1.2,1.3" \
+  --main-py "C:\path\to\python.exe" \
+  --docling-py "C:\path\to\docling_env\python.exe" \
+  --commit main
+```
+
+The runner performs a startup environment check, validates outputs at every stage, pauses rather than fails when the shared Gemini billing circuit is open, publishes final `slides.pdf`, `script.txt`, and `slides.mp4` atomically, and removes storage-heavy numbered slide/audio intermediates only after successful publication.
 
 ## Credentials
 

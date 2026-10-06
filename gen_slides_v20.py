@@ -387,40 +387,45 @@ tex_file = out_base + '.tex'
 remove_missing_graphics_in_place(tex_file)
 clean_pause_in_place(tex_file)
 compile_ok = False
+last_compile_output = ""
 for attempt in range(1, 5):
-    # Repair passes (especially LLM-assisted repair) may reintroduce blank
-    # paragraphs inside equation/align environments. Beamer/TeX treats those
-    # as paragraph breaks in math mode and fails later at \end{frame}.
-    # Re-apply v6 strict blank-line normalization before every compile attempt.
+    # Repair passes may reintroduce blank paragraphs inside equation/align
+    # environments. Strictly normalize before each compile attempt.
     _tex_path = Path(tex_file)
-    # Strictly remove blank paragraphs before every compile attempt.  Using
-    # splitlines() also handles mixed/duplicated CRLF forms that regex-based
-    # normalization can miss after AI-assisted repair passes.  A blank line
-    # inside display math creates a paragraph break and can surface later as
-    # an opaque "Missing $ inserted" error at \end{frame}.
     _tex_raw = _tex_path.read_text(encoding="utf-8-sig")
     _tex_lines = [line.rstrip() for line in _tex_raw.splitlines() if line.strip()]
     _tex_path.write_text("\n".join(_tex_lines) + "\n", encoding="utf-8")
     remove_missing_graphics_in_place(tex_file)
     clean_pause_in_place(tex_file)
     result = subprocess.run(
-        ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', tex_file],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+        ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', '-file-line-error', tex_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
     )
+    last_compile_output = result.stdout or ""
     if result.returncode == 0:
         print(f"✅ pdflatex compilation succeeded for '{tex_file}' at attempt {attempt}")
         compile_ok = True
         break
     print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")
+    # Attempt local deterministic cleanup first. If the same deck still fails,
+    # repair only the offending Beamer frame rather than sending the entire
+    # presentation back to Gemini.
     if attempt == 1:
         fix_latex.clean_tex_file(tex_file)
-    elif attempt == 2:
-        fix_latex.clean_tex_file2(tex_file, model_choice, model_name, api_key)
-    elif attempt == 3:
-        fix_latex.clean_tex_file(tex_file)
+    elif attempt in (2, 3):
+        repaired = fix_latex.repair_compile_error(tex_file, last_compile_output)
+        if not repaired:
+            fix_latex.clean_tex_file(tex_file)
     clean_pause_in_place(tex_file)
 if not compile_ok:
-    raise RuntimeError(f"Unable to compile {tex_file} after four repair attempts.")
+    Path("pdflatex_last_error.txt").write_text(last_compile_output, encoding="utf-8", errors="replace")
+    raise RuntimeError(
+        f"Unable to compile {tex_file} after four repair attempts. "
+        "See pdflatex_last_error.txt for the first actionable source error."
+    )
 ## end of compiling latex after exiting the LLM phase ##
 
 ### begin the main program here #######################################################
