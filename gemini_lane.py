@@ -105,8 +105,22 @@ class GeminiLane:
                 "model": self.model, "created_utc": datetime.now(timezone.utc).isoformat()}
 
     def _write_ticket(self) -> None:
-        self.queue_dir.mkdir(parents=True, exist_ok=True)
-        self.history_dir.mkdir(parents=True, exist_ok=True)
+        # Google Drive for desktop can briefly unmount/reconnect the drive letter.
+        # Treat that as transient instead of failing the whole subchapter.
+        mount_wait = _env_float("MICROGEN_GEMINI_LANE_MOUNT_WAIT_SECONDS", 300.0)
+        deadline = time.time() + mount_wait
+        while True:
+            try:
+                self.queue_dir.mkdir(parents=True, exist_ok=True)
+                self.history_dir.mkdir(parents=True, exist_ok=True)
+                break
+            except OSError as exc:
+                if time.time() >= deadline:
+                    raise RuntimeError(
+                        f"Gemini lane storage unavailable for {mount_wait:.0f}s: {self.root}"
+                    ) from exc
+                print(f"[Gemini lane] shared drive unavailable; waiting for {self.root}", flush=True)
+                time.sleep(min(10.0, max(1.0, self.poll)))
         name = f"{_utc_stamp()}__{_safe(self.host)}__{self.pid}__{self.token}.ticket.json"
         self.ticket = self.queue_dir / name
         self.ticket.write_text(json.dumps(self._ticket_payload(), indent=2), encoding="utf-8")
@@ -150,12 +164,23 @@ class GeminiLane:
               f"ticket={self.ticket.name}; settling {self.settle:.0f}s", flush=True)
         time.sleep(self.settle)
         last_report = 0.0
+        storage_wait = _env_float("MICROGEN_GEMINI_LANE_MOUNT_WAIT_SECONDS", 300.0)
+        missing_since: float | None = None
         while True:
             self._remove_stale()
             tickets = self._tickets()
             names = [p.name for p in tickets]
             if self.ticket.name not in names:
-                raise RuntimeError(f"Gemini lane ticket disappeared before acquisition: {self.ticket}")
+                if missing_since is None:
+                    missing_since = time.time()
+                if time.time() - missing_since <= storage_wait:
+                    if time.time() - last_report >= 30.0:
+                        print(f"[Gemini lane] ticket/storage temporarily unavailable; waiting for shared drive", flush=True)
+                        last_report = time.time()
+                    time.sleep(self.poll)
+                    continue
+                raise RuntimeError(f"Gemini lane ticket unavailable for {storage_wait:.0f}s: {self.ticket}")
+            missing_since = None
             if tickets and tickets[0].name == self.ticket.name:
                 time.sleep(self.claim_grace)
                 self._remove_stale()

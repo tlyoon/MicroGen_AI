@@ -150,7 +150,7 @@ Enable the lane by setting the same synced directory on every worker, for exampl
 MICROGEN_GEMINI_LANE_DIR=G:\My Drive\MicroGen_AI\coordination\gemini_lane
 ```
 
-The lane uses queue tickets, a synchronization settling window, a heartbeat, stale-ticket recovery, and a post-request cooldown. Gemini requests also use conservative exponential backoff for transient `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and related capacity errors. Useful tuning variables are `MICROGEN_GEMINI_LANE_SETTLE_SECONDS`, `MICROGEN_GEMINI_LANE_CLAIM_GRACE_SECONDS`, `MICROGEN_GEMINI_LANE_COOLDOWN_SECONDS`, `MICROGEN_GEMINI_LANE_STALE_SECONDS`, `MICROGEN_GEMINI_MAX_RETRIES`, `MICROGEN_GEMINI_BACKOFF_BASE_SECONDS`, and `MICROGEN_GEMINI_BACKOFF_MAX_SECONDS`.
+The lane uses queue tickets, a synchronization settling window, a heartbeat, stale-ticket recovery, and a post-request cooldown. It also tolerates short Google Drive/Desktop mount interruptions by waiting for the shared lane path to reappear instead of immediately failing the subchapter. Gemini requests use conservative exponential backoff for transient `429`, `500`, `502`, `503`, `504`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, and related capacity errors. Useful tuning variables are `MICROGEN_GEMINI_LANE_SETTLE_SECONDS`, `MICROGEN_GEMINI_LANE_CLAIM_GRACE_SECONDS`, `MICROGEN_GEMINI_LANE_COOLDOWN_SECONDS`, `MICROGEN_GEMINI_LANE_STALE_SECONDS`, `MICROGEN_GEMINI_MAX_RETRIES`, `MICROGEN_GEMINI_BACKOFF_BASE_SECONDS`, and `MICROGEN_GEMINI_BACKOFF_MAX_SECONDS`.
 
 For a single-PC run, leave `MICROGEN_GEMINI_LANE_DIR` unset and the coordination layer is disabled. For multi-PC work, every participating machine must point it at the same shared directory; otherwise the workers are not in the same lane.
 

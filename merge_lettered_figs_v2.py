@@ -24,8 +24,12 @@ Usage:
 #from __future__ import annotations
 import argparse
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 try:
     from PIL import Image

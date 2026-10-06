@@ -115,8 +115,11 @@ def clean_pause_in_place(path: str = "slides.tex") -> None:
     else:
         newline = "\n"
 
-    # Decode (handle possible BOM gracefully)
-    text = raw.decode("utf-8-sig")
+    # Decode (handle possible BOM gracefully), then normalize all newline
+    # forms before editing. Re-expanding newline without this normalization
+    # can turn CRLF into CRCRLF on Windows and create blank paragraphs inside
+    # align/equation environments.
+    text = raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
 
     # 1) Remove standalone \pause lines (optionally with [..]) and trailing comments
     #    Example matches:
