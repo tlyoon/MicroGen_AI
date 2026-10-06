@@ -17,7 +17,7 @@ from gemini_lane import GeminiBillingError, GeminiCircuitOpen, call_with_retry, 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-MODEL_NAME = os.environ.get("MICROVID_FIGURE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"
+MODEL_NAME = os.environ.get("MICROVID_FIGURE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.8-flash"
 BATCH_SIZE = 4
 FIGURE_COOLDOWN = float(os.environ.get("MICROGEN_GEMINI_FIGURE_COOLDOWN_SECONDS", "2"))
 

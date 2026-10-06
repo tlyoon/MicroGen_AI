@@ -110,7 +110,7 @@ V7_DEFAULT
 
 At the time this prompt was written, the package defaults are approximately:
 
-- figure mapping: `gemini-3.1-pro-preview`,
+- figure mapping: `gemini-3.8-flash`,
 - slide generation: `gemini-3.1-pro-preview`,
 - narration generation: `gemini-3.1-pro-preview`.
 
