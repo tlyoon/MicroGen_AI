@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 from PIL import Image
 from google import genai
 from google.genai import types
-from gemini_lane import GeminiBillingError, GeminiCircuitOpen, call_with_retry, gemini_lane
+from gemini_lane import GeminiBillingError, GeminiCircuitOpen, gemini_lane
+from gemini_keys import call_with_key_failover, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -37,10 +38,10 @@ if not env_path.is_file():
     raise RuntimeError(f"Shared Microvid credential file not found: {env_path}")
 print(f"Using shared Microvid API credentials from: {env_path}")
 load_dotenv(dotenv_path=env_path, override=False)
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY is not set in the shared Microvid .env")
-client = genai.Client(api_key=api_key)
+api_keys = get_gemini_api_keys()
+if not api_keys:
+    raise RuntimeError("No Gemini API key is set in the shared Microvid .env")
+print(f"Using {len(api_keys)} Gemini API key(s) in priority order")
 print(f"Using Gemini model for figure mapping: {MODEL_NAME}")
 
 
@@ -50,8 +51,8 @@ def image_part(path: Path):
 
 def generate(parts):
     with gemini_lane("figure_mapping_request", MODEL_NAME, cooldown=FIGURE_COOLDOWN):
-        response = call_with_retry(
-            lambda: client.models.generate_content(model=MODEL_NAME, contents=parts),
+        response = call_with_key_failover(
+            lambda key: genai.Client(api_key=key).models.generate_content(model=MODEL_NAME, contents=parts),
             label=f"figure mapping ({MODEL_NAME})",
         )
     text = (response.text or "").strip()

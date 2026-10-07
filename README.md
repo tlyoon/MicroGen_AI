@@ -138,6 +138,18 @@ On Windows, `pdf2image` also requires Poppler to be installed and available on `
 
 The figure-size threshold `ikB` in `crop_figs_v3.py` may need to be adjusted for a textbook family. For example, Thomas' Calculus 13th edition has been run successfully with a threshold around 4.0 kB.
 
+## Gemini API key pool
+
+For resilient production runs, configure Gemini credentials in priority order in the local `%LOCALAPPDATA%\\Microvid\\.env` file:
+
+```text
+GEMINI_API_KEY_1=...
+GEMINI_API_KEY_2=...
+GEMINI_API_KEY_3=...
+```
+
+MicroGen_AI tries key 1 first. Key/account-specific failures such as invalid credentials, billing depletion, permission failure, or quota exhaustion fall through to the next configured key. Temporary Gemini service errors such as `503 UNAVAILABLE` retry the same key with exponential backoff rather than rotating credentials. The shared billing circuit opens only after the configured key pool is exhausted by billing failures. The legacy single `GEMINI_API_KEY` variable remains supported.
+
 ## Default Gemini models
 
 MicroGen_AI uses stage-specific Gemini defaults so that high-volume visual matching is cheaper while teaching-content generation remains on the more reliable Pro model:

@@ -3,7 +3,8 @@ from pathlib import Path
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
 from google import genai
-from gemini_lane import call_with_retry, gemini_lane
+from gemini_lane import gemini_lane
+from gemini_keys import call_with_key_failover, get_gemini_api_keys
 
 try:
     if hasattr(sys.stdout, "reconfigure"):
@@ -28,14 +29,13 @@ env_path = _microvid_config_dir() / ".env"
 if not env_path.is_file():
     raise RuntimeError(f"Shared Microvid credential file not found: {env_path}")
 load_dotenv(dotenv_path=env_path, override=False)
-api_key_gemini = os.getenv("GEMINI_API_KEY")
+api_keys_gemini = get_gemini_api_keys()
 api_key_oai = os.getenv("OPENAI_API_KEY")
 api_key_dsk = os.getenv("DEEPSEEK_API_KEY")
 client = None
 if model_choice == "gemini":
-    if not api_key_gemini:
-        raise RuntimeError("GEMINI_API_KEY is not configured in the shared Microvid .env")
-    client = genai.Client(api_key=api_key_gemini)
+    if not api_keys_gemini:
+        raise RuntimeError("No Gemini API key is configured in the shared Microvid .env")
 elif model_choice == "openai":
     from openai import OpenAI
     client = OpenAI(api_key=api_key_oai)
@@ -185,8 +185,10 @@ def _call_llm(messages_or_prompt):
         # Gemini. LaTeX repair participates in the same shared request lane as
         # slide/narration generation and uses the common retry/circuit policy.
         with gemini_lane("latex_repair", model_name):
-            r = call_with_retry(
-                lambda: client.models.generate_content(model=model_name, contents=messages_or_prompt),
+            r = call_with_key_failover(
+                lambda key: genai.Client(api_key=key).models.generate_content(
+                    model=model_name, contents=messages_or_prompt
+                ),
                 label=f"LaTeX repair ({model_name})",
             )
         return (getattr(r, "text", None) or "").strip()

@@ -5,7 +5,8 @@ import fix_latex
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
-from gemini_lane import call_with_retry, gemini_lane
+from gemini_lane import gemini_lane
+from gemini_keys import call_with_key_failover, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -44,15 +45,14 @@ load_dotenv(dotenv_path=env_path, override=False)
 # API key and model setup
 api_key_dsk = os.getenv("DEEPSEEK_API_KEY")
 api_key_oai = os.getenv("OPENAI_API_KEY")
-api_key_gemini = os.getenv("GEMINI_API_KEY")
+api_keys_gemini = get_gemini_api_keys()
 
 if model_choice == 'gemini':
-    api_key = api_key_gemini
     print(f'model_choice: {model_choice}; model_name: {model_name}')
-    if not api_key:
-        print("❌ No valid API key found")
+    if not api_keys_gemini:
+        print("❌ No valid Gemini API key found")
         sys.exit()
-    client = genai.Client(api_key=api_key)
+    client = None
     
 elif model_choice == 'openai':
     api_key = api_key_oai
@@ -301,7 +301,7 @@ def _strip_pause_commands(tex: str) -> str:
 #print(f"[INFO] Configuring LLM client for model: {model_choice}")
 
 if model_choice == 'gemini':
-    client = genai.Client(api_key=api_key)
+    client = None
 elif model_choice == 'openai':
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 elif model_choice == 'deepseek':
@@ -349,8 +349,8 @@ if model_choice in ('openai', 'deepseek'):
 else:  # gemini
     print("[INFO] Sending prompt to Gemini")
     with gemini_lane("slide_generation", model_name):
-        resp = call_with_retry(
-            lambda: client.models.generate_content(model=model_name, contents=prompt),
+        resp = call_with_key_failover(
+            lambda key: genai.Client(api_key=key).models.generate_content(model=model_name, contents=prompt),
             label=f"slide generation ({model_name})",
         )
     latex_presentation = resp.text

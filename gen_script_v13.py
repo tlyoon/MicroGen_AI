@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from gemini_lane import call_with_retry, gemini_lane
+from gemini_lane import gemini_lane
+from gemini_keys import call_with_key_failover, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -49,8 +50,8 @@ def _load_runtime_environment() -> Path:
             "Create %LOCALAPPDATA%\\Microvid\\.env (or set MICROVID_CONFIG_DIR)."
         )
     load_dotenv(dotenv_path=env_path, override=False)
-    if not os.getenv("GEMINI_API_KEY"):
-        raise RuntimeError(f"GEMINI_API_KEY is not set in {env_path} or the current environment.")
+    if not get_gemini_api_keys():
+        raise RuntimeError(f"No Gemini API key is set in {env_path} or the current environment.")
     print(f"Using shared Microvid API credentials from: {env_path}")
     return config_dir
 
@@ -238,8 +239,6 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
     except ImportError as exc:
         raise RuntimeError("The hybrid narration engine requires google-genai. Install requirements.txt.") from exc
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-
     # google-genai has changed ThinkingConfig across releases. Build the
     # configuration defensively so an older worker does not fail before making
     # the narration request. Newer SDKs use thinking_level; older releases may
@@ -273,13 +272,14 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
 
     prompt = _compose_prompt(slides, source_blocks)
 
-    def _stream_once() -> str:
+    def _stream_once(api_key: str) -> str:
+        client = genai.Client(api_key=api_key)
         chunks = client.models.generate_content_stream(model=MODEL_NAME, contents=prompt, config=config)
         return "".join(chunk.text or "" for chunk in chunks)
 
     try:
         with gemini_lane("narration_generation", MODEL_NAME):
-            text = call_with_retry(
+            text = call_with_key_failover(
                 _stream_once,
                 label=f"narration generation ({MODEL_NAME})",
             )
