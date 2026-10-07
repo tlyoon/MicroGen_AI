@@ -114,6 +114,32 @@ class GeminiKeyPoolTests(unittest.TestCase):
             self.assertEqual(gemini_keys.call_with_key_failover(operation), "ok")
             self.assertEqual(calls, ["first", "first", "second"])
 
+    def test_mixed_transient_and_billing_failure_does_not_open_circuit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            env = {
+                "GEMINI_API_KEY_1": "first",
+                "GEMINI_API_KEY_2": "second",
+                "MICROGEN_GEMINI_LANE_DIR": tmp,
+                "MICROGEN_GEMINI_TRANSIENT_RETRIES_PER_KEY": "1",
+                "MICROGEN_GEMINI_BACKOFF_BASE_SECONDS": "0",
+                "MICROGEN_GEMINI_BACKOFF_MAX_SECONDS": "0",
+            }
+
+            def operation(key):
+                calls.append(key)
+                if key == "first":
+                    raise FakeTransientError()
+                raise FakeBillingError()
+
+            with patch.dict(os.environ, env, clear=True), patch("gemini_keys.time.sleep"), patch(
+                "gemini_keys.random.uniform", return_value=0.0
+            ):
+                with self.assertRaises(RuntimeError):
+                    gemini_keys.call_with_key_failover(operation)
+                self.assertEqual(calls, ["first", "second"])
+                self.assertFalse((Path(tmp) / "circuit_breaker.json").exists())
+
     def test_all_billing_failures_open_shared_circuit(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {

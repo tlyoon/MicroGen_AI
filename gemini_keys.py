@@ -158,6 +158,7 @@ def call_with_key_failover(
         _env_int("MICROGEN_GEMINI_TRANSIENT_RETRIES_PER_KEY", 2),
     )
     last_key_error: BaseException | None = None
+    billing_failed_keys = 0
 
     for key_index, key in enumerate(keys, start=1):
         transient_failures = 0
@@ -167,6 +168,8 @@ def call_with_key_failover(
             except Exception as exc:
                 if is_key_failover_error(exc):
                     last_key_error = exc
+                    if is_billing_gemini_error(exc):
+                        billing_failed_keys += 1
                     if key_index < len(keys):
                         print(
                             f"[Gemini keys] {label}: key #{key_index} unavailable "
@@ -205,11 +208,15 @@ def call_with_key_failover(
                 )
                 time.sleep(delay)
 
-    if last_key_error is not None and is_billing_gemini_error(last_key_error):
+    if (
+        last_key_error is not None
+        and is_billing_gemini_error(last_key_error)
+        and billing_failed_keys == len(keys)
+    ):
         trip_billing_circuit(last_key_error, label=f"{label} (all configured keys)")
         raise GeminiBillingError(
-            f"{label} stopped because all configured Gemini keys were unavailable; "
-            f"the final key reported billing/prepayment failure: {last_key_error}"
+            f"{label} stopped because every configured Gemini key reported "
+            f"billing/prepayment failure: {last_key_error}"
         ) from last_key_error
     if last_key_error is not None:
         raise RuntimeError(
