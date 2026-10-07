@@ -10,7 +10,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from gemini_lane import gemini_lane
-from gemini_keys import call_with_key_failover, get_gemini_api_keys
+from gemini_keys import call_with_client_failover, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -272,14 +272,14 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
 
     prompt = _compose_prompt(slides, source_blocks)
 
-    def _stream_once(api_key: str) -> str:
-        client = genai.Client(api_key=api_key)
+    def _stream_once(client) -> str:
         chunks = client.models.generate_content_stream(model=MODEL_NAME, contents=prompt, config=config)
         return "".join(chunk.text or "" for chunk in chunks)
 
     try:
         with gemini_lane("narration_generation", MODEL_NAME):
-            text = call_with_key_failover(
+            text = call_with_client_failover(
+                lambda key: genai.Client(api_key=key),
                 _stream_once,
                 label=f"narration generation ({MODEL_NAME})",
             )

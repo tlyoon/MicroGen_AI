@@ -13,7 +13,7 @@ from PIL import Image
 from google import genai
 from google.genai import types
 from gemini_lane import GeminiBillingError, GeminiCircuitOpen, gemini_lane
-from gemini_keys import call_with_key_failover, get_gemini_api_keys
+from gemini_keys import call_with_client_failover, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -51,8 +51,9 @@ def image_part(path: Path):
 
 def generate(parts):
     with gemini_lane("figure_mapping_request", MODEL_NAME, cooldown=FIGURE_COOLDOWN):
-        response = call_with_key_failover(
-            lambda key: genai.Client(api_key=key).models.generate_content(model=MODEL_NAME, contents=parts),
+        response = call_with_client_failover(
+            lambda key: genai.Client(api_key=key),
+            lambda client: client.models.generate_content(model=MODEL_NAME, contents=parts),
             label=f"figure mapping ({MODEL_NAME})",
         )
     text = (response.text or "").strip()

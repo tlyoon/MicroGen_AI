@@ -95,6 +95,30 @@ def is_key_failover_error(exc: BaseException) -> bool:
     return any(marker in text for marker in markers)
 
 
+def call_with_client_failover(
+    client_factory: Callable[[str], object],
+    operation_for_client: Callable[[object], T],
+    *,
+    label: str = "Gemini request",
+    max_retries: int | None = None,
+) -> T:
+    """Run a Gemini operation while keeping each SDK client alive for the full request."""
+    def operation_for_key(api_key: str) -> T:
+        client = client_factory(api_key)
+        try:
+            return operation_for_client(client)
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
+    return call_with_key_failover(
+        operation_for_key,
+        label=label,
+        max_retries=max_retries,
+    )
+
+
 def call_with_key_failover(
     operation_for_key: Callable[[str], T],
     *,

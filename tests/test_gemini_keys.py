@@ -88,5 +88,30 @@ class GeminiKeyPoolTests(unittest.TestCase):
                 self.assertTrue((Path(tmp) / "circuit_breaker.json").is_file())
 
 
+    def test_client_lifetime_is_owned_until_operation_finishes(self):
+        events = []
+
+        class FakeClient:
+            def __init__(self, key):
+                self.key = key
+                self.closed = False
+                events.append(("created", key))
+
+            def close(self):
+                self.closed = True
+                events.append(("closed", self.key))
+
+        def operation(client):
+            self.assertFalse(client.closed)
+            events.append(("used", client.key))
+            return "ok"
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY_1": "first"}, clear=True):
+            result = gemini_keys.call_with_client_failover(FakeClient, operation)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(events, [("created", "first"), ("used", "first"), ("closed", "first")])
+
+
 if __name__ == "__main__":
     unittest.main()
