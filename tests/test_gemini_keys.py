@@ -23,6 +23,17 @@ class FakeTransientError(Exception):
 
 
 class GeminiKeyPoolTests(unittest.TestCase):
+    def test_client_factory_applies_configured_request_timeout(self):
+        sentinel = object()
+        with patch.dict(os.environ, {"MICROGEN_GEMINI_REQUEST_TIMEOUT_MS": "12345"}, clear=True), patch(
+            "gemini_keys.genai.Client", return_value=sentinel
+        ) as client_ctor:
+            self.assertIs(gemini_keys.create_gemini_client("secret"), sentinel)
+
+        kwargs = client_ctor.call_args.kwargs
+        self.assertEqual(kwargs["api_key"], "secret")
+        self.assertEqual(kwargs["http_options"].timeout, 12345)
+
     def test_numbered_keys_are_priority_ordered_and_deduplicated(self):
         env = {
             "GEMINI_API_KEY_2": "second",

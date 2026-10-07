@@ -6,6 +6,9 @@ import random
 import time
 from typing import Callable, TypeVar
 
+from google import genai
+from google.genai import types
+
 from gemini_lane import (
     GeminiBillingError,
     assert_gemini_available,
@@ -42,6 +45,15 @@ def _env_int(name: str, default: int) -> int:
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else default
+
+
+def create_gemini_client(api_key: str):
+    """Create a Gemini client with a bounded request timeout."""
+    timeout_ms = max(1_000, _env_int("MICROGEN_GEMINI_REQUEST_TIMEOUT_MS", 120_000))
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=timeout_ms),
+    )
 
 
 def get_gemini_api_keys() -> list[str]:

@@ -6,7 +6,7 @@ import subprocess, os
 from google import genai
 from dotenv import load_dotenv
 from gemini_lane import gemini_lane
-from gemini_keys import call_with_client_failover, get_gemini_api_keys
+from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -350,7 +350,7 @@ else:  # gemini
     print("[INFO] Sending prompt to Gemini")
     with gemini_lane("slide_generation", model_name):
         resp = call_with_client_failover(
-            lambda key: genai.Client(api_key=key),
+            create_gemini_client,
             lambda client: client.models.generate_content(model=model_name, contents=prompt),
             label=f"slide generation ({model_name})",
         )

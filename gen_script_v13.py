@@ -10,7 +10,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from gemini_lane import gemini_lane
-from gemini_keys import call_with_client_failover, get_gemini_api_keys
+from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -279,7 +279,7 @@ def _generate_polished(slides: list[dict[str, Any]], source_blocks: list[dict[st
     try:
         with gemini_lane("narration_generation", MODEL_NAME):
             text = call_with_client_failover(
-                lambda key: genai.Client(api_key=key),
+                create_gemini_client,
                 _stream_once,
                 label=f"narration generation ({MODEL_NAME})",
             )

@@ -4,7 +4,7 @@ from PyPDF2 import PdfReader
 from dotenv import load_dotenv
 from google import genai
 from gemini_lane import gemini_lane
-from gemini_keys import call_with_client_failover, get_gemini_api_keys
+from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
 
 try:
     if hasattr(sys.stdout, "reconfigure"):
@@ -186,7 +186,7 @@ def _call_llm(messages_or_prompt):
         # slide/narration generation and uses the common retry/circuit policy.
         with gemini_lane("latex_repair", model_name):
             r = call_with_client_failover(
-                lambda key: genai.Client(api_key=key),
+                create_gemini_client,
                 lambda client: client.models.generate_content(
                     model=model_name, contents=messages_or_prompt
                 ),

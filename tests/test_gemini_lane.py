@@ -43,6 +43,9 @@ class GeminiLaneTests(unittest.TestCase):
         self.assertTrue(gemini_lane.is_billing_gemini_error(exc))
         self.assertFalse(gemini_lane.is_transient_gemini_error(exc))
 
+    def test_timeout_is_transient(self):
+        self.assertTrue(gemini_lane.is_transient_gemini_error(TimeoutError("request timed out")))
+
 
 if __name__ == "__main__":
     unittest.main()
