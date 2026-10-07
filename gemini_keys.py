@@ -137,9 +137,14 @@ def call_with_key_failover(
     retries = _env_int("MICROGEN_GEMINI_MAX_RETRIES", 6) if max_retries is None else max_retries
     base = _env_float("MICROGEN_GEMINI_BACKOFF_BASE_SECONDS", 15.0)
     cap = _env_float("MICROGEN_GEMINI_BACKOFF_MAX_SECONDS", 180.0)
+    transient_retries_per_key = max(
+        1,
+        _env_int("MICROGEN_GEMINI_TRANSIENT_RETRIES_PER_KEY", 2),
+    )
     last_key_error: BaseException | None = None
 
     for key_index, key in enumerate(keys, start=1):
+        transient_failures = 0
         for attempt in range(retries + 1):
             try:
                 return operation_for_key(key)
@@ -154,8 +159,26 @@ def call_with_key_failover(
                         )
                     break
 
-                if attempt >= retries or not is_transient_gemini_error(exc):
+                if not is_transient_gemini_error(exc):
                     raise
+
+                transient_failures += 1
+
+                if (
+                    key_index < len(keys)
+                    and transient_failures >= transient_retries_per_key
+                ):
+                    print(
+                        f"[Gemini keys] {label}: key #{key_index} had "
+                        f"{transient_failures} consecutive transient failures "
+                        f"({type(exc).__name__}: {exc}); rotating to key #{key_index + 1}",
+                        flush=True,
+                    )
+                    break
+
+                if attempt >= retries:
+                    raise
+
                 delay = min(cap, base * (2 ** attempt))
                 delay += random.uniform(0.0, min(5.0, max(1.0, delay * 0.15)))
                 print(
