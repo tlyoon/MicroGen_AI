@@ -24,6 +24,7 @@ from typing import Callable
 from gemini_lane import circuit_is_open
 import microgen_quality as quality
 from microgen_ownership import from_gcs_bucket
+from microgen_docling_environment import resolve_docling_python
 
 STAGES = [
     "figure_extraction",
@@ -560,7 +561,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--work-root", type=Path, required=True)
     ap.add_argument("--targets", required=True, help="Comma-separated subchapters, e.g. 1.1,1.2,2.3")
     ap.add_argument("--main-py", default=sys.executable)
-    ap.add_argument("--docling-py", default=sys.executable)
+    ap.add_argument("--docling-py", default=None,
+                    help="Existing Docling Python; falls back to MICROGEN_DOCLING_PY or known local Conda environments.")
     ap.add_argument("--commit", default="unknown")
     ap.add_argument("--stage-retries", type=int, default=1)
     ap.add_argument(
@@ -607,6 +609,8 @@ def main() -> int:
         os.environ["MICROGEN_MULTIPART"] = "1"
     else:
         os.environ.pop("MICROGEN_MULTIPART", None)
+    args.docling_py = resolve_docling_python(args.docling_py,
+                                                   main_python=args.main_py)
     preflight(args.main_py, args.docling_py)
     report: list[dict] = []
     report_path = args.work_root / "batch_report.json"

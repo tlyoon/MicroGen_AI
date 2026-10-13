@@ -157,8 +157,12 @@ def main() -> int:
     parser.add_argument("--audit", action="store_true", help="Read-only two-level lecture inventory")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args()
+    from microgen_docling_environment import resolve_docling_python
+    chosen_docling = resolve_docling_python(args.docling_py,
+                                             main_python=sys.executable)
     info = inspect_environment(args.source_root, work_root=args.work_root,
-                               docling_py=args.docling_py)
+                               docling_py=chosen_docling)
+    info["docling_python"] = chosen_docling
     if args.audit:
         if args.source_root is None:
             parser.error("--audit requires --source-root")

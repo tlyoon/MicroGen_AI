@@ -115,3 +115,27 @@ python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root 
 Dell-115 had approximately 732 GB free on local D: at inspection. A dedicated Docling environment was initiated there, but the package index repeatedly failed DNS resolution (`getaddrinfo failed`), so its pip installer and remaining subprocess were stopped rather than repeatedly retried. That Docling environment is **not certified or installed**. Yoga6's C: remains too full to attempt the installation safely. Live Gemini 3.8 Flash reached Google from Yoga6's clean environment, but the small readiness request returned 503 high demand. This is provider capacity, not an SDK import failure.
 
 No production source folders or production code checkouts were modified. Full Docling extraction + successful live full-pipeline validation remains a release blocker.
+
+
+### Reuse existing Docling: Yoga6 (verified)
+
+The Yoga6 machine already has **Docling 2.43.0** with Python **3.11.13** in the existing Conda interpreter:
+
+```powershell
+$doclingPython = Join-Path $env:USERPROFILE 'miniconda3\envs\docling_3\python.exe'
+```
+
+The interpreter successfully imports `docling.document_converter.DocumentConverter`, `docling.datamodel.pipeline_options.PdfPipelineOptions`, `pdf2image` and `PIL`. In contrast, `docling_win` failed dependency imports, and `docling` had no valid `python.exe`. Use **docling_3**, not the default Miniforge Python and not the broken alternative.
+
+The machine-specific user environment setting `MICROGEN_DOCLING_PY` was saved to point at that verified interpreter. MicroGen now respects explicit `--docling-py` first, then the machine variable, then bounded discovery of known existing Conda Docling environments. This discovery is read-only and never installs any dependencies. If a specified interpreter is invalid, the preflight fails visibly rather than switching environments.
+
+The main Gemini/TTS interpreter remains the separately verified clean venv:
+
+```powershell
+$mainPython = Join-Path $env:LOCALAPPDATA 'MicroGen_Clean_Venv_20261013\Scripts\python.exe'
+$doclingPython = Join-Path $env:USERPROFILE 'miniconda3\envs\docling_3\python.exe'
+
+& $mainPython microgen_doctor.py --source-root "G:\My Drive\ZCA110_2627_SEM1\MCQ_generation\Thomas_calculus_13ed" --docling-py $doclingPython --work-root "D:\MicroGenScratch"
+```
+
+The `D:\MicroGenScratch` path is an illustrative local work volume, **not a claim that Yoga6 has a D: drive**. On 2026-10-13, Yoga6 had approximately **0.8 GB free on C:** and therefore did not pass the 8 GB scratch-space guard. Do **not** run expensive Docling extraction or video rendering until a sufficiently spacious writable local work drive is available. This is now the remaining Yoga6 local resource blocker; Docling itself is already installed and verified.
