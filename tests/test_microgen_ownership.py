@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 from microgen_ownership import GCSLease, LeaseBusy, LeaseLost, lease_object_key
@@ -94,9 +95,10 @@ class OwnershipTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             args=SimpleNamespace(work_root=Path(tmp),multi_pc=False)
             with microgen_batch.subchapter_ownership(args,"8.5"):
-                with self.assertRaisesRegex(RuntimeError,"active local worker"):
-                    with microgen_batch.subchapter_ownership(args,"8.5"):
-                        pass
+                with mock.patch.dict("os.environ",{"MICROGEN_LOCAL_LOCK_WAIT_SECONDS":"0"}):
+                    with self.assertRaisesRegex(RuntimeError,"active local worker"):
+                        with microgen_batch.subchapter_ownership(args,"8.5"):
+                            pass
             # A stable lock inode remains, but its OS lock is released.
             self.assertTrue((Path(tmp)/".microgen_8.5.owner.lock").exists())
             with microgen_batch.subchapter_ownership(args, "8.5"):
@@ -134,9 +136,10 @@ class OwnershipTests(unittest.TestCase):
                     time.sleep(.1)
                 self.assertTrue(acquired.is_file())
                 args=SimpleNamespace(work_root=root,multi_pc=False)
-                with self.assertRaisesRegex(RuntimeError,"active local worker"):
-                    with microgen_batch.subchapter_ownership(args,"4.2"):
-                        pass
+                with mock.patch.dict("os.environ",{"MICROGEN_LOCAL_LOCK_WAIT_SECONDS":"0"}):
+                    with self.assertRaisesRegex(RuntimeError,"active local worker"):
+                        with microgen_batch.subchapter_ownership(args,"4.2"):
+                            pass
                 proc.kill()
                 proc.wait(timeout=5)
                 with microgen_batch.subchapter_ownership(args,"4.2"):

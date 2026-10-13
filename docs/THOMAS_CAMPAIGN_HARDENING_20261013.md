@@ -95,3 +95,8 @@ python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root 
 ```
 
 Choose a *genuinely local* disk with sufficient free space for the work root. Google Drive's virtual free-space reading is not a substitute. The configured threshold can be raised for large PDFs, or cautiously adjusted for known tiny jobs; overrides below 0.5 GiB are rejected. Do not install heavy extraction/ML dependencies into Yoga6's nearly full C: drive until space is freed or an alternative volume is available.
+
+
+### Windows crash-release grace period
+
+On Yoga6, the OS occasionally continued reporting an exclusive byte lock briefly after the killed worker exited. To avoid a false owner-conflict failure, the local kernel lock now waits up to five seconds by default (`MICROGEN_LOCAL_LOCK_WAIT_SECONDS`) before declaring that another worker is active. The range is limited to 0–60 seconds. The underlying lock remains a process-owned kernel lock, never a manually removed stale lockfile. The crash/ownership tests include both immediate contention and bounded recovery.

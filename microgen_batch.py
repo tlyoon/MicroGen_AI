@@ -370,24 +370,38 @@ def subchapter_ownership(args, subchapter: str):
     local.parent.mkdir(parents=True, exist_ok=True)
     with open(local, "a+b") as handle:
         locked = False
+        grace_text = os.environ.get("MICROGEN_LOCAL_LOCK_WAIT_SECONDS", "5.0")
         try:
-            if os.name == "nt":
-                import msvcrt
-                handle.seek(0)
-                if local.stat().st_size == 0:
-                    handle.write(b"\0")
-                    handle.flush()
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            locked = True
-        except (OSError, BlockingIOError) as exc:
-            raise RuntimeError(
-                f"Subchapter {subchapter} has another active local worker; "
-                f"kernel lock held at {local}. Do not force-remove a live lock."
-            ) from exc
+            grace = float(grace_text)
+        except ValueError as exc:
+            raise RuntimeError("MICROGEN_LOCAL_LOCK_WAIT_SECONDS must be numeric") from exc
+        if not 0 <= grace <= 60:
+            raise RuntimeError("Local lock wait must be between 0 and 60 seconds")
+        deadline = time.monotonic() + grace
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            if local.stat().st_size == 0:
+                handle.write(b"\0")
+                handle.flush()
+        else:
+            import fcntl
+        while not locked:
+            try:
+                if os.name == "nt":
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+            except (OSError, BlockingIOError) as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"Subchapter {subchapter} has another active local worker; "
+                        f"kernel lock unavailable at {local}. Verify other workers "
+                        "before modifying locks."
+                    ) from exc
+                time.sleep(min(0.15, max(0.01, deadline-time.monotonic())))
         try:
             # Avoid overwriting the byte locked by Windows msvcrt.locking.
             # The lock file records a human-readable owner after the first byte.
