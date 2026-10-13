@@ -56,4 +56,15 @@ class DoctorTests(unittest.TestCase):
             self.assertFalse(info["ok"])
             self.assertEqual(info["scratch_disk"]["free_gb"],0.9)
 
+
+    def test_separate_docling_interpreter_is_checked_before_generation(self):
+        with tempfile.TemporaryDirectory() as root:
+            from unittest.mock import Mock
+            with mock.patch("microgen_doctor.subprocess.run",
+                            side_effect=[Mock(returncode=0),Mock(returncode=1)]) as run:
+                state=inspect_environment(Path(root),docling_py="D:/Docling/python.exe")
+            self.assertEqual(run.call_count,2)
+            self.assertFalse(state["checks"]["docling_extraction_importable"])
+            self.assertFalse(state["ok"])
+
 if __name__=="__main__":unittest.main()

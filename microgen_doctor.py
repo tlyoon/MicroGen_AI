@@ -18,6 +18,7 @@ def inspect_environment(
     source_root: Path | None = None, *,
     python_exe: str | None = None,
     work_root: Path | None = None,
+    docling_py: str | None = None,
 ) -> dict:
     python_exe = python_exe or sys.executable
     deps = ("fitz", "PIL", "imageio_ffmpeg", "PyPDF2",
@@ -80,6 +81,17 @@ def inspect_environment(
     if source_root is not None:
         checks["source_directory_accessible"] = bool(source.get("can_read"))
         checks["source_directory_writable"] = bool(source.get("can_write"))
+    if docling_py:
+        try:
+            check_docling = subprocess.run(
+                [str(docling_py), "-c", "import docling,pdf2image,PIL"],
+                stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                errors="replace",timeout=50,
+            )
+            docling_available = check_docling.returncode == 0
+        except (OSError,subprocess.TimeoutExpired):
+            docling_available = False
+        checks["docling_extraction_importable"] = docling_available
     disk = None
     if work_root is not None:
         from microgen_quality import scratch_disk_status
@@ -140,10 +152,13 @@ def main() -> int:
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--work-root", type=Path,
                         help="Check actual local scratch drive capacity before generation.")
+    parser.add_argument("--docling-py", type=str,
+                        help="Check the separate Docling Python interpreter used for extraction.")
     parser.add_argument("--audit", action="store_true", help="Read-only two-level lecture inventory")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args()
-    info = inspect_environment(args.source_root, work_root=args.work_root)
+    info = inspect_environment(args.source_root, work_root=args.work_root,
+                               docling_py=args.docling_py)
     if args.audit:
         if args.source_root is None:
             parser.error("--audit requires --source-root")

@@ -100,3 +100,18 @@ Choose a *genuinely local* disk with sufficient free space for the work root. Go
 ### Windows crash-release grace period
 
 On Yoga6, the OS occasionally continued reporting an exclusive byte lock briefly after the killed worker exited. To avoid a false owner-conflict failure, the local kernel lock now waits up to five seconds by default (`MICROGEN_LOCAL_LOCK_WAIT_SECONDS`) before declaring that another worker is active. The range is limited to 0–60 seconds. The underlying lock remains a process-owned kernel lock, never a manually removed stale lockfile. The crash/ownership tests include both immediate contention and bounded recovery.
+
+
+### Separate Docling environment preflight and installer network failure
+
+Docling is intentionally kept in a **separate optional Python environment** because its ML dependencies may be large. `requirements-docling.txt` captures the version range and `pdf2image` dependency. The doctor now supports `--docling-py` and actually imports `docling,pdf2image,PIL` using that interpreter; a broken/missing extraction environment therefore fails preflight rather than stalling the generation job.
+
+Example after installing a dedicated environment on a sufficiently spacious **local** drive:
+
+```powershell
+python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root "D:\MicroGenScratch" --docling-py "D:\MicroGen_Docling_Venv\Scripts\python.exe"
+```
+
+Dell-115 had approximately 732 GB free on local D: at inspection. A dedicated Docling environment was initiated there, but the package index repeatedly failed DNS resolution (`getaddrinfo failed`), so its pip installer and remaining subprocess were stopped rather than repeatedly retried. That Docling environment is **not certified or installed**. Yoga6's C: remains too full to attempt the installation safely. Live Gemini 3.8 Flash reached Google from Yoga6's clean environment, but the small readiness request returned 503 high demand. This is provider capacity, not an SDK import failure.
+
+No production source folders or production code checkouts were modified. Full Docling extraction + successful live full-pipeline validation remains a release blocker.
