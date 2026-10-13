@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 import re
 import fix_latex
-from microgen_quality import check_graphics, check_slide_pdf
+from microgen_quality import check_graphics, check_slide_pdf, check_latex_overflow
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
@@ -418,7 +418,8 @@ for attempt in range(1, 5):
         if final_pass.returncode != 0:
             raise RuntimeError(f"Second-pass pdflatex failed: {final_pass.stdout[-1200:]}")
         check_slide_pdf(Path("slides.pdf"), require_footer=True)
-        print(f"✅ Two-pass LaTeX and page-number checks succeeded: {tex_file}")
+        check_latex_overflow(Path("slides.log"))
+        print(f"✅ Two-pass LaTeX, counters and overflow checks succeeded: {tex_file}")
         compile_ok = True
         break
     print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")

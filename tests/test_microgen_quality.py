@@ -225,5 +225,18 @@ class QualityContractTests(unittest.TestCase):
             (root / "script_tts.json").write_text("changed speech")
             self.assertNotEqual(b, q.dependency_fingerprint(root, "tts"))
 
+    def test_severe_beamer_overflow_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "slides.log"
+            path.write_text(
+                "Overfull \\hbox (0.69pt too wide) detected at line 3\n"
+                "Overfull \\vbox (28.12pt too high) has occurred\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(q.QualityError, "Severe LaTeX"):
+                q.check_latex_overflow(path)
+            path.write_text("Overfull \\hbox (0.69pt too wide)",encoding="utf-8")
+            self.assertEqual(q.check_latex_overflow(path)["severe_count"], 0)
+
 if __name__ == "__main__":
     unittest.main()

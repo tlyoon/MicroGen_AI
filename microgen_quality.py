@@ -362,3 +362,26 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         pairs.append(("_rate", os.environ.get("MICROVID_TTS_SPEAKING_RATE", "0.8")))
         pairs.append(("_language", os.environ.get("MICROVID_TTS_LANGUAGE", "en-US")))
     return hashlib.sha256(json.dumps(pairs, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def check_latex_overflow(log_path: Path, *, max_hbox_pt: float = 8.0,
+                         max_vbox_pt: float = 5.0) -> dict:
+    """Catch severe overfull Beamer boxes instead of trusting PDF compile exit.
+
+    Mild theme-related hbox overflow may be tolerated. Geometry/semantic
+    review is still needed for clipping not reported by TeX.
+    """
+    require_file(log_path)
+    content = Path(log_path).read_text(encoding="utf-8", errors="replace")
+    matches = re.findall(
+        r"Overfull\s+\\(hbox|vbox)\s+\(([0-9]+(?:\.[0-9]+)?)pt\s+too\s+(?:wide|high)\)",
+        content,
+    )
+    severe = [(kind, float(amount)) for kind, amount in matches
+              if float(amount) > (max_hbox_pt if kind == "hbox" else max_vbox_pt)]
+    if severe:
+        raise QualityError(
+            f"Severe LaTeX layout overflow in {log_path.name}: {severe[:12]}. "
+            "Reflow the source-backed content; do not crop the PDF."
+        )
+    return {"all_overfull_count": len(matches), "severe_count": 0}
