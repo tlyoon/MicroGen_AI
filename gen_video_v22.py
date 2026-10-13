@@ -226,6 +226,10 @@ def main() -> None:
             if sha256(backup) != sha256(OUTPUT_FILE):
                 raise RuntimeError("Previous media backup checksum mismatch")
     candidate.replace(OUTPUT_FILE)
+    if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
+        from microgen_multipart import render_parts
+        result = render_parts(Path.cwd(), segments, _concat)
+        print(f"[video] validated {len(result['parts'])} source-grounded video parts")
     print(f"Video created and verified successfully: {OUTPUT_FILE}")
 
 

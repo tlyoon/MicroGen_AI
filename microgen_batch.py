@@ -9,6 +9,7 @@ than burning retry attempts across every worker.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from typing import Callable
 
 from gemini_lane import circuit_is_open
 import microgen_quality as quality
+from microgen_ownership import from_gcs_bucket
 
 STAGES = [
     "figure_extraction",
@@ -137,6 +139,11 @@ def prepare_stage(
     stage.mkdir(parents=True, exist_ok=True)
     copy_repo_into_stage(repo, stage)
     shutil.copy2(src, stage / "source.pdf")
+    # An explicitly reviewed topic boundary manifest may travel with source.pdf.
+    # The model is never allowed to silently approve its own scene proposals.
+    reviewed = src.parent / "lesson_scenes.json"
+    if reviewed.is_file():
+        shutil.copy2(reviewed, stage / "lesson_scenes.json")
 
     cp = load_checkpoint(checkpoint_path)
     cp.update(
@@ -206,6 +213,8 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             elif name == "video":
                 wav = quality.check_wavs(stage, count)
                 quality.check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
+                if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
+                    quality.check_multipart_receipt(stage)
             return True
         except (quality.QualityError, OSError, ValueError):
             return False
@@ -304,10 +313,11 @@ def atomic_publish_file(src: Path, dest: Path) -> None:
     tmp.replace(dest)
 
 
-def publish(stage: Path, dest: Path) -> None:
+def publish(stage: Path, dest: Path, *, lease=None) -> None:
     """Publish only a verified bundle, keeping backups of earlier assets."""
     info = quality.manifest_for(stage, require_footer=True)
-    quality.publish_bundle(stage, dest, manifest=info)
+    quality.publish_bundle(stage, dest, manifest=info,
+                           still_owner=(lease.assert_held if lease is not None else None))
     if not quality.published_manifest_valid(dest):
         raise RuntimeError("Publication receipt/checksum validation failed")
 
@@ -344,7 +354,35 @@ def preflight(main_py: str, docling_py: str) -> None:
     print(proc2.stdout.strip(), flush=True)
 
 
-def process_one(args, subchapter: str, report: list[dict]) -> None:
+@contextlib.contextmanager
+def subchapter_ownership(args, subchapter: str):
+    """Local mutual exclusion plus optional strong cross-PC GCS CAS lease."""
+    import contextlib as _contextlib
+    local = args.work_root / f".microgen_{subchapter}.owner.lock"
+    try:
+        fd = os.open(str(local), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError(
+            f"Subchapter {subchapter} already has a local owner lock at {local}. "
+            "Check the active worker; do not delete a lock from a running process."
+        ) from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(json.dumps({"subchapter": subchapter, "pid": os.getpid(),
+                                  "created_utc": utc_now()}))
+        if args.multi_pc:
+            with from_gcs_bucket(args.lease_bucket, args.campaign_id, subchapter) as lease:
+                lease.assert_held()
+                yield lease
+        else:
+            yield None
+    finally:
+        local.unlink(missing_ok=True)
+
+
+def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
+    if lease is not None:
+        lease.assert_held()
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -357,19 +395,27 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
     log_path = args.work_root / f"{subchapter}.log"
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
-    if quality.published_manifest_valid(dest):
+    verified = quality.published_manifest_valid(dest)
+    published_mode_ready = not args.multipart
+    if verified and args.multipart:
+        final_receipt = json.loads(
+            (dest / ".microgen_verified_completion.json").read_text(encoding="utf-8")
+        )
+        published_mode_ready = bool(final_receipt.get("multipart_parts"))
+    if verified and published_mode_ready:
         print(f"[{subchapter}] verified receipt and source hashes; skipping", flush=True)
         report.append({"subchapter": subchapter, "status": "success",
                        "resumed": True, "verified": True})
         return
-    if nonempty(dest / "slides.mp4") and not args.rebuild_unverified:
+    if nonempty(dest / "slides.mp4") and not verified and not args.rebuild_unverified:
         raise RuntimeError(
             "An existing MP4 has no current verified completion receipt. "
             "Preserved unchanged. Review it or run with --rebuild-unverified "
             "to explicitly permit replacement after full verification."
         )
 
-    if cp.get("completed", {}).get("published") and stage_valid(stage, "published", dest):
+    if (published_mode_ready and cp.get("completed", {}).get("published")
+            and stage_valid(stage, "published", dest)):
         print(f"[{subchapter}] already published and verified; skipping", flush=True)
         report.append({"subchapter": subchapter, "status": "success", "resumed": True})
         return
@@ -386,6 +432,12 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
     }
 
     for stage_name in STAGES:
+        if lease is not None:
+            lease.assert_held()
+        if args.multipart and stage_name == "narration":
+            from microgen_multipart import validate_scenes
+            count = quality.check_slide_pdf(stage / "slides.pdf")["pages"]
+            validate_scenes(stage, durations=[1.0] * count)
         completed = bool(cp.get("completed", {}).get(stage_name))
         fingerprint_ok = False
         if completed and stage_valid(stage, stage_name, dest):
@@ -403,7 +455,9 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
             if stage_name == "published":
-                publish(stage, dest)
+                if lease is not None:
+                    lease.assert_held()
+                publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
                 run_subprocess(
@@ -415,6 +469,8 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
                     gemini_stage=stage_name in GEMINI_STAGES,
                     retries=args.stage_retries,
                 )
+                if lease is not None:
+                    lease.assert_held()
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
             mark_complete(cp, checkpoint_path, stage_name, stage)
@@ -467,6 +523,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
+    ap.add_argument("--multi-pc", action="store_true",
+                    help="Require a strong GCS lease for every subchapter, instead of Drive-based locks.")
+    ap.add_argument("--lease-bucket", help="GCS bucket for atomic generation-conditional ownership.")
+    ap.add_argument("--campaign-id", help="Stable campaign identifier shared across all PCs.")
+    ap.add_argument("--multipart", action="store_true",
+                    help="Require approved source-cited lesson scenes and emit video parts.")
     return ap
 
 
@@ -479,13 +541,28 @@ def main() -> int:
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
+    if args.multi_pc and (not args.campaign_id or not args.lease_bucket):
+        raise SystemExit("--multi-pc requires both --campaign-id and --lease-bucket")
+    if args.multi_pc:
+        parts = {segment.casefold() for segment in args.work_root.parts}
+        if (args.work_root.is_relative_to(args.source_root)
+                or parts.intersection({"my drive", "google drive", "onedrive", "dropbox"})):
+            raise SystemExit(
+                "Multi-PC work root must be a private local scratch folder, not "
+                "inside source root or a recognized synced-drive folder."
+            )
+    if args.multipart:
+        os.environ["MICROGEN_MULTIPART"] = "1"
+    else:
+        os.environ.pop("MICROGEN_MULTIPART", None)
     preflight(args.main_py, args.docling_py)
     report: list[dict] = []
     report_path = args.work_root / "batch_report.json"
     print(f"[batch] targets={targets}", flush=True)
     for subchapter in targets:
         try:
-            process_one(args, subchapter, report)
+            with subchapter_ownership(args, subchapter) as lease:
+                process_one(args, subchapter, report, lease=lease)
         except Exception as exc:
             print(f"[{subchapter}] FAILED: {type(exc).__name__}: {exc}", flush=True)
             report.append(

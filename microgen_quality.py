@@ -208,7 +208,10 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     narration = check_narration(stage / "script.txt", stage / "script_tts.json", pdf["pages"])
     wav = check_wavs(stage, pdf["pages"])
     video = check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
-    return {
+    multipart = None
+    if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
+        multipart = check_multipart_receipt(stage)
+    result = {
         "schema_version": 1,
         "validation": "structural-media-v1; does not certify scientific fidelity",
         "source_sha256": sha256(stage / "source.pdf"),
@@ -223,6 +226,11 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if multipart is not None:
+        result["multipart_receipt_sha256"] = multipart["receipt_sha256"]
+        result["multipart_parts"] = multipart["parts"]
+        result["scene_manifest_sha256"] = sha256(stage / "lesson_scenes.json")
+    return result
 
 
 def published_manifest_valid(dest: Path) -> bool:
@@ -249,12 +257,19 @@ def published_manifest_valid(dest: Path) -> bool:
         for name, digest in data.get("figure_sha256", {}).items():
             if sha256(dest / name) != digest:
                 return False
+        if "multipart_receipt_sha256" in data:
+            if (sha256(dest / ".microgen_multipart_receipt.json") != data["multipart_receipt_sha256"]
+                or sha256(dest / "lesson_scenes.json") != data["scene_manifest_sha256"]):
+                return False
+            for name, digest in data.get("multipart_parts", {}).items():
+                if sha256(dest / name) != digest:
+                    return False
         return True
     except (OSError, KeyError, ValueError, TypeError):
         return False
 
 
-def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None) -> dict:
+def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, still_owner=None) -> dict:
     """Preflight and stage every file before replacing any published artifact.
 
     Previous files are kept as backups. The marker is published last. If any
@@ -264,6 +279,9 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None) -> 
     info = manifest or manifest_for(stage)
     files = ["slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"]
     files += sorted(set(info.get("figure_sha256", {})))
+    if info.get("multipart_parts"):
+        files += ["lesson_scenes.json", ".microgen_multipart_receipt.json"]
+        files += sorted(info["multipart_parts"])
     files += [f"slide{i}.wav" for i in range(1, len(info.get("wav_sha256", [])) + 1)]
     # Keep source-adjacent split-page PDFs where the legacy slicer generated them.
     count = int(info.get("slide_count", 0))
@@ -290,6 +308,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None) -> 
             staged[name] = pending
         # Backups are retained for explicit recovery from previously published defects.
         for name in files:
+            if still_owner is not None:
+                still_owner()
             prior = dest / name
             if prior.is_file():
                 backup = dest / (name + f".before-microgen-{token}.bak")
@@ -303,8 +323,12 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None) -> 
             # Remove stale acceptance marker before changing the artifact set.
             old_marker.unlink(missing_ok=True)
             for name in files:
+                if still_owner is not None:
+                    still_owner()
                 staged[name].replace(dest / name)
                 replaced.append(name)
+            if still_owner is not None:
+                still_owner()
             receipt = dest / (marker + f".microgen-{token}.tmp")
             receipt.write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
             receipt.replace(dest / marker)
@@ -349,6 +373,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
     if name in {"video", "published"}:
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
+        if (stage / "lesson_scenes.json").is_file():
+            inputs.append("lesson_scenes.json")
+        if (stage / ".microgen_multipart_receipt.json").is_file() and name == "published":
+            inputs.append(".microgen_multipart_receipt.json")
+            inputs += sorted(p.name for p in stage.glob("slides_part_*.mp4"))
     if name == "published":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
     pairs = []
@@ -458,3 +487,46 @@ def try_local_latex_repair(tex_path: Path, *, timeout: float = 180.0) -> bool:
     temp_pdf.replace(target_pdf)
     temp_tex.replace(tex_path)
     return True
+
+
+def check_multipart_receipt(stage: Path, *, expected_parts: int | None = None) -> dict:
+    """Check the opt-in multipart proof against the exact source and video bytes."""
+    stage = Path(stage)
+    marker = stage / ".microgen_multipart_receipt.json"
+    require_file(marker)
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise QualityError(f"Invalid multipart receipt: {exc}") from exc
+    parts = data.get("parts")
+    inputs = data.get("input_hashes", {})
+    if data.get("schema_version") != 1 or not isinstance(parts, list) or not parts:
+        raise QualityError("Invalid multipart receipt structure")
+    if expected_parts is not None and len(parts) != expected_parts:
+        raise QualityError("Incorrect multipart part count")
+    if inputs.get("source_sha256") != sha256(stage / "source.pdf") or \
+       inputs.get("slides_sha256") != sha256(stage / "slides.pdf") or \
+       inputs.get("manifest_sha256") != sha256(stage / "lesson_scenes.json"):
+        raise QualityError("Multipart source/deck/approved scene manifest changed")
+    sequence = []
+    digests = {}
+    for i, item in enumerate(parts, 1):
+        name = f"slides_part_{i:02d}.mp4"
+        if item.get("file") != name or item.get("part") != i:
+            raise QualityError("Invalid multipart filenames or order")
+        if item.get("boundary_verified") is not True:
+            raise QualityError("Multipart cut lacks an approved semantic boundary")
+        expected = item.get("duration_seconds")
+        if not isinstance(expected, (int, float)) or not 0 < expected <= 570:
+            raise QualityError("Multipart part exceeds policy")
+        current = check_video(stage / name, expected_seconds=expected)
+        if current["seconds"] >= 600 or current["sha256"] != item.get("mp4_sha256"):
+            raise QualityError("Multipart actual media mismatch")
+        sequence.extend(item.get("slides", []))
+        digests[name] = current["sha256"]
+    import fitz
+    with fitz.open(stage / "slides.pdf") as slides:
+        n = slides.page_count
+    if sequence != list(range(1, n+1)):
+        raise QualityError("Multipart parts omit/reorder slide content")
+    return {"parts": digests, "receipt_sha256": sha256(marker)}

@@ -378,3 +378,43 @@ Universiti Sains Malaysia (USM)
 ## License
 
 Released under the MIT License. See `LICENSE`.
+
+## Opt-in coherent multipart lectures (reviewed concepts)
+
+MicroGen_AI now includes a validated **multipart media assembly option**. It operates on actual WAV durations, never splits a slide mid-sentence, only permits cuts at explicitly reviewed concept boundaries and checks each video before publication. It is **not yet automatic end-to-end pedagogical planning**: a lecturer must review/correct topic grouping and source-page references in a scene proposal. Model-generated references are not approved by default.
+
+After a slide deck exists (and before starting narration/TTS), run:
+
+```powershell
+python microgen_scene_proposal.py --stage "D:\MicroGenWork\8.5"
+```
+
+Review `lesson_scenes.proposal.json`, correct all weak `source_pages` and `natural_break_after` decisions, then:
+
+```powershell
+python microgen_scene_proposal.py --stage "D:\MicroGenWork\8.5" --approve --reviewer "Course lecturer"
+```
+
+The command refuses approval when weakly-grounded scene citations remain. For a fresh run, place the approved `lesson_scenes.json` beside the subchapter's `source.pdf` (or keep it in the corresponding persistent stage). Run the usual `microgen_batch.py` with `--multipart` and standard `--source-root/--work-root/--targets`. If no approved source-grounded scene manifest matches the generated deck, narration halts **before** another paid request. Output contains the original `slides.mp4` and additional `slides_part_01.mp4`, etc., plus `.microgen_multipart_receipt.json`. Videos are source-order-complete and duration-checked.
+
+For a 30-minute legacy video like Thomas 8.5, no old published MP4 is automatically overwritten. The user must expressly authorize any rebuild, then review content/quality before distributing new parts. Because source pages and scene headings are model-derived, even a mechanically verified split requires academic quality review.
+
+## Cross-PC ownership (strong distributed lease)
+
+A Google Drive folder is not a reliable distributed mutex. To run different subchapters on several PCs concurrently, install the **optional** Cloud Storage dependency:
+
+```powershell
+pip install -r requirements-multipc.txt
+```
+
+Create a dedicated GCS bucket, configure application-default credentials with *read/create/update/delete* rights to its `microgen/v1/` objects, and give every PC the same `--campaign-id` and `--lease-bucket`. Example:
+
+```powershell
+python microgen_batch.py --multi-pc --campaign-id "thomas-2026-sem1" --lease-bucket "YOUR_GCS_LOCK_BUCKET" --source-root "G:\My Drive\CourseSources" --work-root "$env:LOCALAPPDATA\MicroGenJobs\HP" --targets "5.1,5.2"
+```
+
+Locks use generation-matched compare-and-swap, renewable heartbeats and ownership tokens. A second PC cannot claim the same subchapter during the live lease. If bucket access or ownership checks fail, the job fails closed **before publishing**. This protects against simultaneous worker collisions but still requires the PCs' clocks to be synchronized and Cloud Storage connectivity. Do not remove active local owner lockfiles.
+
+Do not claim a Firestore/GCS lock is enabled when `--multi-pc` was omitted. If a Cloud Storage bucket has not been configured, run **one PC at a time** or distribute jobs non-overlapping manually. The existing `MICROGEN_GEMINI_LANE_DIR` only serializes Gemini requests and is not a job lease.
+
+Remaining higher-order functionality: fully automatic source-first semantic scene generation, guaranteed 8–9 minute parts without awkward boundaries, timestamp-verified word/equation highlighting, and automatic composite-figure/subpanel QA. These remain explicit future release gates; no runtime approximation is presented as synchronized highlighting.

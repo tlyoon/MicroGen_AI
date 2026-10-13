@@ -249,5 +249,36 @@ class QualityContractTests(unittest.TestCase):
         self.assertNotIn("\n\n", out)
         self.assertEqual(q.normalize_latex_paragraphs(out), out)
 
+    def test_lost_lease_during_publication_rolls_back_before_receipt(self):
+        from microgen_ownership import LeaseLost
+        with tempfile.TemporaryDirectory() as tmp:
+            stage=Path(tmp)/"stage"
+            dest=Path(tmp)/"dest"
+            stage.mkdir();dest.mkdir()
+            for name in ("source.pdf","slides.pdf","slides.tex","script.txt",
+                         "script_tts.json","slides.mp4"):
+                (stage/name).write_text("new"+name)
+                (dest/name).write_text("old"+name)
+            (dest/"source.pdf").write_bytes((stage/"source.pdf").read_bytes())
+            meta={
+                "schema_version":1,
+                "source_sha256":q.sha256(stage/"source.pdf"),
+                "slides_pdf_sha256":q.sha256(stage/"slides.pdf"),
+                "slides_tex_sha256":q.sha256(stage/"slides.tex"),
+                "script_sha256":q.sha256(stage/"script.txt"),
+                "sidecar_sha256":q.sha256(stage/"script_tts.json"),
+                "mp4_sha256":q.sha256(stage/"slides.mp4"),
+            }
+            checks=[0]
+            def lease_check():
+                checks[0]+=1
+                if checks[0]==8:
+                    raise LeaseLost("lost during promotion")
+            with self.assertRaisesRegex(LeaseLost,"lost during promotion"):
+                q.publish_bundle(stage,dest,manifest=meta,still_owner=lease_check)
+            for name in ("slides.pdf","slides.tex","script.txt","script_tts.json","slides.mp4"):
+                self.assertEqual((dest/name).read_text(),"old"+name)
+            self.assertFalse(q.published_manifest_valid(dest))
+
 if __name__ == "__main__":
     unittest.main()

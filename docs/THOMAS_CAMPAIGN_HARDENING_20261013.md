@@ -52,3 +52,17 @@ python -m unittest discover -s tests -v
 ```
 
 Release sequence: isolated unit tests -> independent Windows/Ubuntu CI -> fresh controlled test-copy generation -> inspection of actual PDF math/diagrams and audio -> only then merge/deploy to the three PCs at safe worker boundaries. Older output receipts are not silently promoted to new verified status.
+
+
+## Continuation: concept-safe multipart and strong cross-PC ownership
+
+The October continuation added `microgen_multipart.py`, `microgen_scene_proposal.py`, and `microgen_ownership.py` as **opt-in** modules.
+
+- Multipart mode requires a `lesson_scenes.json` whose source PDF hash, slide PDF hash, contiguous slide IDs, textbook page references, explicit natural topic boundaries and lecturer approval are verified before another narration request. The original full `slides.mp4` is preserved. Part MP4s are created from exact already-generated slide/WAV segments and have actual stream, duration and hash checks, source-adjacent publication, and a receipt. The planner will fail if a coherent concept cannot fit under the 570-second ceiling; it will not fake shorter lesson durations.
+- `microgen_scene_proposal.py` offers a **draft**, not automatic academic approval. Weak title-to-textbook matches require manual correction; simple text overlap cannot verify scientific accuracy, composite figure panels, narration transitions or correct concept boundaries.
+- Opt-in GCS generation-conditional ownership (`--multi-pc --lease-bucket ... --campaign-id ...`) provides atomic, server-backed leases and periodic renewal. Google Drive filesystem synchronization is never treated as a strong lock. This requires an explicitly configured GCS bucket, an optional dependency and an authorization test before production use.
+- **Mechanical real-media pilot** using Thomas 8.5 54-slide audio and videos was performed in `%LOCALAPPDATA%\MicroGen_Multipart_Isolated_Smoke_20261013`, not in the Thomas source root. Four part MP4s passed media checks: slides 1–13 (410.9 s), 14–26 (460.5 s), 27–41 (477.9 s), 42–54 (470.3 s). These are NOT lecturer-approved teaching parts; nine heading-to-source matches were weak.
+- An isolated full-bundle publication also passed with 54 WAVs, the original video, four part videos and a final hash-bound receipt. The textbook's 66 production outputs were not changed.
+- GCS lease unit tests use a simulated atomic generation store and include owner contention, expiry/takeover, stale-owner fencing and local lock cleanup. A **live shared GCS bucket test on two machines remains a release gate**. No synchronization to production checkouts has been carried out.
+
+Remaining unfinished requirements: automatic source-first semantic scene generation and academically reviewed multipart boundaries, accurate intro/closing continuity narration for each part, word-level forced timing and slide-element highlighting, semantic Beamer overflow correction beyond the conservative local repair, composite image panel QA, and a clean live end-to-end multi-PC campaign. Do not claim these capabilities are complete based solely on the module/receipt tests.
