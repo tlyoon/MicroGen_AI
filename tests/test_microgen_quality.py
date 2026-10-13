@@ -280,5 +280,38 @@ class QualityContractTests(unittest.TestCase):
                 self.assertEqual((dest/name).read_text(),"old"+name)
             self.assertFalse(q.published_manifest_valid(dest))
 
+    def test_publication_receipt_includes_and_verifies_composite_figures(self):
+        from PIL import Image
+        from microgen_figure_composition import FigureCollector
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            stage=root/"stage";stage.mkdir()
+            dest=root/"dest";dest.mkdir()
+            source_fig=root/"page_1";source_fig.mkdir()
+            panel=source_fig/"fig_1.png"
+            Image.new("RGB",(16,14),"yellow").save(panel)
+            c=FigureCollector(stage)
+            c.add(stage/"Figure 1.7.png",panel,source_page="page_1")
+            c.finalize()
+            for name in ("source.pdf","slides.tex","slides.pdf","script.txt",
+                         "script_tts.json","slides.mp4"):
+                (stage/name).write_text("new:"+name)
+            shutil.copy2(stage/"source.pdf",dest/"source.pdf")
+            manifest={
+                "schema_version":1,
+                "source_sha256":q.sha256(stage/"source.pdf"),
+                "slides_tex_sha256":q.sha256(stage/"slides.tex"),
+                "slides_pdf_sha256":q.sha256(stage/"slides.pdf"),
+                "script_sha256":q.sha256(stage/"script.txt"),
+                "sidecar_sha256":q.sha256(stage/"script_tts.json"),
+                "mp4_sha256":q.sha256(stage/"slides.mp4"),
+                "figure_sha256":{"Figure 1.7.png":q.sha256(stage/"Figure 1.7.png")},
+                "figure_composition_receipt_sha256":q.sha256(stage/"figure_composition_receipt.json"),
+            }
+            q.publish_bundle(stage,dest,manifest=manifest)
+            self.assertTrue(q.published_manifest_valid(dest))
+            Image.new("RGB",(20,12),"red").save(dest/"Figure 1.7.png")
+            self.assertFalse(q.published_manifest_valid(dest))
+
 if __name__ == "__main__":
     unittest.main()

@@ -192,9 +192,13 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
         pages = stage / "pages"
         return pages.is_dir() and any(pages.glob("page_*"))
     if name in {"figure_mapping", "figure_merge"}:
-        # These stages may legitimately produce no Figure*.png. Their durable
-        # checkpoint is therefore the authority.
-        return True
+        # Even zero-figure pages receive a final structured provenance receipt.
+        try:
+            from microgen_figure_composition import validate_figure_receipt
+            validate_figure_receipt(stage)
+            return True
+        except (OSError, ValueError, RuntimeError):
+            return False
     if name == "published":
         return quality.published_manifest_valid(dest)
     if name in {"slides", "narration", "tts", "slide_slicing", "video"}:
@@ -356,28 +360,58 @@ def preflight(main_py: str, docling_py: str) -> None:
 
 @contextlib.contextmanager
 def subchapter_ownership(args, subchapter: str):
-    """Local mutual exclusion plus optional strong cross-PC GCS CAS lease."""
-    import contextlib as _contextlib
+    """Crash-recoverable kernel lock plus optional strong cross-PC GCS lease.
+
+    The lock inode/file is deliberately retained: removing an unlocked file
+    risks two processes holding locks on *different* recreated file inodes.
+    Kernel locks are released automatically when a process exits or crashes.
+    """
     local = args.work_root / f".microgen_{subchapter}.owner.lock"
-    try:
-        fd = os.open(str(local), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError as exc:
-        raise RuntimeError(
-            f"Subchapter {subchapter} already has a local owner lock at {local}. "
-            "Check the active worker; do not delete a lock from a running process."
-        ) from exc
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as out:
-            out.write(json.dumps({"subchapter": subchapter, "pid": os.getpid(),
-                                  "created_utc": utc_now()}))
-        if args.multi_pc:
-            with from_gcs_bucket(args.lease_bucket, args.campaign_id, subchapter) as lease:
-                lease.assert_held()
-                yield lease
-        else:
-            yield None
-    finally:
-        local.unlink(missing_ok=True)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    with open(local, "a+b") as handle:
+        locked = False
+        try:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0)
+                if local.stat().st_size == 0:
+                    handle.write(b"\0")
+                    handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            locked = True
+        except (OSError, BlockingIOError) as exc:
+            raise RuntimeError(
+                f"Subchapter {subchapter} has another active local worker; "
+                f"kernel lock held at {local}. Do not force-remove a live lock."
+            ) from exc
+        try:
+            # Avoid overwriting the byte locked by Windows msvcrt.locking.
+            # The lock file records a human-readable owner after the first byte.
+            handle.seek(1)
+            handle.truncate()
+            handle.write(json.dumps({
+                "subchapter": subchapter, "pid": os.getpid(),
+                "created_utc": utc_now(),
+            }).encode("utf-8"))
+            handle.flush()
+            if args.multi_pc:
+                with from_gcs_bucket(args.lease_bucket, args.campaign_id, subchapter) as lease:
+                    lease.assert_held()
+                    yield lease
+            else:
+                yield None
+        finally:
+            if locked:
+                if os.name == "nt":
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:

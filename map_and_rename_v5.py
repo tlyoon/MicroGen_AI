@@ -10,10 +10,9 @@ import os, re, shutil, sys
 from pathlib import Path
 from dotenv import load_dotenv
 from PIL import Image
-from google import genai
-from google.genai import types
 from gemini_lane import GeminiBillingError, GeminiCircuitOpen, gemini_lane
 from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
+from microgen_figure_composition import FigureCollector, validate_figure_receipt
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -33,23 +32,24 @@ def _microvid_config_dir() -> Path:
     return Path.home() / "AppData" / "Local" / "Microvid"
 
 
-env_path = _microvid_config_dir() / ".env"
-if not env_path.is_file():
-    raise RuntimeError(f"Shared Microvid credential file not found: {env_path}")
-print(f"Using shared Microvid API credentials from: {env_path}")
-load_dotenv(dotenv_path=env_path, override=False)
-api_keys = get_gemini_api_keys()
-if not api_keys:
-    raise RuntimeError("No Gemini API key is set in the shared Microvid .env")
-print(f"Using {len(api_keys)} Gemini API key(s) in priority order")
-print(f"Using Gemini model for figure mapping: {MODEL_NAME}")
+def _load_runtime_credentials():
+    env_path = _microvid_config_dir() / ".env"
+    if not env_path.is_file():
+        raise RuntimeError(f"Shared Microvid credential file not found: {env_path}")
+    load_dotenv(dotenv_path=env_path, override=False)
+    api_keys = get_gemini_api_keys()
+    if not api_keys:
+        raise RuntimeError("No Gemini API key is set in the shared Microvid .env")
+    print(f"Figure mapping: {len(api_keys)} configured Gemini key(s), model={MODEL_NAME}")
 
 
 def image_part(path: Path):
+    from google.genai import types
     return types.Part.from_bytes(data=path.read_bytes(), mime_type="image/png")
 
 
 def generate(parts):
+    _load_runtime_credentials()
     with gemini_lane("figure_mapping_request", MODEL_NAME, cooldown=FIGURE_COOLDOWN):
         response = call_with_client_failover(
             create_gemini_client,
@@ -102,6 +102,7 @@ def safe_destination(name: str, page_dir: Path) -> Path | None:
 
 def mapping():
     pages_root = Path("pages")
+    collector = FigureCollector(pages_root)
     page_dirs = sorted(
         [p for p in pages_root.glob("page_*") if p.is_dir()],
         key=lambda p: int(re.search(r"(\d+)$", p.name).group(1)),
@@ -122,15 +123,16 @@ def mapping():
         except (GeminiBillingError, GeminiCircuitOpen):
             raise
         except Exception as exc:
-            print(f"Caption extraction failed for {page_dir.name}: {exc}")
-            continue
+            raise RuntimeError(f"Caption extraction failed for {page_dir.name}: {exc}") from exc
 
         fig_files = sorted(
             page_dir.glob("fig_*.png"),
             key=lambda p: int(re.search(r"(\d+)", p.stem).group(1)),
         )
         if not fig_files:
-            print("No extracted figures to map on this page")
+            if re.search(r"\bFigure\s+\d",caption_text,re.I):
+                raise RuntimeError(f"Page {page_dir.name} has captions but no extracted crops")
+            print("No formally numbered figures on this page")
             continue
 
         for start in range(0, len(fig_files), BATCH_SIZE):
@@ -155,7 +157,7 @@ Extracted caption text:
 
             try:
                 response_text = generate(parts)
-                mapped_pairs = {}
+                mapped_in_batch = 0
                 for raw in response_text.splitlines():
                     line = raw.strip().lstrip("- ")
                     m = re.match(r"^(fig_\d+\.png)\s*:\s*.*?\s*:\s*(.+?)\s*$", line, re.I)
@@ -169,22 +171,39 @@ Extracted caption text:
                     if dst is None:
                         print(f"Rejected unsafe destination: {dest_text}")
                         continue
-                    shutil.copy2(src, dst)
-                    print(f"Mapped: {src.name} -> {dst.name}")
-                    mapped_pairs.setdefault(dst, []).append(src)
+                    collector.add(dst,src,source_page=page_dir.name)
+                    mapped_in_batch+=1
+                    print(f"Recorded mapping: {src.name} -> {dst.name}")
 
-                for dst, srcs in mapped_pairs.items():
-                    if len(srcs) > 1:
-                        merge_images_horizontally(srcs, dst)
+                if not mapped_in_batch:
+                    print(f"[figure mapping] no formal mappings in batch on {page_dir.name}")
             except (GeminiBillingError, GeminiCircuitOpen):
                 raise
             except Exception as exc:
-                print(f"Mapping batch failed on {page_dir.name}: {exc}")
+                raise RuntimeError(f"Figure mapping batch failed on {page_dir.name}: {exc}") from exc
 
+        if re.search(r"\bFigure\s+\d",caption_text,re.I) and not any(
+            entry["source_page"] == page_dir.name
+            for group in collector.items.values() for entry in group
+        ):
+            raise RuntimeError(f"Captioned page {page_dir.name} has no mapped figure")
+
+    evidence=collector.finalize()
+    validate_figure_receipt(pages_root)
     for png in pages_root.glob("*.png"):
         target = Path.cwd() / png.name
-        shutil.move(str(png), str(target))
-        print(f"Moved: {png.name} -> {target.name}")
+        if target.is_file():
+            from microgen_figure_composition import sha256
+            if sha256(target)!=sha256(png):
+                raise RuntimeError(f"Existing figure conflicts with new mapping: {target.name}")
+            png.unlink()
+        else:
+            shutil.move(str(png),str(target))
+        print(f"Verified figure: {png.name}")
+    receipt=pages_root/"figure_composition_receipt.json"
+    shutil.copy2(receipt,Path.cwd()/receipt.name)
+    validate_figure_receipt(Path.cwd())
+    print(f"[figure mapping] verified {len(evidence['figures'])} figure compositions")
 
 
 if __name__ == "__main__":

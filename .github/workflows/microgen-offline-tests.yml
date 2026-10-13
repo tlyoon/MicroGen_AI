@@ -24,6 +24,6 @@ jobs:
           python -m pip install python-dotenv google-genai google-cloud-texttospeech PyPDF2 pymupdf pillow imageio-ffmpeg
       - name: Static syntax check
         run: |
-          python -m compileall -q microgen_batch.py microgen_quality.py microgen_narration_batch.py microgen_lesson_plan.py microgen_doctor.py microgen_multipart.py microgen_ownership.py microgen_scene_proposal.py gen_script_v13.py gen_slides_v20.py text_to_speech_v25.py gen_video_v22.py
+          python -m compileall -q microgen_batch.py microgen_quality.py microgen_narration_batch.py microgen_lesson_plan.py microgen_doctor.py microgen_multipart.py microgen_ownership.py microgen_scene_proposal.py gen_script_v13.py gen_slides_v20.py text_to_speech_v25.py gen_video_v22.py microgen_figure_composition.py map_and_rename_v5.py
       - name: Unit tests (no API calls)
         run: python -m unittest discover -s tests -v
