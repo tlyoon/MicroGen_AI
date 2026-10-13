@@ -43,4 +43,17 @@ class DoctorTests(unittest.TestCase):
             self.assertFalse(result["checks"]["gemini_tts_sdks_importable"])
             self.assertFalse(result["ok"])
 
+
+    def test_doctor_reports_unsuitable_scratch_disk(self):
+        with tempfile.TemporaryDirectory() as root:
+            fake={"work_root":root,"volume_checked":root,"free_gb":0.9,
+                  "required_gb":8.0,"enough_space":False}
+            with mock.patch("microgen_doctor.subprocess.run",
+                            return_value=mock.Mock(returncode=0)), \
+                 mock.patch("microgen_quality.scratch_disk_status",return_value=fake):
+                info=inspect_environment(Path(root),work_root=Path(root))
+            self.assertFalse(info["checks"]["scratch_disk_capacity"])
+            self.assertFalse(info["ok"])
+            self.assertEqual(info["scratch_disk"]["free_gb"],0.9)
+
 if __name__=="__main__":unittest.main()

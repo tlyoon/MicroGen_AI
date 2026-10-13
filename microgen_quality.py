@@ -554,3 +554,48 @@ def check_multipart_receipt(stage: Path, *, expected_parts: int | None = None) -
     if sequence != list(range(1, n+1)):
         raise QualityError("Multipart parts omit/reorder slide content")
     return {"parts": digests, "receipt_sha256": sha256(marker)}
+
+
+def scratch_disk_status(path: Path, *, min_free_gb: float | None = None) -> dict:
+    """Inspect actual scratch *volume* capacity, not Google Drive's virtual quota.
+
+    Default protects Docling PDF conversion, slide PNGs, WAV caches and FFmpeg
+    temporary segments. Users may deliberately override for smaller jobs.
+    """
+    if min_free_gb is None:
+        raw=os.environ.get("MICROGEN_MIN_SCRATCH_FREE_GB","8.0")
+        try:
+            min_free_gb=float(raw)
+        except ValueError as exc:
+            raise QualityError("MICROGEN_MIN_SCRATCH_FREE_GB is not a number") from exc
+    if not (isinstance(min_free_gb,(float,int))
+            and __import__("math").isfinite(min_free_gb)
+            and min_free_gb >= 0.5):
+        raise QualityError("Minimum scratch capacity must be at least 0.5 GB")
+    requested=Path(path).expanduser()
+    probe=requested
+    while not probe.exists():
+        if probe == probe.parent:
+            raise QualityError(f"Cannot resolve volume for scratch root: {requested}")
+        probe=probe.parent
+    usage=shutil.disk_usage(probe)
+    free_gb=usage.free/(1024**3)
+    return {
+        "work_root":str(requested),
+        "volume_checked":str(probe),
+        "free_gb":round(free_gb,2),
+        "required_gb":float(min_free_gb),
+        "enough_space":free_gb>=min_free_gb,
+    }
+
+
+def require_scratch_space(path: Path, *, min_free_gb: float | None = None) -> dict:
+    result=scratch_disk_status(path,min_free_gb=min_free_gb)
+    if not result["enough_space"]:
+        raise QualityError(
+            f"Scratch drive has only {result['free_gb']} GB free; "
+            f"at least {result['required_gb']} GB is required. "
+            "Choose a different local work root or free disk space before "
+            "starting Docling, TTS or FFmpeg. No API generation has started."
+        )
+    return result

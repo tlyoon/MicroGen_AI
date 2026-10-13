@@ -572,6 +572,10 @@ def main() -> int:
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
     args.work_root.mkdir(parents=True, exist_ok=True)
+    # Fail before any paid API requests or multi-gigabyte extraction/rendering.
+    disk = quality.require_scratch_space(args.work_root)
+    print(f"[batch] scratch free={disk['free_gb']} GB "
+          f"(minimum={disk['required_gb']} GB)", flush=True)
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")

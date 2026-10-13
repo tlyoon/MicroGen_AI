@@ -17,6 +17,7 @@ from pathlib import Path
 def inspect_environment(
     source_root: Path | None = None, *,
     python_exe: str | None = None,
+    work_root: Path | None = None,
 ) -> dict:
     python_exe = python_exe or sys.executable
     deps = ("fitz", "PIL", "imageio_ffmpeg", "PyPDF2",
@@ -79,6 +80,11 @@ def inspect_environment(
     if source_root is not None:
         checks["source_directory_accessible"] = bool(source.get("can_read"))
         checks["source_directory_writable"] = bool(source.get("can_write"))
+    disk = None
+    if work_root is not None:
+        from microgen_quality import scratch_disk_status
+        disk = scratch_disk_status(work_root)
+        checks["scratch_disk_capacity"] = disk["enough_space"]
     remediation = (None if sdk_importable else
                    "Installed Google packages could not be imported. In this "
                    "Python interpreter run: python -c 'import google.genai, "
@@ -87,7 +93,8 @@ def inspect_environment(
     return {"host": os.environ.get("COMPUTERNAME") or "unknown",
             "python_executable": python_exe, "checks": checks,
             "sdk_import_remediation": remediation,
-            "source": source, "ok": all(checks.values()),
+            "source": source, "scratch_disk": disk,
+            "ok": all(checks.values()),
             "note": "Configuration preflight only; does not confirm billing, model access, or source integrity."}
 
 
@@ -131,10 +138,12 @@ def audit_tree(root: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Preflight and audit MicroGen without generating content")
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--work-root", type=Path,
+                        help="Check actual local scratch drive capacity before generation.")
     parser.add_argument("--audit", action="store_true", help="Read-only two-level lecture inventory")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args()
-    info = inspect_environment(args.source_root)
+    info = inspect_environment(args.source_root, work_root=args.work_root)
     if args.audit:
         if args.source_root is None:
             parser.error("--audit requires --source-root")

@@ -82,3 +82,16 @@ HP and Dell-115 passed the isolated 56-test branch. Yoga6's Miniforge base inter
 5. A separate Python virtual environment was installed on Yoga6 at `%LOCALAPPDATA%\MicroGen_Clean_Venv_20261013`. The Google Gemini/Cloud TTS SDKs, Pydantic, Pillow, PyMuPDF and related dependencies import successfully. The offline diagnostic passes. The base Miniforge environment was not modified. **Docling is absent from this clean venv**; an isolated extraction environment is still required for the full batch preflight.
 
 Do not treat the offline Gemini mocks, a locally fixed TeX PDF or synthetic figure tests as a complete production end-to-end acceptance test. A controlled real textbook pilot, including visual inspection and verified Docling extraction, must still precede a fully supported multi-PC release.
+
+
+## Disk capacity safety guard (observed on Yoga6)
+
+The clean Yoga6 venv repaired its SDK import and passed all 68 offline tests, but the machine's local C: volume had only **0.9 GiB free** at inspection. A fresh Docling install or lecture conversion in `%LOCALAPPDATA%` would be unsafe. The main runner now checks **actual free disk space on the work-root volume before model calls or expensive conversions** and refuses to begin below 8 GiB free by default (`MICROGEN_MIN_SCRATCH_FREE_GB`).
+
+Preflight from any installation:
+
+```powershell
+python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root "D:\MicroGenScratch"
+```
+
+Choose a *genuinely local* disk with sufficient free space for the work root. Google Drive's virtual free-space reading is not a substitute. The configured threshold can be raised for large PDFs, or cautiously adjusted for known tiny jobs; overrides below 0.5 GiB are rejected. Do not install heavy extraction/ML dependencies into Yoga6's nearly full C: drive until space is freed or an alternative volume is available.

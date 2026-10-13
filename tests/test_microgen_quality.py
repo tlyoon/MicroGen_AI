@@ -313,5 +313,28 @@ class QualityContractTests(unittest.TestCase):
             Image.new("RGB",(20,12),"red").save(dest/"Figure 1.7.png")
             self.assertFalse(q.published_manifest_valid(dest))
 
+    def test_work_root_low_disk_blocks_before_paid_generation(self):
+        with tempfile.TemporaryDirectory() as root:
+            low=mock.Mock(total=500*1024**3,used=499*1024**3,
+                          free=int(0.9*1024**3))
+            with mock.patch("microgen_quality.shutil.disk_usage",return_value=low):
+                state=q.scratch_disk_status(Path(root))
+                self.assertFalse(state["enough_space"])
+                self.assertLess(state["free_gb"],1.0)
+                with self.assertRaisesRegex(q.QualityError,"Scratch drive has only"):
+                    q.require_scratch_space(Path(root))
+
+    def test_scratch_disk_threshold_can_be_configured(self):
+        with tempfile.TemporaryDirectory() as root:
+            healthy=mock.Mock(total=100*1024**3,used=90*1024**3,
+                              free=10*1024**3)
+            with mock.patch("microgen_quality.shutil.disk_usage",return_value=healthy):
+                state=q.require_scratch_space(Path(root))
+                self.assertTrue(state["enough_space"])
+                self.assertEqual(state["required_gb"],8.0)
+            with mock.patch.dict("os.environ",{"MICROGEN_MIN_SCRATCH_FREE_GB":"nope"}):
+                with self.assertRaisesRegex(q.QualityError,"not a number"):
+                    q.scratch_disk_status(Path(root))
+
 if __name__ == "__main__":
     unittest.main()
