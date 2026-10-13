@@ -10,7 +10,7 @@ The changes are software hardening only. Do not rerun production against the 66 
 - The video engine retains hash-keyed per-slide MP4 segments and never deletes the old MP4 at the start of encoding. Plain static slides use 2 fps rather than 30 fps, reducing unnecessary frames.
 - Gemini narration is partitioned into 8-slide batches (configurable 1–20) with validated, input-bound checkpoints. A large 54-slide request previously timed out with 504; batching recovered 8.5 successfully.
 - TTS now verifies and caches each WAV, retains existing audio, and refuses mixed-provider voices. Windows SAPI fallback is opt-in; no silent switching.
-- Beamer is compiled twice, with page counter checks. Missing figures fail closed rather than silently disappearing.
+- Beamer is compiled twice, with page counter and severe-overflow checks. Missing figures fail closed rather than silently disappearing. When a LaTeX compile fails, an isolated deterministic blank-paragraph repair is attempted and verified before asking Gemini to repair TeX. The original defective 8.5 pilot TeX passed this local method as a 10-page PDF without another API request.
 - Temporary image/crop folders can be cleaned after verified publication, but WAVs and numbered slide PDFs remain available to resume and audit.
 - `microgen_doctor.py` performs an offline, bounded source inventory and checks prerequisites without revealing credentials.
 - Unit tests run on Python 3.11/3.12 across Windows/Linux; tests do not call paid APIs.

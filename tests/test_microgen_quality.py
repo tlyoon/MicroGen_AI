@@ -238,5 +238,16 @@ class QualityContractTests(unittest.TestCase):
             path.write_text("Overfull \\hbox (0.69pt too wide)",encoding="utf-8")
             self.assertEqual(q.check_latex_overflow(path)["severe_count"], 0)
 
+    def test_latex_normalization_preserves_math_and_is_idempotent(self):
+        tex = ("\\begin{align*}\n\n"
+               "x^2 &= 4 \\\\\n\n"
+               "y &= \\frac{1}{2}\n\n"
+               "\\end{align*}\n")
+        out = q.normalize_latex_paragraphs(tex)
+        self.assertIn("x^2 &= 4", out)
+        self.assertIn("y &= \\frac{1}{2}", out)
+        self.assertNotIn("\n\n", out)
+        self.assertEqual(q.normalize_latex_paragraphs(out), out)
+
 if __name__ == "__main__":
     unittest.main()

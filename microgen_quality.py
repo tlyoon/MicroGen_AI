@@ -385,3 +385,76 @@ def check_latex_overflow(log_path: Path, *, max_hbox_pt: float = 8.0,
             "Reflow the source-backed content; do not crop the PDF."
         )
     return {"all_overfull_count": len(matches), "severe_count": 0}
+
+
+def normalize_latex_paragraphs(source: str) -> str:
+    """Remove empty LaTeX paragraph tokens without altering nonempty lines.
+
+    Empty paragraphs inside display math caused the Thomas 8.5 pilot to fail.
+    Keep equations, symbols, labels, captions and all nonblank source lines.
+    """
+    lines = [line.rstrip() for line in source.splitlines() if line.strip()]
+    return "\n".join(lines) + "\n"
+
+
+def try_local_latex_repair(tex_path: Path, *, timeout: float = 180.0) -> bool:
+    """Compile deterministic candidate twice *in an isolated job directory*.
+
+    Only promotes the candidate if all quality gates pass. Returns False on
+    ordinary TeX failures so the existing targeted repair path can continue.
+    Does not make Gemini requests, remove figure references or publish to Drive.
+    """
+    tex_path = Path(tex_path)
+    require_file(tex_path)
+    original = tex_path.read_text(encoding="utf-8-sig")
+    normalized = normalize_latex_paragraphs(original)
+    build = tex_path.parent / ".microgen_deterministic_latex_repair"
+    build.mkdir(parents=True, exist_ok=True)
+    candidate = tex_path.parent / "slides_microgen_clean_candidate.tex"
+    candidate.write_text(normalized, encoding="utf-8")
+    check_graphics(candidate)
+    output_dir = build / "pdf"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        "pdflatex", "-interaction=nonstopmode", "-halt-on-error",
+        "-file-line-error", "-jobname=slides",
+        "-output-directory=" + str(output_dir), candidate.name,
+    ]
+    for attempt in (1, 2):
+        try:
+            result = subprocess.run(
+                command, cwd=tex_path.parent, capture_output=True,
+                text=True, errors="replace", timeout=timeout,
+                stdin=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            (build / "last_failure.txt").write_text(str(exc), encoding="utf-8")
+            return False
+        (build / f"pdflatex_pass_{attempt}.txt").write_text(
+            result.stdout + "\n" + result.stderr, encoding="utf-8",
+        )
+        if result.returncode:
+            return False
+    compiled = output_dir / "slides.pdf"
+    try:
+        check_slide_pdf(compiled, require_footer=True)
+        check_latex_overflow(output_dir / "slides.log")
+    except QualityError as exc:
+        (build / "last_failure.txt").write_text(str(exc), encoding="utf-8")
+        return False
+    prior = tex_path.with_name("slides.before_deterministic_repair.tex")
+    if not prior.exists():
+        shutil.copy2(tex_path, prior)
+    # Candidate and PDFs are fully verified before any staged input is updated.
+    target_pdf = tex_path.with_suffix(".pdf")
+    temp_pdf = target_pdf.with_name(target_pdf.name + ".microgen.tmp")
+    shutil.copy2(compiled, temp_pdf)
+    if sha256(temp_pdf) != sha256(compiled):
+        raise QualityError("Deterministic PDF staging hash mismatch")
+    temp_tex = tex_path.with_name(tex_path.name + ".microgen.tmp")
+    shutil.copy2(candidate, temp_tex)
+    if sha256(temp_tex) != sha256(candidate):
+        raise QualityError("Deterministic TeX staging hash mismatch")
+    temp_pdf.replace(target_pdf)
+    temp_tex.replace(tex_path)
+    return True

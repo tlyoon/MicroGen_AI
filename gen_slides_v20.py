@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 import re
 import fix_latex
-from microgen_quality import check_graphics, check_slide_pdf, check_latex_overflow
+from microgen_quality import check_graphics, check_slide_pdf, check_latex_overflow, try_local_latex_repair
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
@@ -423,6 +423,12 @@ for attempt in range(1, 5):
         compile_ok = True
         break
     print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")
+    # Isolate and test the reproducible local normalization first, before
+    # making additional Gemini requests for repair.
+    if try_local_latex_repair(Path(tex_file)):
+        print("[slide] deterministic two-pass LaTeX repair succeeded; no Gemini repair required")
+        compile_ok = True
+        break
     # Attempt local deterministic cleanup first. If the same deck still fails,
     # repair only the offending Beamer frame rather than sending the entire
     # presentation back to Gemini.
