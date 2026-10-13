@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import sys
@@ -10,6 +11,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from gemini_lane import gemini_lane
+from microgen_narration_batch import generate_batched
 from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -22,7 +24,7 @@ TTS_SIDECAR = Path("script_tts.json")
 NARRATION_WPM = int(os.environ.get("MICROVID_NARRATION_WPM", "130"))
 MAX_SOURCE_CHARACTERS = int(os.environ.get("MICROVID_MAX_NARRATION_SOURCE_CHARS", "250000"))
 DEFAULT_BODY_SECONDS = int(os.environ.get("MICROVID_DEFAULT_SLIDE_SECONDS", "45"))
-MODEL_NAME = os.environ.get("MICROVID_NARRATION_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"
+MODEL_NAME = os.environ.get("MICROVID_NARRATION_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.8-flash"
 THINKING_LEVEL = os.environ.get("MICROVID_THINKING_LEVEL", "high").upper()
 
 URL_RE = re.compile(r"\bhttps?://\S+|\bwww\.\S+", re.I)
@@ -343,7 +345,15 @@ def main() -> None:
         raise RuntimeError("slides.pdf contains no pages.")
     slides = _slide_manifest(slide_pages)
     source_blocks = _source_blocks(source_pages)
-    polished = _generate_polished(slides, source_blocks)
+    prompt_path = Path("gen_script_prompt_v8_hybrid.md")
+    if not prompt_path.is_file():
+        raise FileNotFoundError(f"Required narration template absent: {prompt_path}")
+    polished = generate_batched(
+        slides, source_blocks, _generate_polished,
+        cache_dir=Path(".microgen_narration_batches"),
+        model=MODEL_NAME,
+        prompt_hash=hashlib.sha256(prompt_path.read_bytes()).hexdigest(),
+    )
 
     # Preserve v7 title-card behaviour: the first audio says the displayed title/topic only.
     first_title = slides[0]["title"].strip()

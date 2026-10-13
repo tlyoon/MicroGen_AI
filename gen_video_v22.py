@@ -136,10 +136,10 @@ def _make_segment(pdf: Path, audio: Path, output: Path) -> None:
             audio_duration = wav_file.getnframes() / float(wav_file.getframerate())
         _run_ffmpeg(
             [
-                "-y", "-loop", "1", "-framerate", "30", "-i", str(image),
+                "-y", "-loop", "1", "-framerate", "2", "-i", str(image),
                 "-i", str(staged_audio), "-t", f"{audio_duration:.6f}",
                 "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=white",
-                "-c:v", "libx264", "-tune", "stillimage", "-preset", "medium",
+                "-r", "2", "-c:v", "libx264", "-tune", "stillimage", "-preset", "veryfast",
                 "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", str(staged_output),
             ],
             f"Building media segment for {pdf.name}",
@@ -174,20 +174,59 @@ def main() -> None:
     print(f"len(pdf_files)={len(pdfs)}; len(wav_files)={len(wavs)}")
     print("Number of PDF and WAV files tallies. To generate video with pri FFmpeg media engine ...")
 
-    if OUTPUT_FILE.exists():
-        OUTPUT_FILE.unlink()
-    with tempfile.TemporaryDirectory(prefix="microvid_v7_segments_") as tmp:
-        segment_dir = Path(tmp)
-        segments = []
-        for index, (pdf, wav) in enumerate(zip(pdfs, wavs), start=1):
-            segment = segment_dir / f"slide{index}.mp4"
-            _make_segment(pdf, wav, segment)
-            segments.append(segment)
-            print(f"processing ({pdf.name}, {wav.name})")
-        _concat(segments, OUTPUT_FILE)
-    if not OUTPUT_FILE.is_file() or OUTPUT_FILE.stat().st_size == 0:
-        raise RuntimeError("slides.mp4 was not created successfully.")
-    print(f"Video created successfully: {OUTPUT_FILE}")
+    # Segment cache is input-bound and persisted across interrupted runs.
+    # Never destroy the existing good MP4 just because a new attempt started.
+    import hashlib
+    import json
+    from microgen_quality import check_video, check_wavs, sha256
+    cache = Path(".microgen_video_cache")
+    cache.mkdir(exist_ok=True)
+    segments = []
+    for index, (pdf, wav) in enumerate(zip(pdfs, wavs), start=1):
+        segment = cache / f"slide{index}.mp4"
+        meta = cache / f"slide{index}.json"
+        key = hashlib.sha256(
+            f"{sha256(pdf)}:{sha256(wav)}:gen_video_v22_cache_v2".encode()
+        ).hexdigest()
+        reusable = False
+        if segment.is_file() and meta.is_file():
+            try:
+                saved = json.loads(meta.read_text(encoding="utf-8"))
+                reusable = saved.get("key") == key and saved.get("sha256") == sha256(segment)
+                if reusable:
+                    check_video(segment)
+            except Exception:
+                reusable = False
+        if not reusable:
+            temporary = cache / f"slide{index}.candidate.mp4"
+            temporary.unlink(missing_ok=True)
+            _make_segment(pdf, wav, temporary)
+            check_video(temporary)
+            temporary.replace(segment)
+            meta_tmp = meta.with_suffix(".json.tmp")
+            meta_tmp.write_text(
+                json.dumps({"key": key, "sha256": sha256(segment)}),
+                encoding="utf-8"
+            )
+            meta_tmp.replace(meta)
+            print(f"[video] generated {index}/{len(pdfs)}", flush=True)
+        else:
+            print(f"[video] reused {index}/{len(pdfs)}", flush=True)
+        segments.append(segment)
+    candidate = Path("slides.candidate.mp4")
+    candidate.unlink(missing_ok=True)
+    _concat(segments, candidate)
+    checked = check_wavs(Path.cwd(), len(wavs))
+    check_video(candidate, expected_seconds=checked["total_seconds"])
+    # Keep earlier complete outputs until the candidate is fully verified.
+    if OUTPUT_FILE.is_file():
+        backup = Path(f"slides.before-microgen-{sha256(OUTPUT_FILE)[:12]}.mp4")
+        if not backup.exists():
+            shutil.copy2(OUTPUT_FILE, backup)
+            if sha256(backup) != sha256(OUTPUT_FILE):
+                raise RuntimeError("Previous media backup checksum mismatch")
+    candidate.replace(OUTPUT_FILE)
+    print(f"Video created and verified successfully: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

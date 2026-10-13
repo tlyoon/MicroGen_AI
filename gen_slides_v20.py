@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import re
 import fix_latex
+from microgen_quality import check_graphics, check_slide_pdf
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
@@ -17,7 +18,7 @@ if hasattr(sys.stdout, "reconfigure"):
 #model_name = "gpt-4o"    ; model_choice = 'openai'  
 #model_name = "gpt-5-mini"    ; model_choice = 'openai'  
 #model_name = "gpt-5"    ; model_choice = 'openai'  
-model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"
+model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.8-flash"
 model_choice = 'gemini'
 ########  end of specify model_name, must be consistent with model_choice ######## 
 
@@ -385,7 +386,7 @@ with open(out_base + '.tex','w',encoding='utf-8') as f:
 
 ## begin compiling latex after exiting the LLM phase ##
 tex_file = out_base + '.tex'
-remove_missing_graphics_in_place(tex_file)
+check_graphics(Path(tex_file))  # missing figures must not disappear silently
 clean_pause_in_place(tex_file)
 compile_ok = False
 last_compile_output = ""
@@ -396,7 +397,7 @@ for attempt in range(1, 5):
     _tex_raw = _tex_path.read_text(encoding="utf-8-sig")
     _tex_lines = [line.rstrip() for line in _tex_raw.splitlines() if line.strip()]
     _tex_path.write_text("\n".join(_tex_lines) + "\n", encoding="utf-8")
-    remove_missing_graphics_in_place(tex_file)
+    check_graphics(Path(tex_file))
     clean_pause_in_place(tex_file)
     result = subprocess.run(
         ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', '-file-line-error', tex_file],
@@ -407,7 +408,17 @@ for attempt in range(1, 5):
     )
     last_compile_output = result.stdout or ""
     if result.returncode == 0:
-        print(f"✅ pdflatex compilation succeeded for '{tex_file}' at attempt {attempt}")
+        # LaTeX resolves Beamer page totals only on a subsequent pass.
+        final_pass = subprocess.run(
+            ['pdflatex', '-interaction=nonstopmode', '-halt-on-error',
+             '-file-line-error', tex_file],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, check=False, timeout=180,
+        )
+        if final_pass.returncode != 0:
+            raise RuntimeError(f"Second-pass pdflatex failed: {final_pass.stdout[-1200:]}")
+        check_slide_pdf(Path("slides.pdf"), require_footer=True)
+        print(f"✅ Two-pass LaTeX and page-number checks succeeded: {tex_file}")
         compile_ok = True
         break
     print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")

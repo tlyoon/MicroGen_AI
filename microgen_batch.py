@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 from gemini_lane import circuit_is_open
+import microgen_quality as quality
 
 STAGES = [
     "figure_extraction",
@@ -187,20 +188,27 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
         # These stages may legitimately produce no Figure*.png. Their durable
         # checkpoint is therefore the authority.
         return True
-    if name == "slides":
-        return nonempty(stage / "slides.pdf") and nonempty(stage / "slides.tex")
-    if name == "narration":
-        return nonempty(stage / "script.txt") and nonempty(stage / "script_tts.json")
-    if name == "tts":
-        count = slide_count(stage)
-        return bool(count) and len(numbered_files(stage, "wav")) == count
-    if name == "slide_slicing":
-        count = slide_count(stage)
-        return bool(count) and len(numbered_files(stage, "pdf")) == count
-    if name == "video":
-        return nonempty(stage / "slides.mp4")
     if name == "published":
-        return all(nonempty(dest / n) for n in ("slides.pdf", "script.txt", "slides.mp4"))
+        return quality.published_manifest_valid(dest)
+    if name in {"slides", "narration", "tts", "slide_slicing", "video"}:
+        try:
+            if name == "slides":
+                quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
+                quality.check_graphics(stage / "slides.tex")
+                return True
+            count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
+            if name == "narration":
+                quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+            elif name == "tts":
+                quality.check_wavs(stage, count)
+            elif name == "slide_slicing":
+                quality.numbered_files(stage, "pdf", count)
+            elif name == "video":
+                wav = quality.check_wavs(stage, count)
+                quality.check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
+            return True
+        except (quality.QualityError, OSError, ValueError):
+            return False
     return False
 
 
@@ -209,10 +217,12 @@ def invalidate_from(cp: dict, stage_name: str) -> None:
     idx = STAGES.index(stage_name)
     for name in STAGES[idx:]:
         completed.pop(name, None)
+        cp.setdefault("dependency_fingerprints", {}).pop(name, None)
 
 
-def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str) -> None:
+def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path) -> None:
     cp.setdefault("completed", {})[stage_name] = utc_now()
+    cp.setdefault("dependency_fingerprints", {})[stage_name] = quality.dependency_fingerprint(stage, stage_name)
     cp["last_error"] = None
     cp["updated_utc"] = utc_now()
     save_checkpoint(checkpoint_path, cp)
@@ -260,6 +270,7 @@ def run_subprocess(
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 text=True,
+                timeout=float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200")),
             )
             log.write(f"\n[{label}] exit={proc.returncode}\n")
         if proc.returncode == 0:
@@ -294,30 +305,17 @@ def atomic_publish_file(src: Path, dest: Path) -> None:
 
 
 def publish(stage: Path, dest: Path) -> None:
-    required = ("slides.pdf", "script.txt", "slides.mp4")
-    for name in required:
-        if not nonempty(stage / name):
-            raise RuntimeError(f"required output missing/empty: {name}")
-    for name in ("slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"):
-        src = stage / name
-        if src.is_file():
-            atomic_publish_file(src, dest / name)
-    for pattern in ("Figure*.png", "FIGURE*.png"):
-        for src in stage.glob(pattern):
-            atomic_publish_file(src, dest / src.name)
-    if not stage_valid(stage, "published", dest):
-        raise RuntimeError("published output verification failed")
+    """Publish only a verified bundle, keeping backups of earlier assets."""
+    info = quality.manifest_for(stage, require_footer=True)
+    quality.publish_bundle(stage, dest, manifest=info)
+    if not quality.published_manifest_valid(dest):
+        raise RuntimeError("Publication receipt/checksum validation failed")
 
 
 def cleanup_intermediates(stage: Path) -> None:
+    """Retain checked slide PDFs and WAVs for accurate resume and audit."""
     for dirname in ("pages", "crops"):
         shutil.rmtree(stage / dirname, ignore_errors=True)
-    for suffix in ("pdf", "wav"):
-        for path in numbered_files(stage, suffix):
-            try:
-                path.unlink()
-            except OSError:
-                pass
 
 
 def preflight(main_py: str, docling_py: str) -> None:
@@ -357,6 +355,19 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
     )
     dest = destination_for(args.source_root, subchapter)
     log_path = args.work_root / f"{subchapter}.log"
+    # Existing source-adjacent MP4s are protected unless a user explicitly
+    # authorizes revalidation/rebuild under the upgraded quality contract.
+    if quality.published_manifest_valid(dest):
+        print(f"[{subchapter}] verified receipt and source hashes; skipping", flush=True)
+        report.append({"subchapter": subchapter, "status": "success",
+                       "resumed": True, "verified": True})
+        return
+    if nonempty(dest / "slides.mp4") and not args.rebuild_unverified:
+        raise RuntimeError(
+            "An existing MP4 has no current verified completion receipt. "
+            "Preserved unchanged. Review it or run with --rebuild-unverified "
+            "to explicitly permit replacement after full verification."
+        )
 
     if cp.get("completed", {}).get("published") and stage_valid(stage, "published", dest):
         print(f"[{subchapter}] already published and verified; skipping", flush=True)
@@ -376,8 +387,15 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
 
     for stage_name in STAGES:
         completed = bool(cp.get("completed", {}).get(stage_name))
+        fingerprint_ok = False
         if completed and stage_valid(stage, stage_name, dest):
-            print(f"[{subchapter}] resume: {stage_name} already valid", flush=True)
+            try:
+                current = quality.dependency_fingerprint(stage, stage_name)
+                fingerprint_ok = cp.get("dependency_fingerprints", {}).get(stage_name) == current
+            except (OSError, quality.QualityError):
+                fingerprint_ok = False
+        if completed and fingerprint_ok:
+            print(f"[{subchapter}] resume: {stage_name} and dependencies verified", flush=True)
             continue
 
         invalidate_from(cp, stage_name)
@@ -399,7 +417,7 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
                 )
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
-            mark_complete(cp, checkpoint_path, stage_name)
+            mark_complete(cp, checkpoint_path, stage_name, stage)
         except Exception as exc:
             cp["last_error"] = {
                 "stage": stage_name,
@@ -447,6 +465,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("MICROGEN_SOURCE_WAIT_SECONDS", "600")),
     )
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
+    ap.add_argument("--rebuild-unverified", action="store_true",
+                    help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     return ap
 
 

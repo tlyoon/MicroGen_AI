@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import glob
+import hashlib
+import wave
 import json
 import os
 import re
@@ -164,7 +166,7 @@ def synthesize(text: str, output: Path) -> str:
     try:
         return _google_synthesize(spoken, output)
     except Exception as primary_exc:
-        if os.environ.get("MICROVID_TTS_FALLBACK", "sapi").lower() != "sapi":
+        if os.environ.get("MICROVID_TTS_FALLBACK", "disabled").lower() != "sapi":
             raise
         warnings.warn(f"Primary TTS failed ({primary_exc}); using SAPI fallback.", RuntimeWarning, stacklevel=2)
         try:
@@ -213,27 +215,60 @@ def main() -> None:
     if not items:
         raise RuntimeError("No slide narration found.")
 
-    for old in glob.glob("slide*.wav"):
-        try:
-            Path(old).unlink()
-        except OSError:
-            pass
-
+    from microgen_quality import sha256, check_wavs
+    cache = Path(".microgen_tts_cache")
+    cache.mkdir(exist_ok=True)
     providers = []
     for idx, item in enumerate(items, start=1):
         text = item["tts_text"] or item["narration"]
         if not text:
             raise RuntimeError(f"Slide {idx} has no narration/tts_text.")
         output = Path(f"slide{idx}.wav")
-        provider = synthesize(text, output)
+        meta = cache / f"slide{idx}.json"
+        key = hashlib.sha256(json.dumps(
+            [normalize_scientific_speech(text), VOICE_NAME, LANGUAGE_CODE,
+             SPEAKING_RATE, LOCATION, "microgen-tts-v2"],
+            ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8")).hexdigest()
+        provider = None
+        if output.is_file() and meta.is_file():
+            try:
+                saved = json.loads(meta.read_text(encoding="utf-8"))
+                if saved.get("key") == key and sha256(output) == saved.get("sha256"):
+                    with wave.open(str(output), "rb") as audio:
+                        if audio.getnframes() > 0 and audio.getframerate() > 0:
+                            provider = saved.get("provider")
+            except (OSError, ValueError, wave.Error):
+                provider = None
+        if provider:
+            print(f"[TTS] verified WAV reused: slide {idx}", flush=True)
+        else:
+            candidate = cache / f"slide{idx}.candidate.wav"
+            candidate.unlink(missing_ok=True)
+            provider = synthesize(text, candidate)
+            with wave.open(str(candidate), "rb") as audio:
+                if audio.getnframes() <= 0 or audio.getframerate() <= 0:
+                    raise RuntimeError(f"TTS emitted empty WAV at slide {idx}")
+            if output.is_file():
+                backup = cache / (f"slide{idx}.before-{sha256(output)[:12]}.wav")
+                if not backup.exists():
+                    import shutil
+                    shutil.copy2(output, backup)
+            candidate.replace(output)
+            tmp = meta.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps({
+                "key": key, "sha256": sha256(output), "provider": provider,
+            }), encoding="utf-8")
+            tmp.replace(meta)
         providers.append(provider)
-        print(f'Audio content written to file "{output}" using {provider}')
-
-    produced = sorted(Path.cwd().glob("slide*.wav"), key=lambda p: int(re.search(r"\d+", p.stem).group()))
-    if len(produced) != len(items):
-        raise RuntimeError(f"Expected {len(items)} WAV files, but found {len(produced)}.")
-    print(f"Success: Produced {len(produced)} audio files, matching the number of slides.")
-    print(f"TTS providers used: {sorted(set(providers))}")
+        if len(set(providers)) != 1:
+            raise RuntimeError(
+                "Voice inconsistency: mixed TTS providers detected. "
+                "Re-synthesize the entire lecture with one provider."
+            )
+        print(f'Audio content checked: "{output}" using {provider}')
+    check_wavs(Path.cwd(), len(items))
+    print(f"Success: verified {len(items)} audio files in one consistent voice.")
 
 
 if __name__ == "__main__":

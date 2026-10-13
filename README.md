@@ -152,15 +152,17 @@ MicroGen_AI tries key 1 first. Key/account-specific failures such as invalid cre
 
 ## Default Gemini models
 
-MicroGen_AI uses stage-specific Gemini defaults so that high-volume visual matching is cheaper while teaching-content generation remains on the more reliable Pro model:
+MicroGen_AI defaults to Gemini Flash for the main generation tasks. The Thomas' Calculus campaign used `gemini-3.8-flash` successfully for slide narration and figure work.
 
 ```text
 figure mapping:   gemini-3.8-flash
-slide generation: gemini-3.1-pro-preview
-narration:        gemini-3.1-pro-preview
+slide generation: gemini-3.8-flash
+narration:        gemini-3.8-flash
 ```
 
-Figure mapping defaults to `gemini-3.8-flash`. Slide generation and narration remain on `gemini-3.1-pro-preview`. Defaults can be overridden globally with `MICROGEN_LLM_MODEL` or per stage with `MICROVID_FIGURE_MODEL`, `MICROVID_SLIDE_MODEL`, and `MICROVID_NARRATION_MODEL`.
+Defaults can be overridden globally with `MICROGEN_LLM_MODEL` or per stage with `MICROVID_FIGURE_MODEL`, `MICROVID_SLIDE_MODEL`, and `MICROVID_NARRATION_MODEL`. Narration is generated in resumable eight-slide batches by default (`MICROGEN_NARRATION_BATCH_SIZE`).
+
+**New safe-publication contract:** An existing MP4 without a new `.microgen_verified_completion.json` receipt is preserved, not silently treated as certified. Use `--rebuild-unverified` only when you intentionally want to reconstruct that older output. See [October 2026 hardening guide](docs/THOMAS_CAMPAIGN_HARDENING_20261013.md) and run `python microgen_doctor.py --source-root ... --audit` before a large campaign.
 
 ## Multi-PC Gemini coordination
 
