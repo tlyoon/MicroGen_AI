@@ -66,3 +66,8 @@ The October continuation added `microgen_multipart.py`, `microgen_scene_proposal
 - GCS lease unit tests use a simulated atomic generation store and include owner contention, expiry/takeover, stale-owner fencing and local lock cleanup. A **live shared GCS bucket test on two machines remains a release gate**. No synchronization to production checkouts has been carried out.
 
 Remaining unfinished requirements: automatic source-first semantic scene generation and academically reviewed multipart boundaries, accurate intro/closing continuity narration for each part, word-level forced timing and slide-element highlighting, semantic Beamer overflow correction beyond the conservative local repair, composite image panel QA, and a clean live end-to-end multi-PC campaign. Do not claim these capabilities are complete based solely on the module/receipt tests.
+
+
+## Cross-PC compatibility diagnostic after the b3ff1a4 pilot
+
+HP and Dell-115 passed the isolated 56-test branch. Yoga6's Miniforge base interpreter failed to import `google.genai` because Pydantic's discovery of third-party distribution metadata raised `OSError: [Errno 22] Invalid argument`. This failure occurred before generation. `gemini_keys.py` now loads the SDK only when a Gemini request is actually made, allowing offline auditing and key configuration checks to run even on damaged installations. `microgen_doctor.py` additionally performs a real, isolated SDK import test and reports a specific remediation if the SDK is unimportable. Do not mark Yoga6's live Gemini capability healthy until the interpreter environment is repaired or a fresh dedicated Python environment is tested. No live base-Miniforge packages were modified as part of this code-only correction.

@@ -34,4 +34,13 @@ class DoctorTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 audit_tree(Path(root)/"not-present")
 
+
+    def test_detects_installed_but_unimportable_sdk(self):
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch("microgen_doctor.subprocess.run") as run:
+                run.return_value=mock.Mock(returncode=1)
+                result=inspect_environment(Path(root))
+            self.assertFalse(result["checks"]["gemini_tts_sdks_importable"])
+            self.assertFalse(result["ok"])
+
 if __name__=="__main__":unittest.main()

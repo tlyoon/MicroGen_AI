@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +27,17 @@ def inspect_environment(
             modules[name] = importlib.util.find_spec(name) is not None
         except (ImportError, AttributeError, ModuleNotFoundError):
             modules[name] = False
+    # find_spec alone can return True when the installed SDK crashes during
+    # import (observed on Yoga6 with damaged Miniforge package metadata).
+    try:
+        deep_import=subprocess.run(
+            [python_exe,"-c","import google.genai, google.cloud.texttospeech, pydantic"],
+            stdin=subprocess.DEVNULL,capture_output=True,text=True,
+            errors="replace",timeout=30,
+        )
+        sdk_importable=deep_import.returncode==0
+    except (OSError,subprocess.TimeoutExpired):
+        sdk_importable=False
     latex = bool(shutil.which("pdflatex"))
     ffmpeg = bool(shutil.which("ffmpeg"))
     if not ffmpeg and modules.get("imageio_ffmpeg"):
@@ -59,6 +71,7 @@ def inspect_environment(
         source["can_read"] = path.is_dir() and os.access(path, os.R_OK)
         source["can_write"] = path.is_dir() and os.access(path, os.W_OK)
     checks = {"python_version_3_11_plus": sys.version_info >= (3, 11),
+              "gemini_tts_sdks_importable": sdk_importable,
               "pdflatex_available": latex, "ffmpeg_available": ffmpeg,
               "gemini_key_configured": gemini_keys,
               "cloud_tts_credentials_configured": any(possible_credentials),
@@ -66,8 +79,14 @@ def inspect_environment(
     if source_root is not None:
         checks["source_directory_accessible"] = bool(source.get("can_read"))
         checks["source_directory_writable"] = bool(source.get("can_write"))
+    remediation = (None if sdk_importable else
+                   "Installed Google packages could not be imported. In this "
+                   "Python interpreter run: python -c 'import google.genai, "
+                   "google.cloud.texttospeech, pydantic'; repair broken package "
+                   "metadata or use a fresh isolated Python environment.")
     return {"host": os.environ.get("COMPUTERNAME") or "unknown",
             "python_executable": python_exe, "checks": checks,
+            "sdk_import_remediation": remediation,
             "source": source, "ok": all(checks.values()),
             "note": "Configuration preflight only; does not confirm billing, model access, or source integrity."}
 
