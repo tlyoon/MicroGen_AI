@@ -139,3 +139,11 @@ $doclingPython = Join-Path $env:USERPROFILE 'miniconda3\envs\docling_3\python.ex
 ```
 
 The `D:\MicroGenScratch` path is an illustrative local work volume, **not a claim that Yoga6 has a D: drive**. On 2026-10-13, Yoga6 had approximately **0.8 GB free on C:** and therefore did not pass the 8 GB scratch-space guard. Do **not** run expensive Docling extraction or video rendering until a sufficiently spacious writable local work drive is available. This is now the remaining Yoga6 local resource blocker; Docling itself is already installed and verified.
+
+### Yoga6 controlled 8.6 pilot — recoverable provider failures (2026-10-14)
+
+A genuine end-to-end pilot against an isolated copy of the Thomas 8.6 six-page source passed local disk, SDK, TTS credential, pdflatex and pre-existing `docling_3` preflight; figure extraction finished. Gemini page 1 caption extraction succeeded; the page 2 request then raised `httpx.ReadError: [Errno 10053]`, an aborted Windows connection, and the stage restarted from page 1. A subsequent request returned `504 DEADLINE_EXCEEDED`.
+
+The current correction adds hash-bound **page caption and per-crop-batch Gemini reply caching** to `map_and_rename_v5.py`. Successful requests survive a failed later page and are reused only when model, prompt and exact input PNG bytes match. Network `ReadError`, 10053 and reset/aborted connections are now classified as retryable transient Gemini errors rather than failures that immediately restart the entire mapping stage. Unit tests reproduce and recover the page-2 failure; no original textbook lecture is overwritten.
+
+Cloud-model availability remains outside the package's control. Do not mark this real end-to-end pilot accepted until slide PDF, narration, per-slide WAV count, MP4 and hash-bound publication receipt have all passed. The scratch root for this test is `%LOCALAPPDATA%\MicroGenAcceptance_20261014`; the original source lives under the supplied Google Drive Thomas root.

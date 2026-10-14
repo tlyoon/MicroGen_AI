@@ -6,7 +6,7 @@ Preserves map_and_rename_v4 output behavior while using the shared Microvid
 GEMINI_API_KEY and the modern google-genai SDK. Gemini access is coordinated
 per request so long subchapters do not monopolize a multi-PC production lane.
 """
-import os, re, shutil, sys
+import os, re, shutil, sys, hashlib, json
 from pathlib import Path
 from dotenv import load_dotenv
 from PIL import Image
@@ -100,6 +100,41 @@ def safe_destination(name: str, page_dir: Path) -> Path | None:
     return page_dir.parent / name
 
 
+def _cached_figure_request(cache_name: str, prompt: str, image_files: list[Path], create) -> str:
+    """Reuse only completed model replies matching exact model/prompt/image bytes.
+
+    Network failures never poison the cache; all accepted requests are stored
+    atomically. This survives stage restarts without repeating earlier pages.
+    """
+    dig=hashlib.sha256()
+    for value in ("microgen-figure-map-cache-v1",MODEL_NAME,prompt):
+        dig.update(value.encode("utf-8"))
+        dig.update(b"\0")
+    for image in image_files:
+        dig.update(image.name.encode("utf-8"))
+        dig.update(image.read_bytes())
+    key=dig.hexdigest()
+    directory=Path(".microgen_mapping_cache")
+    directory.mkdir(exist_ok=True)
+    cache=directory/cache_name
+    if cache.is_file():
+        try:
+            record=json.loads(cache.read_text(encoding="utf-8"))
+            if record.get("key")==key and str(record.get("response") or "").strip():
+                print(f"[figure mapping] reused checkpoint: {cache_name}",flush=True)
+                return record["response"]
+        except (OSError,ValueError,TypeError):
+            pass
+    result=create()
+    if not isinstance(result,str) or not result.strip():
+        raise RuntimeError("Gemini mapping response is empty; not cached")
+    pending=cache.with_suffix(".json.tmp")
+    pending.write_text(json.dumps({"key":key,"response":result},
+                                   ensure_ascii=False,indent=2),encoding="utf-8")
+    pending.replace(cache)
+    return result
+
+
 def mapping():
     pages_root = Path("pages")
     collector = FigureCollector(pages_root)
@@ -117,7 +152,10 @@ def mapping():
             continue
 
         try:
-            caption_text = generate([CAPTION_PROMPT, image_part(full_page_image)])
+            caption_text = _cached_figure_request(
+                f"{page_dir.name}_captions.json", CAPTION_PROMPT, [full_page_image],
+                lambda: generate([CAPTION_PROMPT, image_part(full_page_image)])
+            )
             caption_file.write_text(caption_text, encoding="utf-8")
             print(f"Captions saved to: {caption_file.name}")
         except (GeminiBillingError, GeminiCircuitOpen):
@@ -156,7 +194,10 @@ Extracted caption text:
                 parts.extend([f"Crop file: {fig.name}", image_part(fig)])
 
             try:
-                response_text = generate(parts)
+                response_text = _cached_figure_request(
+                    f"{page_dir.name}_mapping_{start:04d}.json",
+                    prompt, [full_page_image, *batch], lambda: generate(parts),
+                )
                 mapped_in_batch = 0
                 for raw in response_text.splitlines():
                     line = raw.strip().lstrip("- ")
