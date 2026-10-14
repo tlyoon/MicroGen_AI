@@ -39,3 +39,11 @@ If any flagged figure is absent, changed, mismatched, duplicated, or not express
 Run `python -m unittest discover -s tests -p 'test_microgen_*.py' -q`.
 
 This gate does not perform source-page semantic recognition, mathematical proof checking, narration listening, slide visual validation, or student publication authorization. An end-to-end campaign still needs the separate academic-review step. Preserve original textbook and production folders; review experimental outputs separately.
+
+## Unmapped source-crop visibility
+
+The 2026-10-15 live Section 8.6 pilot extracted an unnumbered gasoline-tank diagram accompanying Exercise 62. Its figure-composition receipt correctly contained no formally numbered mapped images, but did not expose the unused source crop to reviewers. That is a coverage-audit gap, not proof the generated lecture ought to teach Exercise 62.
+
+The final technical completion manifest now contains `unmapped_source_crops` when extracted `crops/page_N/fig_*.png` files have no hash-matched mapped figure destination. Entries record the source page, crop filename, content SHA-256, and an explicit `review_required` flag. If any exist, `scientific_review_pending` is true. This preserves useful unattended technical generation, but prevents a human reviewer from mistaking a figure-free receipt for proof that the textbook contains no unmapped illustrations.
+
+The audit **does not automatically decide** whether an exercise-only figure should appear in a lecture. There is no implicit academic approval. Technical validation still cannot certify source completeness, mathematical correctness, or authority to publish to students. Prior historical manifests without this field are not retroactively audited.

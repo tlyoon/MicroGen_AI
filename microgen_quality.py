@@ -216,6 +216,10 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         # Publishing a multi-panel figure requires a hash-bound human receipt.
         figure_provenance = validate_figure_receipt(stage, require_review=True)
         figures.extend(stage / f["destination"] for f in figure_provenance["figures"])
+    unmapped_source_crops = []
+    if figure_provenance is not None:
+        from microgen_figure_composition import audit_unmapped_source_crops
+        unmapped_source_crops = audit_unmapped_source_crops(stage, receipt=figure_provenance)
     narration = check_narration(stage / "script.txt", stage / "script_tts.json", pdf["pages"])
     wav = check_wavs(stage, pdf["pages"])
     video = check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
@@ -237,6 +241,9 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if unmapped_source_crops:
+        result["unmapped_source_crops"] = unmapped_source_crops
+        result["scientific_review_pending"] = True
     if figure_provenance is not None:
         result["figure_composition_receipt_sha256"] = sha256(provenance_file)
         if any(item.get("review_required") for item in figure_provenance["figures"]):
