@@ -127,7 +127,7 @@ class FigureCollector:
         return result
 
 
-def validate_figure_receipt(directory: Path) -> dict:
+def validate_figure_receipt(directory: Path, *, require_review: bool = False) -> dict:
     directory=Path(directory)
     receipt=directory/"figure_composition_receipt.json"
     if not receipt.is_file():
@@ -144,4 +144,38 @@ def validate_figure_receipt(directory: Path) -> dict:
             raise FigureCompositionError(f"Figure composition changed or missing: {path}")
         if entry["panel_count"]!=len(entry["source_crops"]):
             raise FigureCompositionError("Composite panel count inconsistent with evidence")
+    if require_review:
+        pending=[entry for entry in data["figures"] if entry.get("review_required")]
+        if pending:
+            approval_path=directory/"figure_review_approval.json"
+            if not approval_path.is_file():
+                raise FigureCompositionError(
+                    "Composite figures require human review before publication: "
+                    "figure_review_approval.json is missing"
+                )
+            try:
+                approval=json.loads(approval_path.read_text(encoding="utf-8"))
+                accepted=approval["figures"]
+                if (approval.get("schema_version")!=1
+                    or not isinstance(approval.get("reviewer"),str)
+                    or not approval["reviewer"].strip()
+                    or not isinstance(approval.get("review_note"),str)
+                    or not approval["review_note"].strip()
+                    or not isinstance(accepted,list)):
+                    raise ValueError("Invalid figure approval metadata")
+                by_name={}
+                for record in accepted:
+                    name=record["destination"]
+                    if name in by_name or record.get("approved") is not True:
+                        raise ValueError("Duplicate or unapproved figure")
+                    by_name[name]=record
+                for entry in pending:
+                    record=by_name.get(entry["destination"])
+                    if (record is None
+                        or record.get("output_sha256")!=entry["output_sha256"]
+                        or record.get("source_page")!=entry["source_page"]
+                        or record.get("panel_count")!=entry["panel_count"]):
+                        raise ValueError("Missing, stale or mismatched composite approval")
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise FigureCompositionError(f"Invalid composite review approval: {exc}") from exc
     return data
