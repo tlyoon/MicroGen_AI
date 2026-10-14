@@ -127,6 +127,41 @@ class FigureCollector:
         return result
 
 
+
+def audit_unmapped_source_crops(directory: Path, *, receipt: dict | None = None) -> list[dict]:
+    """Record extracted textbook crops not represented in final figure mapping.
+
+    Unmapped crops may be legitimate exercise-only or decorative illustrations.
+    They require human coverage review, but must not be silently lost from the
+    technical completion metadata. This routine makes no academic judgment.
+    """
+    directory = Path(directory)
+    if receipt is None:
+        receipt = validate_figure_receipt(directory)
+    mapped = {
+        (figure["source_page"], crop["filename"], crop["sha256"])
+        for figure in receipt["figures"] for crop in figure["source_crops"]
+    }
+    crop_root = directory / "crops"
+    if not crop_root.is_dir():
+        return []
+    unmatched: list[dict] = []
+    for folder in sorted(crop_root.iterdir()):
+        if not folder.is_dir() or not re.fullmatch(r"page_\d+", folder.name):
+            continue
+        for path in sorted(folder.glob("fig_*.png")):
+            if not path.is_file():
+                continue
+            digest = sha256(path)
+            if (folder.name, path.name, digest) not in mapped:
+                unmatched.append({
+                    "source_page": folder.name, "filename": path.name,
+                    "source_sha256": digest,
+                    "review_required": True,
+                    "note": "Unmapped extracted crop; compare with source and lesson scope",
+                })
+    return unmatched
+
 def validate_figure_receipt(directory: Path, *, require_review: bool = False) -> dict:
     directory=Path(directory)
     receipt=directory/"figure_composition_receipt.json"
