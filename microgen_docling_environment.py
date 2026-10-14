@@ -32,7 +32,7 @@ def docling_candidates(home: Path | None = None) -> list[Path]:
     return result
 
 
-def supports_docling(executable: str | Path, *, timeout_seconds: float = 40) -> bool:
+def supports_docling(executable: str | Path, *, timeout_seconds: float = 90) -> bool:
     executable=str(executable)
     if not Path(executable).is_file():
         return False
@@ -47,13 +47,36 @@ def supports_docling(executable: str | Path, *, timeout_seconds: float = 40) -> 
         return False
 
 
+def persisted_windows_docling_python() -> str | None:
+    """Read only the Windows user's existing Docling setting.
+
+    Long-lived Remote Desktop/automation agents may inherit an old process
+    environment even after the user updated HKCU\\Environment.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            value, _ = winreg.QueryValueEx(key, "MICROGEN_DOCLING_PY")
+    except (ImportError, OSError):
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return os.path.expandvars(value.strip())
+
+
 def resolve_docling_python(explicit: str | None = None, *,
                            main_python: str | None = None,
                            env: dict | None = None,
                            home: Path | None = None) -> str:
     main_python=main_python or sys.executable
-    env=env if env is not None else os.environ
-    configured=explicit or env.get("MICROGEN_DOCLING_PY")
+    # If an explicit env mapping was passed (e.g., in tests), never consult
+    # the ambient registry: caller-supplied configuration must be deterministic.
+    caller_supplied_env=env is not None
+    env=env if caller_supplied_env else os.environ
+    configured=(explicit or env.get("MICROGEN_DOCLING_PY")
+                or (None if caller_supplied_env else persisted_windows_docling_python()))
     if configured:
         # No fallback when explicitly set: misconfiguration should be reported,
         # not hidden behind an unexpected interpreter choice.

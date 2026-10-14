@@ -50,6 +50,19 @@ if ($LASTEXITCODE -ne 0) { throw 'Docling interpreter is unusable' }
 $env:MICROGEN_DOCLING_PY = $doclingPython
 ```
 
+**Existing Anaconda/Miniconda installations:** before installing anything, examine
+`$env:LOCALAPPDATA\\miniconda3\\envs`,
+`$env:LOCALAPPDATA\\miniforge3\\envs` and user-home Conda locations.
+For example, an existing environment may be at
+`$env:LOCALAPPDATA\\miniconda3\\envs\\docling_win\\python.exe`.
+Test that interpreter directly with the import command above. Cold imports of
+`DocumentConverter` can take longer than 40 seconds on some Windows PCs,
+so the bounded discovery/import deadline is 90 seconds. If a long-lived remote
+agent does not inherit a pre-existing Windows user `MICROGEN_DOCLING_PY`
+setting, MicroGen now reads the persisted HKCU setting without modifying it.
+An explicit `--docling-py` or current process setting still takes priority.
+Do not assume that an old, stale agent environment means Docling is missing.
+
 The Docling environment is deliberately independent of other applications. Do not modify global pip index settings or pre-existing Conda environments solely to repair MicroGen. In a temporary terminal session, pip can avoid a nonfunctional extra package index by overriding `PIP_EXTRA_INDEX_URL`; do not persist a machine-wide change without review.
 
 ## Synchronization rules
