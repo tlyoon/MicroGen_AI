@@ -418,3 +418,8 @@ Locks use generation-matched compare-and-swap, renewable heartbeats and ownershi
 Do not claim a Firestore/GCS lock is enabled when `--multi-pc` was omitted. If a Cloud Storage bucket has not been configured, run **one PC at a time** or distribute jobs non-overlapping manually. The existing `MICROGEN_GEMINI_LANE_DIR` only serializes Gemini requests and is not a job lease.
 
 Remaining higher-order functionality: fully automatic source-first semantic scene generation, guaranteed 8–9 minute parts without awkward boundaries, timestamp-verified word/equation highlighting, and automatic composite-figure/subpanel QA. These remain explicit future release gates; no runtime approximation is presented as synchronized highlighting.
+
+
+## Safe local code deployment on multiple PCs
+
+Use a local-disk Git checkout on each computer, separate local scratch, and an authorized writable cloud source tree for inputs/outputs. Do not run Git checkout updates against Google Drive virtual filesystems. See [three-PC deployment and recovery](docs/LOCAL_CODE_THREE_PC_DEPLOYMENT.md).
