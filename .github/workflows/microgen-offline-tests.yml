@@ -1,0 +1,29 @@
+name: MicroGen offline regressions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install offline test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-dotenv google-genai google-cloud-texttospeech PyPDF2 pymupdf pillow imageio-ffmpeg
+      - name: Static syntax check
+        run: |
+          python -m compileall -q microgen_batch.py microgen_quality.py microgen_narration_batch.py microgen_lesson_plan.py microgen_doctor.py microgen_multipart.py microgen_ownership.py microgen_scene_proposal.py microgen_docling_environment.py gen_script_v13.py gen_slides_v20.py text_to_speech_v25.py gen_video_v22.py microgen_figure_composition.py map_and_rename_v5.py microgen_slide_reflow.py
+      - name: Unit tests (no API calls)
+        run: python -m unittest discover -s tests -v

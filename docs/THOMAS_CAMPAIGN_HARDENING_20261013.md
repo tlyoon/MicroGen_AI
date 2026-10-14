@@ -1,0 +1,173 @@
+# MicroGen_AI: Thomas Calculus 2026 reliability hardening
+
+Repository: https://github.com/tlyoon/MicroGen_AI (not MicroGen_AI_Web).
+The changes are software hardening only. Do not rerun production against the 66 completed Thomas folders merely to smoke-test a new branch.
+
+## Lessons incorporated
+
+- A nonempty PDF or MP4 is **not** a completed lecture. Strict validation now checks real PDF pages/counters, missing LaTeX figures, ordered sidecar narration, contiguous WAV files, MP4 audio/video streams and duration.
+- Publication is built and checked locally first. A hash-bound `.microgen_verified_completion.json` is written last; previously published files receive protected backups, and publication attempts roll back on failure.
+- The video engine retains hash-keyed per-slide MP4 segments and never deletes the old MP4 at the start of encoding. Plain static slides use 2 fps rather than 30 fps, reducing unnecessary frames.
+- Gemini narration is partitioned into 8-slide batches (configurable 1–20) with validated, input-bound checkpoints. A large 54-slide request previously timed out with 504; batching recovered 8.5 successfully.
+- TTS now verifies and caches each WAV, retains existing audio, and refuses mixed-provider voices. Windows SAPI fallback is opt-in; no silent switching.
+- Beamer is compiled twice, with page counter and severe-overflow checks. Missing figures fail closed rather than silently disappearing. When a LaTeX compile fails, an isolated deterministic blank-paragraph repair is attempted and verified before asking Gemini to repair TeX. The original defective 8.5 pilot TeX passed this local method as a 10-page PDF without another API request.
+- Temporary image/crop folders can be cleaned after verified publication, but WAVs and numbered slide PDFs remain available to resume and audit.
+- `microgen_doctor.py` performs an offline, bounded source inventory and checks prerequisites without revealing credentials.
+- Unit tests run on Python 3.11/3.12 across Windows/Linux; tests do not call paid APIs.
+
+## Other users: setup
+
+Clone `tlyoon/MicroGen_AI` to a local code directory and install dependencies. Install Python 3.11+ (3.11 or 3.12 tested), MiKTeX/pdflatex, FFmpeg or imageio-ffmpeg. Provide keys privately in `%LOCALAPPDATA%\Microvid\.env` or `MICROVID_CONFIG_DIR` and service-account credentials in the documented default folder. Never put secrets in GitHub.
+
+Specify an explicit, writable *source root* containing `<chapter>/<subchapter>/source.pdf` and a **separate local-disk work root** for heavy tasks.
+
+Read-only preflight:
+
+```powershell
+python microgen_doctor.py --source-root "G:\My Drive\ZCA110_2627_SEM1\MCQ_generation\Thomas_calculus_13ed" --audit
+```
+
+Example only, against an **isolated source-authorized test copy**, not the completed Thomas tree:
+
+```powershell
+$env:MICROGEN_LLM_MODEL = "gemini-3.8-flash"
+$env:MICROGEN_NARRATION_BATCH_SIZE = "8"
+$env:MICROGEN_STAGE_TIMEOUT_SECONDS = "7200"
+python microgen_batch.py --source-root "D:\LectureSources" --work-root "D:\MicroGenWork" --targets "1.1"
+```
+
+For multiple PCs, distribute disjoint subchapter IDs, pin the same tested commit, and share a `MICROGEN_GEMINI_LANE_DIR`. The Gemini lane serializes API requests but does **not** by itself provide a strong source-publication lease. Cloud Drive folders must not serve as computational scratch space.
+
+## Important limitations and next release gates
+
+The implemented `microgen_lesson_plan.py` is an **offline planning foundation only**. It accepts source-grounded semantic scene inputs and plans coherent part boundaries; it is **not integrated yet** into the full slide/narration/MP4 production pipeline. It does not itself split the 30-minute 8.5 lecture into three or four coherent videos.
+
+True word/phrase-synchronized highlighting, verified figure subpanel/caption provenance, full cross-PC job ownership, automatic repair of clipped but compilable Beamer slides, and end-to-end clean-install piloting **remain outstanding**. The 66 Thomas MP4s are not thereby scientifically certified.
+
+Run locally before merge:
+
+```powershell
+python -m compileall -q microgen_quality.py microgen_batch.py microgen_narration_batch.py microgen_lesson_plan.py microgen_doctor.py gen_script_v13.py gen_slides_v20.py gen_video_v22.py text_to_speech_v25.py
+python -m unittest discover -s tests -v
+```
+
+Release sequence: isolated unit tests -> independent Windows/Ubuntu CI -> fresh controlled test-copy generation -> inspection of actual PDF math/diagrams and audio -> only then merge/deploy to the three PCs at safe worker boundaries. Older output receipts are not silently promoted to new verified status.
+
+
+## Continuation: concept-safe multipart and strong cross-PC ownership
+
+The October continuation added `microgen_multipart.py`, `microgen_scene_proposal.py`, and `microgen_ownership.py` as **opt-in** modules.
+
+- Multipart mode requires a `lesson_scenes.json` whose source PDF hash, slide PDF hash, contiguous slide IDs, textbook page references, explicit natural topic boundaries and lecturer approval are verified before another narration request. The original full `slides.mp4` is preserved. Part MP4s are created from exact already-generated slide/WAV segments and have actual stream, duration and hash checks, source-adjacent publication, and a receipt. The planner will fail if a coherent concept cannot fit under the 570-second ceiling; it will not fake shorter lesson durations.
+- `microgen_scene_proposal.py` offers a **draft**, not automatic academic approval. Weak title-to-textbook matches require manual correction; simple text overlap cannot verify scientific accuracy, composite figure panels, narration transitions or correct concept boundaries.
+- Opt-in GCS generation-conditional ownership (`--multi-pc --lease-bucket ... --campaign-id ...`) provides atomic, server-backed leases and periodic renewal. Google Drive filesystem synchronization is never treated as a strong lock. This requires an explicitly configured GCS bucket, an optional dependency and an authorization test before production use.
+- **Mechanical real-media pilot** using Thomas 8.5 54-slide audio and videos was performed in `%LOCALAPPDATA%\MicroGen_Multipart_Isolated_Smoke_20261013`, not in the Thomas source root. Four part MP4s passed media checks: slides 1–13 (410.9 s), 14–26 (460.5 s), 27–41 (477.9 s), 42–54 (470.3 s). These are NOT lecturer-approved teaching parts; nine heading-to-source matches were weak.
+- An isolated full-bundle publication also passed with 54 WAVs, the original video, four part videos and a final hash-bound receipt. The textbook's 66 production outputs were not changed.
+- GCS lease unit tests use a simulated atomic generation store and include owner contention, expiry/takeover, stale-owner fencing and local lock cleanup. A **live shared GCS bucket test on two machines remains a release gate**. No synchronization to production checkouts has been carried out.
+
+Remaining unfinished requirements: automatic source-first semantic scene generation and academically reviewed multipart boundaries, accurate intro/closing continuity narration for each part, word-level forced timing and slide-element highlighting, semantic Beamer overflow correction beyond the conservative local repair, composite image panel QA, and a clean live end-to-end multi-PC campaign. Do not claim these capabilities are complete based solely on the module/receipt tests.
+
+
+## Cross-PC compatibility diagnostic after the b3ff1a4 pilot
+
+HP and Dell-115 passed the isolated 56-test branch. Yoga6's Miniforge base interpreter failed to import `google.genai` because Pydantic's discovery of third-party distribution metadata raised `OSError: [Errno 22] Invalid argument`. This failure occurred before generation. `gemini_keys.py` now loads the SDK only when a Gemini request is actually made, allowing offline auditing and key configuration checks to run even on damaged installations. `microgen_doctor.py` additionally performs a real, isolated SDK import test and reports a specific remediation if the SDK is unimportable. Do not mark Yoga6's live Gemini capability healthy until the interpreter environment is repaired or a fresh dedicated Python environment is tested. No live base-Miniforge packages were modified as part of this code-only correction.
+
+
+## Later hardening: crash recovery and cross-batch figure integrity
+
+1. The former local subchapter lock used an exclusive-created marker file. When a process crashed, the file could remain and block new workers permanently. The new mechanism uses a Windows kernel byte lock or POSIX `flock`, automatically released by the OS when the owning process exits. **The lock file is intentionally retained** to prevent two writers locking different newly created inodes. Tests terminate a child worker and verify the lock becomes available without manual cleanup. The optional Google Cloud Storage lease continues to control *cross-PC* ownership.
+2. Figure mapping previously accumulated multiple crops to the same destination only **within a single Gemini batch**. If a composite's panels were mapped by different batches, a later batch could overwrite earlier panels. `microgen_figure_composition.py` now buffers mappings across all batches, rejects cross-page label collisions, validates source crop hashes and image dimensions, composes once, and writes `figure_composition_receipt.json`. The batch runner requires the receipt, and published bundles preserve and verify its hashes. A ten-panel/three-batch end-to-end offline regression reproduces the old data loss and verifies the new behavior.
+3. Missing source-page images, captioned figures with no extracted crops, and failed figure-mapping batches now **stop the stage**, not silently continue. This changes previously permissive workflows, deliberately favoring scientific fidelity over producing an apparently successful incomplete deck.
+4. Provenance records and checked pixel compositions do **not** certify that the original textbook's subpanels, labels or captions were correctly associated by Gemini. Wide composites are flagged as requiring review. Full semantic image-content checks remain pending.
+5. A separate Python virtual environment was installed on Yoga6 at `%LOCALAPPDATA%\MicroGen_Clean_Venv_20261013`. The Google Gemini/Cloud TTS SDKs, Pydantic, Pillow, PyMuPDF and related dependencies import successfully. The offline diagnostic passes. The base Miniforge environment was not modified. **Docling is absent from this clean venv**; an isolated extraction environment is still required for the full batch preflight.
+
+Do not treat the offline Gemini mocks, a locally fixed TeX PDF or synthetic figure tests as a complete production end-to-end acceptance test. A controlled real textbook pilot, including visual inspection and verified Docling extraction, must still precede a fully supported multi-PC release.
+
+
+## Disk capacity safety guard (observed on Yoga6)
+
+The clean Yoga6 venv repaired its SDK import and passed all 68 offline tests, but the machine's local C: volume had only **0.9 GiB free** at inspection. A fresh Docling install or lecture conversion in `%LOCALAPPDATA%` would be unsafe. The main runner now checks **actual free disk space on the work-root volume before model calls or expensive conversions** and refuses to begin below 8 GiB free by default (`MICROGEN_MIN_SCRATCH_FREE_GB`).
+
+Preflight from any installation:
+
+```powershell
+python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root "D:\MicroGenScratch"
+```
+
+Choose a *genuinely local* disk with sufficient free space for the work root. Google Drive's virtual free-space reading is not a substitute. The configured threshold can be raised for large PDFs, or cautiously adjusted for known tiny jobs; overrides below 0.5 GiB are rejected. Do not install heavy extraction/ML dependencies into Yoga6's nearly full C: drive until space is freed or an alternative volume is available.
+
+
+### Windows crash-release grace period
+
+On Yoga6, the OS occasionally continued reporting an exclusive byte lock briefly after the killed worker exited. To avoid a false owner-conflict failure, the local kernel lock now waits up to five seconds by default (`MICROGEN_LOCAL_LOCK_WAIT_SECONDS`) before declaring that another worker is active. The range is limited to 0–60 seconds. The underlying lock remains a process-owned kernel lock, never a manually removed stale lockfile. The crash/ownership tests include both immediate contention and bounded recovery.
+
+
+### Separate Docling environment preflight and installer network failure
+
+Docling is intentionally kept in a **separate optional Python environment** because its ML dependencies may be large. `requirements-docling.txt` captures the version range and `pdf2image` dependency. The doctor now supports `--docling-py` and actually imports `docling,pdf2image,PIL` using that interpreter; a broken/missing extraction environment therefore fails preflight rather than stalling the generation job.
+
+Example after installing a dedicated environment on a sufficiently spacious **local** drive:
+
+```powershell
+python microgen_doctor.py --source-root "G:\My Drive\CourseSources" --work-root "D:\MicroGenScratch" --docling-py "D:\MicroGen_Docling_Venv\Scripts\python.exe"
+```
+
+Dell-115 had approximately 732 GB free on local D: at inspection. A dedicated Docling environment was initiated there, but the package index repeatedly failed DNS resolution (`getaddrinfo failed`), so its pip installer and remaining subprocess were stopped rather than repeatedly retried. That Docling environment is **not certified or installed**. Yoga6's C: remains too full to attempt the installation safely. Live Gemini 3.8 Flash reached Google from Yoga6's clean environment, but the small readiness request returned 503 high demand. This is provider capacity, not an SDK import failure.
+
+No production source folders or production code checkouts were modified. Full Docling extraction + successful live full-pipeline validation remains a release blocker.
+
+
+### Reuse existing Docling: Yoga6 (verified)
+
+The Yoga6 machine already has **Docling 2.43.0** with Python **3.11.13** in the existing Conda interpreter:
+
+```powershell
+$doclingPython = Join-Path $env:USERPROFILE 'miniconda3\envs\docling_3\python.exe'
+```
+
+The interpreter successfully imports `docling.document_converter.DocumentConverter`, `docling.datamodel.pipeline_options.PdfPipelineOptions`, `pdf2image` and `PIL`. In contrast, `docling_win` failed dependency imports, and `docling` had no valid `python.exe`. Use **docling_3**, not the default Miniforge Python and not the broken alternative.
+
+The machine-specific user environment setting `MICROGEN_DOCLING_PY` was saved to point at that verified interpreter. MicroGen now respects explicit `--docling-py` first, then the machine variable, then bounded discovery of known existing Conda Docling environments. This discovery is read-only and never installs any dependencies. If a specified interpreter is invalid, the preflight fails visibly rather than switching environments.
+
+The main Gemini/TTS interpreter remains the separately verified clean venv:
+
+```powershell
+$mainPython = Join-Path $env:LOCALAPPDATA 'MicroGen_Clean_Venv_20261013\Scripts\python.exe'
+$doclingPython = Join-Path $env:USERPROFILE 'miniconda3\envs\docling_3\python.exe'
+
+& $mainPython microgen_doctor.py --source-root "G:\My Drive\ZCA110_2627_SEM1\MCQ_generation\Thomas_calculus_13ed" --docling-py $doclingPython --work-root "D:\MicroGenScratch"
+```
+
+The `D:\MicroGenScratch` path is an illustrative local work volume, **not a claim that Yoga6 has a D: drive**. On 2026-10-13, Yoga6 had approximately **0.8 GB free on C:** and therefore did not pass the 8 GB scratch-space guard. Do **not** run expensive Docling extraction or video rendering until a sufficiently spacious writable local work drive is available. This is now the remaining Yoga6 local resource blocker; Docling itself is already installed and verified.
+
+### Yoga6 controlled 8.6 pilot — recoverable provider failures (2026-10-14)
+
+A genuine end-to-end pilot against an isolated copy of the Thomas 8.6 six-page source passed local disk, SDK, TTS credential, pdflatex and pre-existing `docling_3` preflight; figure extraction finished. Gemini page 1 caption extraction succeeded; the page 2 request then raised `httpx.ReadError: [Errno 10053]`, an aborted Windows connection, and the stage restarted from page 1. A subsequent request returned `504 DEADLINE_EXCEEDED`.
+
+The current correction adds hash-bound **page caption and per-crop-batch Gemini reply caching** to `map_and_rename_v5.py`. Successful requests survive a failed later page and are reused only when model, prompt and exact input PNG bytes match. Network `ReadError`, 10053 and reset/aborted connections are now classified as retryable transient Gemini errors rather than failures that immediately restart the entire mapping stage. Unit tests reproduce and recover the page-2 failure; no original textbook lecture is overwritten.
+
+Cloud-model availability remains outside the package's control. Do not mark this real end-to-end pilot accepted until slide PDF, narration, per-slide WAV count, MP4 and hash-bound publication receipt have all passed. The scratch root for this test is `%LOCALAPPDATA%\MicroGenAcceptance_20261014`; the original source lives under the supplied Google Drive Thomas root.
+
+
+## Automatic structural slide reflow — 2026-10-14
+
+The live Yoga6 Thomas 8.6 six-page source revealed two reproducible layout failures. The first attempt generated a 16-page deck with two dense examples on one slide; the second dense two-column CAS comparison triggered an overfull LaTeX box. In a scratch-only diagnostic, splitting each **whole** example block and each **whole** CAS column into separate frames yielded 18 pages, and the exact PDF passed text-boundary, page-count and LaTeX-overflow gates. The independent downstream narration/TTS/MP4 test then produced 18 valid WAVs and a 628.6-second video with a verified local publication receipt.
+
+The new `microgen_slide_reflow.py` applies **bounded, transparent, zero-LLM** repair to genuinely rejected candidate slides:
+- Normalize harmless blank lines and evaluate generated Beamer frames without changing equations.
+- Split only intact `exampleblock` or `column` sections; preserve source math-expression evidence (multiset of exact math strings).
+- Compile two passes in isolated candidate directories. Accept only a deck with verified page/counter, geometry, missing-figure and severe-overflow checks.
+- Never overwrite the existing TeX/PDF on failed trials. Save original source, input/output hashes, transformation details and a receipt when a candidate is accepted.
+- Set a fixed total frame count only for clearly overlay-free, contiguous Beamer frames; refuse the shortcut for `pause`, `only`, `againframe`, `appendix` or other overlay constructions.
+- Retain the existing targeted Gemini repair as a fallback for unsupported mathematical layouts.
+
+This is a **structural repair**, not proof that the lecture faithfully reproduces every part of the textbook or that a split comparison remains pedagogically optimal. Image panels, quotations, mathematics and chapter-specific meaning still need a separate academic review. Future automatic results are not declared suitable for class distribution merely because the PDF compiles.
+
+To reproduce the offline gate without calling Gemini:
+
+```powershell
+python -m unittest tests.test_microgen_slide_reflow -v
+python microgen_slide_reflow.py --tex "D:\Scratch\8.6\slides.tex"
+```
+
+Run only on an isolated source-authorized copy. In the normal pipeline, the generator invokes structural reflow when a compiled presentation fails strict PDF/LaTeX quality checks; no new command is required from users.

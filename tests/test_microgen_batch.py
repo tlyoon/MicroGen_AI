@@ -22,7 +22,9 @@ class BatchCheckpointTests(unittest.TestCase):
             dest.mkdir()
             for name in ("slides.pdf", "script.txt", "slides.mp4"):
                 (dest / name).write_bytes(b"x")
-            self.assertTrue(microgen_batch.stage_valid(stage, "published", dest))
+            # The old three-file existence check was dangerously permissive.
+            # An output must now have a valid, hash-bound acceptance receipt.
+            self.assertFalse(microgen_batch.stage_valid(stage, "published", dest))
             (dest / "script.txt").unlink()
             self.assertFalse(microgen_batch.stage_valid(stage, "published", dest))
 

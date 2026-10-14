@@ -6,9 +6,6 @@ import random
 import time
 from typing import Callable, TypeVar
 
-from google import genai
-from google.genai import types
-
 from gemini_lane import (
     GeminiBillingError,
     assert_gemini_available,
@@ -47,8 +44,24 @@ def _env_float(name: str, default: float) -> float:
     return float(raw) if raw else default
 
 
+def _import_sdk():
+    """Lazy SDK import so offline checks remain usable on damaged environments."""
+    try:
+        from google import genai
+        from google.genai import types
+    except Exception as exc:
+        raise RuntimeError(
+            "The Google Gemini SDK cannot be imported in this Python environment. "
+            "Run 'python -c \"import google.genai\"' in the chosen environment; "
+            "repair/reinstall google-genai, pydantic and corrupted package metadata "
+            "before running paid generation."
+        ) from exc
+    return genai, types
+
+
 def create_gemini_client(api_key: str):
     """Create a Gemini client whose timeout/retries are owned by MicroGen."""
+    genai, types = _import_sdk()
     timeout_ms = max(1_000, _env_int("MICROGEN_GEMINI_REQUEST_TIMEOUT_MS", 120_000))
     sdk_attempts = max(1, _env_int("MICROGEN_GEMINI_SDK_RETRY_ATTEMPTS", 1))
     return genai.Client(

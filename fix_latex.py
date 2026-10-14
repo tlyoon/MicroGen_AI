@@ -14,7 +14,7 @@ except Exception:
 
 
 # ------------------- Model init ----------------
-model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.1-pro-preview"; model_choice = "gemini"
+model_name = os.environ.get("MICROVID_SLIDE_MODEL") or os.environ.get("MICROGEN_LLM_MODEL") or "gemini-3.8-flash"; model_choice = "gemini"
 
 def _microvid_config_dir() -> Path:
     configured = os.environ.get("MICROVID_CONFIG_DIR")

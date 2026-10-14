@@ -46,6 +46,16 @@ class GeminiLaneTests(unittest.TestCase):
     def test_timeout_is_transient(self):
         self.assertTrue(gemini_lane.is_transient_gemini_error(TimeoutError("request timed out")))
 
+    def test_windows_network_abort_is_retryable(self):
+        # Observed in the Yoga6 8.6 end-to-end run (httpx.ReadError / 10053).
+        class ReadError(Exception):
+            pass
+        self.assertTrue(gemini_lane.is_transient_gemini_error(
+            ReadError("[Errno 10053] An established connection was aborted by "
+                      "the software in your host machine")))
+        self.assertTrue(gemini_lane.is_transient_gemini_error(
+            ConnectionResetError("Connection reset by peer")))
+
 
 if __name__ == "__main__":
     unittest.main()

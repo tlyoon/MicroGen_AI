@@ -1,0 +1,4 @@
+# Optional heavy Docling extraction environment. Install on a drive with adequate free space.
+# Use a separate Python venv, then pass its python.exe via --docling-py.
+docling>=2.40,<3
+pdf2image>=1.17,<2

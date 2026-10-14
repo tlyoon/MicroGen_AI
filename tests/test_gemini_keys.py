@@ -2,7 +2,8 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import patch, Mock
 
 import gemini_keys
 from gemini_lane import GeminiBillingError
@@ -25,6 +26,11 @@ class FakeTransientError(Exception):
 class GeminiKeyPoolTests(unittest.TestCase):
     def test_client_factory_applies_configured_request_timeout(self):
         sentinel = object()
+        fake_sdk=SimpleNamespace(Client=Mock(return_value=sentinel))
+        fake_types=SimpleNamespace(
+            HttpOptions=lambda **kw: SimpleNamespace(**kw),
+            HttpRetryOptions=lambda **kw: SimpleNamespace(**kw),
+        )
         with patch.dict(
             os.environ,
             {
@@ -32,10 +38,10 @@ class GeminiKeyPoolTests(unittest.TestCase):
                 "MICROGEN_GEMINI_SDK_RETRY_ATTEMPTS": "1",
             },
             clear=True,
-        ), patch("gemini_keys.genai.Client", return_value=sentinel) as client_ctor:
+        ), patch("gemini_keys._import_sdk", return_value=(fake_sdk,fake_types)):
             self.assertIs(gemini_keys.create_gemini_client("secret"), sentinel)
 
-        kwargs = client_ctor.call_args.kwargs
+        kwargs = fake_sdk.Client.call_args.kwargs
         self.assertEqual(kwargs["api_key"], "secret")
         self.assertEqual(kwargs["http_options"].timeout, 12345)
         self.assertEqual(kwargs["http_options"].retry_options.attempts, 1)

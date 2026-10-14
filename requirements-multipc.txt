@@ -1,0 +1,2 @@
+# Optional strong cross-PC subchapter leasing; install only when using --multi-pc
+google-cloud-storage>=2.15,<4

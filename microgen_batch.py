@@ -9,6 +9,7 @@ than burning retry attempts across every worker.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -21,6 +22,9 @@ from pathlib import Path
 from typing import Callable
 
 from gemini_lane import circuit_is_open
+import microgen_quality as quality
+from microgen_ownership import from_gcs_bucket
+from microgen_docling_environment import resolve_docling_python
 
 STAGES = [
     "figure_extraction",
@@ -136,6 +140,11 @@ def prepare_stage(
     stage.mkdir(parents=True, exist_ok=True)
     copy_repo_into_stage(repo, stage)
     shutil.copy2(src, stage / "source.pdf")
+    # An explicitly reviewed topic boundary manifest may travel with source.pdf.
+    # The model is never allowed to silently approve its own scene proposals.
+    reviewed = src.parent / "lesson_scenes.json"
+    if reviewed.is_file():
+        shutil.copy2(reviewed, stage / "lesson_scenes.json")
 
     cp = load_checkpoint(checkpoint_path)
     cp.update(
@@ -184,23 +193,36 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
         pages = stage / "pages"
         return pages.is_dir() and any(pages.glob("page_*"))
     if name in {"figure_mapping", "figure_merge"}:
-        # These stages may legitimately produce no Figure*.png. Their durable
-        # checkpoint is therefore the authority.
-        return True
-    if name == "slides":
-        return nonempty(stage / "slides.pdf") and nonempty(stage / "slides.tex")
-    if name == "narration":
-        return nonempty(stage / "script.txt") and nonempty(stage / "script_tts.json")
-    if name == "tts":
-        count = slide_count(stage)
-        return bool(count) and len(numbered_files(stage, "wav")) == count
-    if name == "slide_slicing":
-        count = slide_count(stage)
-        return bool(count) and len(numbered_files(stage, "pdf")) == count
-    if name == "video":
-        return nonempty(stage / "slides.mp4")
+        # Even zero-figure pages receive a final structured provenance receipt.
+        try:
+            from microgen_figure_composition import validate_figure_receipt
+            validate_figure_receipt(stage)
+            return True
+        except (OSError, ValueError, RuntimeError):
+            return False
     if name == "published":
-        return all(nonempty(dest / n) for n in ("slides.pdf", "script.txt", "slides.mp4"))
+        return quality.published_manifest_valid(dest)
+    if name in {"slides", "narration", "tts", "slide_slicing", "video"}:
+        try:
+            if name == "slides":
+                quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
+                quality.check_graphics(stage / "slides.tex")
+                return True
+            count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
+            if name == "narration":
+                quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+            elif name == "tts":
+                quality.check_wavs(stage, count)
+            elif name == "slide_slicing":
+                quality.numbered_files(stage, "pdf", count)
+            elif name == "video":
+                wav = quality.check_wavs(stage, count)
+                quality.check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
+                if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
+                    quality.check_multipart_receipt(stage)
+            return True
+        except (quality.QualityError, OSError, ValueError):
+            return False
     return False
 
 
@@ -209,10 +231,12 @@ def invalidate_from(cp: dict, stage_name: str) -> None:
     idx = STAGES.index(stage_name)
     for name in STAGES[idx:]:
         completed.pop(name, None)
+        cp.setdefault("dependency_fingerprints", {}).pop(name, None)
 
 
-def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str) -> None:
+def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path) -> None:
     cp.setdefault("completed", {})[stage_name] = utc_now()
+    cp.setdefault("dependency_fingerprints", {})[stage_name] = quality.dependency_fingerprint(stage, stage_name)
     cp["last_error"] = None
     cp["updated_utc"] = utc_now()
     save_checkpoint(checkpoint_path, cp)
@@ -260,6 +284,7 @@ def run_subprocess(
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 text=True,
+                timeout=float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200")),
             )
             log.write(f"\n[{label}] exit={proc.returncode}\n")
         if proc.returncode == 0:
@@ -293,31 +318,19 @@ def atomic_publish_file(src: Path, dest: Path) -> None:
     tmp.replace(dest)
 
 
-def publish(stage: Path, dest: Path) -> None:
-    required = ("slides.pdf", "script.txt", "slides.mp4")
-    for name in required:
-        if not nonempty(stage / name):
-            raise RuntimeError(f"required output missing/empty: {name}")
-    for name in ("slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"):
-        src = stage / name
-        if src.is_file():
-            atomic_publish_file(src, dest / name)
-    for pattern in ("Figure*.png", "FIGURE*.png"):
-        for src in stage.glob(pattern):
-            atomic_publish_file(src, dest / src.name)
-    if not stage_valid(stage, "published", dest):
-        raise RuntimeError("published output verification failed")
+def publish(stage: Path, dest: Path, *, lease=None) -> None:
+    """Publish only a verified bundle, keeping backups of earlier assets."""
+    info = quality.manifest_for(stage, require_footer=True)
+    quality.publish_bundle(stage, dest, manifest=info,
+                           still_owner=(lease.assert_held if lease is not None else None))
+    if not quality.published_manifest_valid(dest):
+        raise RuntimeError("Publication receipt/checksum validation failed")
 
 
 def cleanup_intermediates(stage: Path) -> None:
+    """Retain checked slide PDFs and WAVs for accurate resume and audit."""
     for dirname in ("pages", "crops"):
         shutil.rmtree(stage / dirname, ignore_errors=True)
-    for suffix in ("pdf", "wav"):
-        for path in numbered_files(stage, suffix):
-            try:
-                path.unlink()
-            except OSError:
-                pass
 
 
 def preflight(main_py: str, docling_py: str) -> None:
@@ -346,7 +359,79 @@ def preflight(main_py: str, docling_py: str) -> None:
     print(proc2.stdout.strip(), flush=True)
 
 
-def process_one(args, subchapter: str, report: list[dict]) -> None:
+@contextlib.contextmanager
+def subchapter_ownership(args, subchapter: str):
+    """Crash-recoverable kernel lock plus optional strong cross-PC GCS lease.
+
+    The lock inode/file is deliberately retained: removing an unlocked file
+    risks two processes holding locks on *different* recreated file inodes.
+    Kernel locks are released automatically when a process exits or crashes.
+    """
+    local = args.work_root / f".microgen_{subchapter}.owner.lock"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    with open(local, "a+b") as handle:
+        locked = False
+        grace_text = os.environ.get("MICROGEN_LOCAL_LOCK_WAIT_SECONDS", "5.0")
+        try:
+            grace = float(grace_text)
+        except ValueError as exc:
+            raise RuntimeError("MICROGEN_LOCAL_LOCK_WAIT_SECONDS must be numeric") from exc
+        if not 0 <= grace <= 60:
+            raise RuntimeError("Local lock wait must be between 0 and 60 seconds")
+        deadline = time.monotonic() + grace
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            if local.stat().st_size == 0:
+                handle.write(b"\0")
+                handle.flush()
+        else:
+            import fcntl
+        while not locked:
+            try:
+                if os.name == "nt":
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+            except (OSError, BlockingIOError) as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"Subchapter {subchapter} has another active local worker; "
+                        f"kernel lock unavailable at {local}. Verify other workers "
+                        "before modifying locks."
+                    ) from exc
+                time.sleep(min(0.15, max(0.01, deadline-time.monotonic())))
+        try:
+            # Avoid overwriting the byte locked by Windows msvcrt.locking.
+            # The lock file records a human-readable owner after the first byte.
+            handle.seek(1)
+            handle.truncate()
+            handle.write(json.dumps({
+                "subchapter": subchapter, "pid": os.getpid(),
+                "created_utc": utc_now(),
+            }).encode("utf-8"))
+            handle.flush()
+            if args.multi_pc:
+                with from_gcs_bucket(args.lease_bucket, args.campaign_id, subchapter) as lease:
+                    lease.assert_held()
+                    yield lease
+            else:
+                yield None
+        finally:
+            if locked:
+                if os.name == "nt":
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
+    if lease is not None:
+        lease.assert_held()
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -357,8 +442,29 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
     )
     dest = destination_for(args.source_root, subchapter)
     log_path = args.work_root / f"{subchapter}.log"
+    # Existing source-adjacent MP4s are protected unless a user explicitly
+    # authorizes revalidation/rebuild under the upgraded quality contract.
+    verified = quality.published_manifest_valid(dest)
+    published_mode_ready = not args.multipart
+    if verified and args.multipart:
+        final_receipt = json.loads(
+            (dest / ".microgen_verified_completion.json").read_text(encoding="utf-8")
+        )
+        published_mode_ready = bool(final_receipt.get("multipart_parts"))
+    if verified and published_mode_ready:
+        print(f"[{subchapter}] verified receipt and source hashes; skipping", flush=True)
+        report.append({"subchapter": subchapter, "status": "success",
+                       "resumed": True, "verified": True})
+        return
+    if nonempty(dest / "slides.mp4") and not verified and not args.rebuild_unverified:
+        raise RuntimeError(
+            "An existing MP4 has no current verified completion receipt. "
+            "Preserved unchanged. Review it or run with --rebuild-unverified "
+            "to explicitly permit replacement after full verification."
+        )
 
-    if cp.get("completed", {}).get("published") and stage_valid(stage, "published", dest):
+    if (published_mode_ready and cp.get("completed", {}).get("published")
+            and stage_valid(stage, "published", dest)):
         print(f"[{subchapter}] already published and verified; skipping", flush=True)
         report.append({"subchapter": subchapter, "status": "success", "resumed": True})
         return
@@ -375,9 +481,22 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
     }
 
     for stage_name in STAGES:
+        if lease is not None:
+            lease.assert_held()
+        if args.multipart and stage_name == "narration":
+            from microgen_multipart import validate_scenes
+            count = quality.check_slide_pdf(stage / "slides.pdf")["pages"]
+            validate_scenes(stage, durations=[1.0] * count)
         completed = bool(cp.get("completed", {}).get(stage_name))
+        fingerprint_ok = False
         if completed and stage_valid(stage, stage_name, dest):
-            print(f"[{subchapter}] resume: {stage_name} already valid", flush=True)
+            try:
+                current = quality.dependency_fingerprint(stage, stage_name)
+                fingerprint_ok = cp.get("dependency_fingerprints", {}).get(stage_name) == current
+            except (OSError, quality.QualityError):
+                fingerprint_ok = False
+        if completed and fingerprint_ok:
+            print(f"[{subchapter}] resume: {stage_name} and dependencies verified", flush=True)
             continue
 
         invalidate_from(cp, stage_name)
@@ -385,7 +504,9 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
             if stage_name == "published":
-                publish(stage, dest)
+                if lease is not None:
+                    lease.assert_held()
+                publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
                 run_subprocess(
@@ -397,9 +518,11 @@ def process_one(args, subchapter: str, report: list[dict]) -> None:
                     gemini_stage=stage_name in GEMINI_STAGES,
                     retries=args.stage_retries,
                 )
+                if lease is not None:
+                    lease.assert_held()
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
-            mark_complete(cp, checkpoint_path, stage_name)
+            mark_complete(cp, checkpoint_path, stage_name, stage)
         except Exception as exc:
             cp["last_error"] = {
                 "stage": stage_name,
@@ -438,7 +561,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--work-root", type=Path, required=True)
     ap.add_argument("--targets", required=True, help="Comma-separated subchapters, e.g. 1.1,1.2,2.3")
     ap.add_argument("--main-py", default=sys.executable)
-    ap.add_argument("--docling-py", default=sys.executable)
+    ap.add_argument("--docling-py", default=None,
+                    help="Existing Docling Python; falls back to MICROGEN_DOCLING_PY or known local Conda environments.")
     ap.add_argument("--commit", default="unknown")
     ap.add_argument("--stage-retries", type=int, default=1)
     ap.add_argument(
@@ -447,6 +571,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("MICROGEN_SOURCE_WAIT_SECONDS", "600")),
     )
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
+    ap.add_argument("--rebuild-unverified", action="store_true",
+                    help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
+    ap.add_argument("--multi-pc", action="store_true",
+                    help="Require a strong GCS lease for every subchapter, instead of Drive-based locks.")
+    ap.add_argument("--lease-bucket", help="GCS bucket for atomic generation-conditional ownership.")
+    ap.add_argument("--campaign-id", help="Stable campaign identifier shared across all PCs.")
+    ap.add_argument("--multipart", action="store_true",
+                    help="Require approved source-cited lesson scenes and emit video parts.")
     return ap
 
 
@@ -456,16 +588,37 @@ def main() -> int:
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
     args.work_root.mkdir(parents=True, exist_ok=True)
+    # Fail before any paid API requests or multi-gigabyte extraction/rendering.
+    disk = quality.require_scratch_space(args.work_root)
+    print(f"[batch] scratch free={disk['free_gb']} GB "
+          f"(minimum={disk['required_gb']} GB)", flush=True)
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
+    if args.multi_pc and (not args.campaign_id or not args.lease_bucket):
+        raise SystemExit("--multi-pc requires both --campaign-id and --lease-bucket")
+    if args.multi_pc:
+        parts = {segment.casefold() for segment in args.work_root.parts}
+        if (args.work_root.is_relative_to(args.source_root)
+                or parts.intersection({"my drive", "google drive", "onedrive", "dropbox"})):
+            raise SystemExit(
+                "Multi-PC work root must be a private local scratch folder, not "
+                "inside source root or a recognized synced-drive folder."
+            )
+    if args.multipart:
+        os.environ["MICROGEN_MULTIPART"] = "1"
+    else:
+        os.environ.pop("MICROGEN_MULTIPART", None)
+    args.docling_py = resolve_docling_python(args.docling_py,
+                                                   main_python=args.main_py)
     preflight(args.main_py, args.docling_py)
     report: list[dict] = []
     report_path = args.work_root / "batch_report.json"
     print(f"[batch] targets={targets}", flush=True)
     for subchapter in targets:
         try:
-            process_one(args, subchapter, report)
+            with subchapter_ownership(args, subchapter) as lease:
+                process_one(args, subchapter, report, lease=lease)
         except Exception as exc:
             print(f"[{subchapter}] FAILED: {type(exc).__name__}: {exc}", flush=True)
             report.append(
