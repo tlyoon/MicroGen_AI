@@ -50,6 +50,46 @@ class ExistingDoclingTests(unittest.TestCase):
         self.assertIsNone(args.docling_py)
         self.assertEqual(args.main_py,microgen_batch.sys.executable)
 
+    def test_reads_persisted_user_setting_if_agent_process_env_is_stale(self):
+        path="C:/Users/User/AppData/Local/miniconda3/envs/docling_win/python.exe"
+        with mock.patch.dict(de.os.environ, {"MICROGEN_DOCLING_PY": ""}), \
+             mock.patch.object(de, "persisted_windows_docling_python", return_value=path) as user_setting, \
+             mock.patch.object(de, "supports_docling") as check:
+            got=de.resolve_docling_python(main_python="C:/main/python.exe")
+        self.assertEqual(got, str(Path(path)))
+        user_setting.assert_called_once()
+        check.assert_not_called()
+
+    def test_process_setting_overrides_stored_setting(self):
+        with mock.patch.dict(de.os.environ, {"MICROGEN_DOCLING_PY": "C:/process/python.exe"}), \
+             mock.patch.object(de, "persisted_windows_docling_python") as user_setting, \
+             mock.patch.object(de, "supports_docling") as check:
+            got=de.resolve_docling_python(main_python="C:/main/python.exe")
+        self.assertEqual(got, str(Path("C:/process/python.exe")))
+        user_setting.assert_not_called()
+        check.assert_not_called()
+
+    def test_explicit_env_never_leaks_windows_user_registry(self):
+        with mock.patch.object(de, "persisted_windows_docling_python") as user_setting, \
+             mock.patch.object(de, "supports_docling", return_value=True):
+            got=de.resolve_docling_python(main_python="C:/main/python.exe", env={})
+        self.assertEqual(got, "C:/main/python.exe")
+        user_setting.assert_not_called()
+
+    def test_cold_docling_probe_uses_bounded_extended_timeout(self):
+        from types import SimpleNamespace
+        with mock.patch.object(de.Path, "is_file", return_value=True), \
+             mock.patch.object(de.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            self.assertTrue(de.supports_docling("C:/conda/python.exe"))
+        self.assertGreaterEqual(run.call_args.kwargs["timeout"], 90)
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 120)
+
+    def test_docling_import_timeout_fails_closed(self):
+        from subprocess import TimeoutExpired
+        with mock.patch.object(de.Path, "is_file", return_value=True), \
+             mock.patch.object(de.subprocess, "run", side_effect=TimeoutExpired("python", 90)):
+            self.assertFalse(de.supports_docling("C:/conda/python.exe"))
+
 
 if __name__=="__main__":
     unittest.main()

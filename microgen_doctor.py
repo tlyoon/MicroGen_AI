@@ -86,7 +86,7 @@ def inspect_environment(
             check_docling = subprocess.run(
                 [str(docling_py), "-c", "import docling,pdf2image,PIL"],
                 stdin=subprocess.DEVNULL,capture_output=True,text=True,
-                errors="replace",timeout=50,
+                errors="replace",timeout=90,
             )
             docling_available = check_docling.returncode == 0
         except (OSError,subprocess.TimeoutExpired):
