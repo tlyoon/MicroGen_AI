@@ -212,7 +212,9 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     provenance_file = stage / "figure_composition_receipt.json"
     if provenance_file.is_file():
         from microgen_figure_composition import validate_figure_receipt
-        figure_provenance = validate_figure_receipt(stage)
+        # Source-crop integrity is not equivalent to composite-panel approval.
+        # Publishing a multi-panel figure requires a hash-bound human receipt.
+        figure_provenance = validate_figure_receipt(stage, require_review=True)
         figures.extend(stage / f["destination"] for f in figure_provenance["figures"])
     narration = check_narration(stage / "script.txt", stage / "script_tts.json", pdf["pages"])
     wav = check_wavs(stage, pdf["pages"])
@@ -237,6 +239,8 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     }
     if figure_provenance is not None:
         result["figure_composition_receipt_sha256"] = sha256(provenance_file)
+        if any(item.get("review_required") for item in figure_provenance["figures"]):
+            result["figure_review_approval_sha256"] = sha256(stage / "figure_review_approval.json")
     if multipart is not None:
         result["multipart_receipt_sha256"] = multipart["receipt_sha256"]
         result["multipart_parts"] = multipart["parts"]
@@ -272,7 +276,10 @@ def published_manifest_valid(dest: Path) -> bool:
             if sha256(dest / "figure_composition_receipt.json") != data["figure_composition_receipt_sha256"]:
                 return False
             from microgen_figure_composition import validate_figure_receipt
-            validate_figure_receipt(dest)
+            evidence = validate_figure_receipt(dest, require_review=True)
+            if any(item.get("review_required") for item in evidence["figures"]):
+                if data.get("figure_review_approval_sha256") != sha256(dest / "figure_review_approval.json"):
+                    return False
         if "multipart_receipt_sha256" in data:
             if (sha256(dest / ".microgen_multipart_receipt.json") != data["multipart_receipt_sha256"]
                 or sha256(dest / "lesson_scenes.json") != data["scene_manifest_sha256"]):
@@ -297,6 +304,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
     files += sorted(set(info.get("figure_sha256", {})))
     if info.get("figure_composition_receipt_sha256"):
         files.append("figure_composition_receipt.json")
+    if info.get("figure_review_approval_sha256"):
+        files.append("figure_review_approval.json")
     if info.get("multipart_parts"):
         files += ["lesson_scenes.json", ".microgen_multipart_receipt.json"]
         files += sorted(info["multipart_parts"])
@@ -404,6 +413,9 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
             inputs += sorted(p.name for p in stage.glob("slides_part_*.mp4"))
     if name == "published":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+        for review_name in ("figure_composition_receipt.json", "figure_review_approval.json"):
+            if (stage / review_name).is_file():
+                inputs.append(review_name)
     pairs = []
     for item in inputs:
         path = stage / item
