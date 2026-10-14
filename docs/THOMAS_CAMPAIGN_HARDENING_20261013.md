@@ -147,3 +147,27 @@ A genuine end-to-end pilot against an isolated copy of the Thomas 8.6 six-page s
 The current correction adds hash-bound **page caption and per-crop-batch Gemini reply caching** to `map_and_rename_v5.py`. Successful requests survive a failed later page and are reused only when model, prompt and exact input PNG bytes match. Network `ReadError`, 10053 and reset/aborted connections are now classified as retryable transient Gemini errors rather than failures that immediately restart the entire mapping stage. Unit tests reproduce and recover the page-2 failure; no original textbook lecture is overwritten.
 
 Cloud-model availability remains outside the package's control. Do not mark this real end-to-end pilot accepted until slide PDF, narration, per-slide WAV count, MP4 and hash-bound publication receipt have all passed. The scratch root for this test is `%LOCALAPPDATA%\MicroGenAcceptance_20261014`; the original source lives under the supplied Google Drive Thomas root.
+
+
+## Automatic structural slide reflow — 2026-10-14
+
+The live Yoga6 Thomas 8.6 six-page source revealed two reproducible layout failures. The first attempt generated a 16-page deck with two dense examples on one slide; the second dense two-column CAS comparison triggered an overfull LaTeX box. In a scratch-only diagnostic, splitting each **whole** example block and each **whole** CAS column into separate frames yielded 18 pages, and the exact PDF passed text-boundary, page-count and LaTeX-overflow gates. The independent downstream narration/TTS/MP4 test then produced 18 valid WAVs and a 628.6-second video with a verified local publication receipt.
+
+The new `microgen_slide_reflow.py` applies **bounded, transparent, zero-LLM** repair to genuinely rejected candidate slides:
+- Normalize harmless blank lines and evaluate generated Beamer frames without changing equations.
+- Split only intact `exampleblock` or `column` sections; preserve source math-expression evidence (multiset of exact math strings).
+- Compile two passes in isolated candidate directories. Accept only a deck with verified page/counter, geometry, missing-figure and severe-overflow checks.
+- Never overwrite the existing TeX/PDF on failed trials. Save original source, input/output hashes, transformation details and a receipt when a candidate is accepted.
+- Set a fixed total frame count only for clearly overlay-free, contiguous Beamer frames; refuse the shortcut for `pause`, `only`, `againframe`, `appendix` or other overlay constructions.
+- Retain the existing targeted Gemini repair as a fallback for unsupported mathematical layouts.
+
+This is a **structural repair**, not proof that the lecture faithfully reproduces every part of the textbook or that a split comparison remains pedagogically optimal. Image panels, quotations, mathematics and chapter-specific meaning still need a separate academic review. Future automatic results are not declared suitable for class distribution merely because the PDF compiles.
+
+To reproduce the offline gate without calling Gemini:
+
+```powershell
+python -m unittest tests.test_microgen_slide_reflow -v
+python microgen_slide_reflow.py --tex "D:\Scratch\8.6\slides.tex"
+```
+
+Run only on an isolated source-authorized copy. In the normal pipeline, the generator invokes structural reflow when a compiled presentation fails strict PDF/LaTeX quality checks; no new command is required from users.

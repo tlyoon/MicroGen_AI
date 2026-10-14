@@ -2,7 +2,8 @@ from pathlib import Path
 import sys
 import re
 import fix_latex
-from microgen_quality import check_graphics, check_slide_pdf, check_latex_overflow, try_local_latex_repair
+from microgen_quality import QualityError, check_graphics, check_slide_pdf, check_latex_overflow, try_local_latex_repair
+from microgen_slide_reflow import repair_layout
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
@@ -417,18 +418,36 @@ for attempt in range(1, 5):
         )
         if final_pass.returncode != 0:
             raise RuntimeError(f"Second-pass pdflatex failed: {final_pass.stdout[-1200:]}")
-        check_slide_pdf(Path("slides.pdf"), require_footer=True)
-        check_latex_overflow(Path("slides.log"))
-        print(f"✅ Two-pass LaTeX, counters and overflow checks succeeded: {tex_file}")
-        compile_ok = True
-        break
-    print(f"❌ pdflatex compilation failed for '{tex_file}' at attempt {attempt}")
+        try:
+            check_slide_pdf(Path("slides.pdf"), require_footer=True)
+            check_latex_overflow(Path("slides.log"))
+        except QualityError as error:
+            print(f"[slide] compiled but quality gate failed: {error}")
+            repaired = repair_layout(Path(tex_file), timeout=150, max_candidates=12)
+            if repaired["status"] == "accepted":
+                print(f"[slide] verified structural reflow: {len(repaired['operations'])} safe frame splits")
+                compile_ok = True
+                break
+            last_compile_output = str(error)
+        else:
+            print(f"✅ Two-pass LaTeX, counters and overflow checks succeeded: {tex_file}")
+            compile_ok = True
+            break
+    print(f"[slide] LaTeX/quality acceptance failed at attempt {attempt}")
     # Isolate and test the reproducible local normalization first, before
     # making additional Gemini requests for repair.
-    if try_local_latex_repair(Path(tex_file)):
+    if result.returncode != 0 and try_local_latex_repair(Path(tex_file)):
         print("[slide] deterministic two-pass LaTeX repair succeeded; no Gemini repair required")
         compile_ok = True
         break
+    # Source-preserving reflow is tested in a separate folder and is only
+    # promoted after page, LaTeX and mathematical-evidence checks pass.
+    if result.returncode != 0:
+        structural = repair_layout(Path(tex_file), timeout=150, max_candidates=12)
+        if structural["status"] == "accepted":
+            print(f"[slide] automatic structural reflow succeeded after {len(structural['attempts'])} candidates")
+            compile_ok = True
+            break
     # Attempt local deterministic cleanup first. If the same deck still fails,
     # repair only the offending Beamer frame rather than sending the entire
     # presentation back to Gemini.
