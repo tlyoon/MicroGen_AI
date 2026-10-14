@@ -23,7 +23,7 @@ from microgen_quality import (
 )
 
 FRAME_RX = re.compile(r"\\begin\{frame\}(?:\[[^\]\n]*\])?(?:\{[^{}\n]*\})?(.*?)\\end\{frame\}",re.S)
-BLOCK_RX = re.compile(r"\\begin\{exampleblock\}\{[^{}\n]*\}.*?\\end\{exampleblock\}",re.S)
+BLOCK_RX = re.compile(r"\\begin\{(exampleblock|block)\}\{[^{}\n]*\}.*?\\end\{\1\}",re.S)
 COLUMNS_RX = re.compile(r"\\begin\{columns\}(?:\[[^\]\n]*\])?(.*?)\\end\{columns\}",re.S)
 COLUMN_RX = re.compile(r"\\begin\{column\}\{[^}\n]*\}(.*?)\\end\{column\}",re.S)
 MATH_RX = re.compile(
@@ -50,7 +50,7 @@ def _split_frame(frame: str, mode: str) -> tuple[str, int] | None:
         if len(groups)<2:
             return None
         # Disallow a nested Beamer structure that a regexp could fracture.
-        if re.search(r"\\begin\{(?:columns|column|frame|exampleblock)\}",body[:groups[0].start()]):
+        if re.search(r"\\begin\{(?:columns|column|frame|exampleblock|block)\}",body[:groups[0].start()]):
             return None
         output=[]
         start=0

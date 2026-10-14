@@ -51,6 +51,16 @@ class LayoutReflowUnitTests(unittest.TestCase):
         self.assertEqual(_math_evidence(txt),_math_evidence(EXAMPLE_DECK))
         self.assertIn(r"\frac{x^3}{3}",txt)
 
+    def test_standard_beamer_blocks_reflow_as_whole_units(self):
+        ordinary=EXAMPLE_DECK.replace(r"\begin{exampleblock}",r"\begin{block}").replace(
+            r"\end{exampleblock}",r"\end{block}")
+        candidates=reflow_document(ordinary,"examples")
+        self.assertEqual(len(candidates),1)
+        revised,_,count=candidates[0]
+        self.assertEqual(count,2)
+        self.assertEqual(_math_evidence(revised),_math_evidence(ordinary))
+        self.assertEqual(revised.count(r"\begin{block}"),2)
+
     def test_math_is_never_changed_by_column_reflow(self):
         candidates=reflow_document(EXAMPLE_DECK,"columns")
         self.assertEqual(len(candidates),1)
