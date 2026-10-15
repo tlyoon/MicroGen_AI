@@ -201,6 +201,31 @@ def check_video(path: Path, *, expected_seconds: float | None = None,
             "audio": True, "video": True}
 
 
+def canonical_figure_hashes(figures: list[Path]) -> dict[str, str]:
+    """Use the real on-disk filename case, collapsing equivalent references.
+
+    Windows PDF/LaTeX generation may reference FIGURE 8.2.png even when the
+    actual source is Figure 8.2.png. Both spellings resolve to one file on
+    Windows and must not become two distinct publication candidates.
+    Distinct files colliding after casefold must fail on every platform.
+    """
+    normalized: dict[str, tuple[Path, str]] = {}
+    for entry in figures:
+        actual = Path(entry).resolve(strict=True)
+        digest = sha256(actual)
+        key = actual.name.casefold()
+        previous = normalized.get(key)
+        if previous is not None:
+            if previous[0] != actual or previous[1] != digest:
+                raise QualityError(
+                    f"Case-insensitive figure filename collision: "
+                    f"{previous[0]} vs {actual}"
+                )
+            continue
+        normalized[key] = (actual, digest)
+    return {path.name: digest for path, digest in normalized.values()}
+
+
 def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     stage = Path(stage)
     pdf = check_slide_pdf(stage / "slides.pdf", require_footer=require_footer)
@@ -235,7 +260,7 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "script_sha256": narration["script_sha256"],
         "sidecar_sha256": narration["sidecar_sha256"],
         "wav_sha256": wav["sha256"],
-        "figure_sha256": {p.name: sha256(p) for p in figures},
+        "figure_sha256": canonical_figure_hashes(figures),
         "mp4_sha256": video["sha256"],
         "slide_count": pdf["pages"],
         "audio_seconds": wav["total_seconds"],
@@ -276,7 +301,10 @@ def published_manifest_valid(dest: Path) -> bool:
         for index, digest in enumerate(data.get("wav_sha256", []), start=1):
             if sha256(dest / f"slide{index}.wav") != digest:
                 return False
-        for name, digest in data.get("figure_sha256", {}).items():
+        figure_sha256 = data.get("figure_sha256", {})
+        if len(figure_sha256) != len({name.casefold() for name in figure_sha256}):
+            return False
+        for name, digest in figure_sha256.items():
             if sha256(dest / name) != digest:
                 return False
         if "figure_composition_receipt_sha256" in data:
@@ -307,6 +335,9 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
     """
     stage, dest = Path(stage), Path(dest)
     info = manifest or manifest_for(stage)
+    figure_names = list(info.get("figure_sha256", {}))
+    if len(figure_names) != len({name.casefold() for name in figure_names}):
+        raise QualityError("Case-insensitive duplicate figure names in publication manifest")
     files = ["slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"]
     files += sorted(set(info.get("figure_sha256", {})))
     if info.get("figure_composition_receipt_sha256"):
@@ -328,6 +359,11 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         raise QualityError("Destination source PDF has changed")
     dest.mkdir(parents=True, exist_ok=True)
     staged: dict[str, Path] = {}
+    # A destination-local candidate can disappear between preflight and
+    # promotion (e.g. a transient Windows filesystem/sync-agent race).
+    # Hold the original digest so a bounded re-stage cannot silently
+    # promote changed or partially copied upstream content.
+    expected_hashes: dict[str, str] = {}
     backups: dict[str, Path] = {}
     replaced: list[str] = []
     marker = ".microgen_verified_completion.json"
@@ -336,9 +372,11 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
     try:
         for name in files:
             pending = dest / (name + f".microgen-{token}.candidate")
+            expected = sha256(stage / name)
             shutil.copy2(stage / name, pending)
-            if sha256(pending) != sha256(stage / name):
+            if sha256(pending) != expected:
                 raise QualityError(f"Copy hash mismatch: {name}")
+            expected_hashes[name] = expected
             staged[name] = pending
         # Backups are retained for explicit recovery from previously published defects.
         for name in files:
@@ -359,7 +397,24 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
             for name in files:
                 if still_owner is not None:
                     still_owner()
-                staged[name].replace(dest / name)
+                try:
+                    staged[name].replace(dest / name)
+                except FileNotFoundError:
+                    # One bounded recovery only, and only for a missing
+                    # *source candidate*. Never mask a missing destination
+                    # directory or promote drifted upstream artifacts.
+                    if staged[name].is_file():
+                        raise
+                    if sha256(stage / name) != expected_hashes[name]:
+                        raise QualityError(f"Source changed during re-stage: {name}")
+                    if still_owner is not None:
+                        still_owner()
+                    print(f"[publication] Candidate disappeared: {name}; "
+                          "recopying once from verified stage", flush=True)
+                    shutil.copy2(stage / name, staged[name])
+                    if sha256(staged[name]) != expected_hashes[name]:
+                        raise QualityError(f"Re-staged hash mismatch: {name}")
+                    staged[name].replace(dest / name)
                 replaced.append(name)
             if still_owner is not None:
                 still_owner()
