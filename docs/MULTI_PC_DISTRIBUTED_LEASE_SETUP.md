@@ -60,7 +60,7 @@ Do not point multiple workers to a shared scratch directory. Keep Gemini billing
 ## Fail-closed safety and residual limitations
 
 - A second claimant should receive `LeaseBusy` while the first lease is valid.
-- A lost lease interrupts running stages and cancels their descendants; only the current lease holder can publish a verified source-adjacent bundle.
+- A lost lease interrupts running stages and cancels their descendants; only the current lease holder can publish a verified source-adjacent bundle. Windows stages begin suspended, are attached to a kill-on-close Job Object, then resume so early-spawned descendants cannot escape; merely calling `taskkill /T` proved unreliable on HP.
 - Existing completed outputs are verified and skipped; a failed attempt is checkpointed for review.
 - Network partition/delayed GCS responses can still delay discovery of lease loss; production cannot guarantee zero physical in-flight work during an outage. The conditional lease protects publication when probes resume.
 - **Offline fake GCS tests do not prove two real Windows hosts can both reach the same bucket and enforce its preconditions.** Keep this gate blocked until the live test above passes.

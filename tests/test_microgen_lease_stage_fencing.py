@@ -22,6 +22,19 @@ class LeaseProbe:
 
 
 class LeaseStageFencingTests(unittest.TestCase):
+    def setUp(self):
+        self.windows_job_patches = []
+        if __import__("os").name == "nt":
+            for name, replacement in (
+                ("_assign_windows_kill_job", mock.Mock(return_value=1234)),
+                ("_close_windows_kill_job", mock.Mock()),
+                ("_resume_windows_process", mock.Mock()),
+            ):
+                patcher = mock.patch.object(batch, name, replacement)
+                patcher.start()
+                self.addCleanup(patcher.stop)
+                self.windows_job_patches.append(patcher)
+
     def test_active_leased_stage_terminated_when_ownership_lost(self):
         proc = mock.Mock()
         proc.wait.side_effect = subprocess.TimeoutExpired(["python", "stage.py"], 5)
@@ -122,6 +135,9 @@ class LeaseStageFencingTests(unittest.TestCase):
 
     def test_real_descendant_cannot_continue_after_lease_loss(self):
         """Integration check: terminate a live driver plus its child process."""
+        # Use the real Windows Job Object here, not the unit-test mocks.
+        for patcher in self.windows_job_patches:
+            patcher.stop()
         import sys
         import time
         with tempfile.TemporaryDirectory() as tmp:
