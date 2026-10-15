@@ -90,6 +90,19 @@ Rules:
 """
 
 
+def has_numbered_figure_caption(caption_text: str) -> bool:
+    """Detect a formal chapter.figure caption, not explanatory 'Figure 8.x'.
+
+    A model may truthfully report an unlabeled exercise illustration while
+    using 'Figure 8.x' as an *example* of a missing formal caption. That is
+    not a named figure and must not block figure mapping.
+    """
+    return bool(re.search(
+        r"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?Figure\s+\d+\.\d+[a-z]?\b",
+        caption_text,
+    ))
+
+
 def safe_destination(name: str, page_dir: Path) -> Path | None:
     name = name.strip().strip('"').strip("'")
     name = name.replace("\\", "/").split("/")[-1]
@@ -168,7 +181,7 @@ def mapping():
             key=lambda p: int(re.search(r"(\d+)", p.stem).group(1)),
         )
         if not fig_files:
-            if re.search(r"\bFigure\s+\d",caption_text,re.I):
+            if has_numbered_figure_caption(caption_text):
                 raise RuntimeError(f"Page {page_dir.name} has captions but no extracted crops")
             print("No formally numbered figures on this page")
             continue
@@ -223,7 +236,7 @@ Extracted caption text:
             except Exception as exc:
                 raise RuntimeError(f"Figure mapping batch failed on {page_dir.name}: {exc}") from exc
 
-        if re.search(r"\bFigure\s+\d",caption_text,re.I) and not any(
+        if has_numbered_figure_caption(caption_text) and not any(
             entry["source_page"] == page_dir.name
             for group in collector.items.values() for entry in group
         ):
