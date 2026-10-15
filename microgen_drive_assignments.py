@@ -29,6 +29,22 @@ class AssignmentDenied(AssignmentError):
     """Another registered host is the one authorized to run this target."""
 
 
+def configured_gemini_lane() -> str:
+    """Find the existing Drive FIFO path even in a stale Windows agent session."""
+    configured = os.environ.get("MICROGEN_GEMINI_LANE_DIR", "").strip()
+    if configured or os.name != "nt":
+        return configured
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            raw, _ = winreg.QueryValueEx(key, "MICROGEN_GEMINI_LANE_DIR")
+        if isinstance(raw, str):
+            return os.path.expandvars(raw.strip())
+    except (ImportError, OSError):
+        pass
+    return ""
+
+
 def machine_id() -> str:
     name = socket.gethostname().strip().upper()
     if not _HOST_RE.fullmatch(name):

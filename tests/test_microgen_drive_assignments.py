@@ -100,6 +100,29 @@ class DriveAssignmentTests(unittest.TestCase):
             d.DriveAssignedOwner(self.path, self.sha, "isolated-2026",
                                  self.root, "8.4", host="DELL-115")
 
+    def test_process_lane_setting_overrides_registry(self):
+        with mock.patch.dict(d.os.environ, {"MICROGEN_GEMINI_LANE_DIR": "G:/lane"}):
+            self.assertEqual(d.configured_gemini_lane(), "G:/lane")
+
+    def test_persisted_lane_discovery_from_stale_windows_agent(self):
+        import sys
+        from types import SimpleNamespace
+        class FakeKey:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+        fake = SimpleNamespace(
+            HKEY_CURRENT_USER=1,
+            OpenKey=lambda *_: FakeKey(),
+            QueryValueEx=lambda key, name: ("G:/My Drive/MicroGen_Coordination/gemini_lane", 1),
+        )
+        with mock.patch.object(d.os, "name", "nt"), \
+             mock.patch.dict(d.os.environ, {"MICROGEN_GEMINI_LANE_DIR": ""}), \
+             mock.patch.dict(sys.modules, {"winreg": fake}):
+            self.assertEqual(d.configured_gemini_lane(),
+                             "G:/My Drive/MicroGen_Coordination/gemini_lane")
+
     def test_no_external_gcs_required(self):
         # Supplying a valid assignment only needs the stdlib and existing
         # ownership exception class, no live Google credentials or API.

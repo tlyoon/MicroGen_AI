@@ -23,7 +23,7 @@ from typing import Callable
 
 from gemini_lane import circuit_is_open
 import microgen_quality as quality
-from microgen_drive_assignments import DriveAssignedOwner, AssignmentError
+from microgen_drive_assignments import DriveAssignedOwner, configured_gemini_lane
 from microgen_docling_environment import resolve_docling_python
 
 STAGES = [
@@ -864,7 +864,11 @@ def main() -> int:
         print("[batch] Assignment-only check PASSED; no generation or cloud calls", flush=True)
         return 0
     if args.multi_pc:
-        lane_raw = os.environ.get("MICROGEN_GEMINI_LANE_DIR", "").strip()
+        lane_raw = configured_gemini_lane()
+        if lane_raw and not os.environ.get("MICROGEN_GEMINI_LANE_DIR"):
+            # Stale automation processes might not inherit the user setting.
+            # The child Gemini stage scripts must inherit the resolved lane.
+            os.environ["MICROGEN_GEMINI_LANE_DIR"] = lane_raw
         if not lane_raw:
             raise SystemExit(
                 "--multi-pc requires a configured shared MICROGEN_GEMINI_LANE_DIR "
