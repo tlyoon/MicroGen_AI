@@ -23,7 +23,7 @@ from typing import Callable
 
 from gemini_lane import circuit_is_open
 import microgen_quality as quality
-from microgen_ownership import from_gcs_bucket
+from microgen_drive_assignments import DriveAssignedOwner, AssignmentError
 from microgen_docling_environment import resolve_docling_python
 
 STAGES = [
@@ -649,8 +649,10 @@ def subchapter_ownership(args, subchapter: str):
             }).encode("utf-8"))
             handle.flush()
             if args.multi_pc:
-                with from_gcs_bucket(args.lease_bucket, args.campaign_id, subchapter) as lease:
-                    lease.assert_held()
+                with DriveAssignedOwner(
+                    args.assignments_file, args.assignments_sha256,
+                    args.campaign_id, args.source_root, subchapter,
+                ) as lease:
                     yield lease
             else:
                 yield None
@@ -810,9 +812,15 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
-                    help="Require a strong GCS lease for every subchapter, instead of Drive-based locks.")
-    ap.add_argument("--lease-bucket", help="GCS bucket for atomic generation-conditional ownership.")
-    ap.add_argument("--campaign-id", help="Stable campaign identifier shared across all PCs.")
+                    help="Require pinned, disjoint, host-specific Drive assignment manifest (no GCS).")
+    ap.add_argument("--lease-bucket", help="Deprecated GCS option, rejected by this runner.")
+    ap.add_argument("--campaign-id", help="Stable campaign ID agreed by all PCs.")
+    ap.add_argument("--assignments-file", type=Path,
+                    help="Shared Drive JSON mapping each subchapter to exactly one host.")
+    ap.add_argument("--assignments-sha256",
+                    help="Pinned SHA256 of assignment file, identical on every worker.")
+    ap.add_argument("--check-assignments", action="store_true",
+                    help="Validate ownership without Docling, Gemini requests or generation.")
     ap.add_argument("--multipart", action="store_true",
                     help="Require approved source-cited lesson scenes and emit video parts.")
     return ap
@@ -831,9 +839,42 @@ def main() -> int:
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
-    if args.multi_pc and (not args.campaign_id or not args.lease_bucket):
-        raise SystemExit("--multi-pc requires both --campaign-id and --lease-bucket")
+    if args.lease_bucket:
+        raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
+    if args.check_assignments and not args.multi_pc:
+        raise SystemExit("--check-assignments requires --multi-pc")
+    if args.multi_pc and (not args.campaign_id or not args.assignments_file
+                          or not args.assignments_sha256):
+        raise SystemExit(
+            "--multi-pc requires --campaign-id, --assignments-file, "
+            "and --assignments-sha256; GCS is not required"
+        )
     if args.multi_pc:
+        if not args.assignments_file.is_absolute():
+            raise SystemExit("The shared assignment file must have an absolute path")
+        if args.assignments_file.resolve().is_relative_to(args.work_root):
+            raise SystemExit("Assignment file cannot live inside local scratch")
+        for subchapter in targets:
+            DriveAssignedOwner(
+                args.assignments_file, args.assignments_sha256,
+                args.campaign_id, args.source_root, subchapter,
+            ).assert_held()
+        print(f"[batch] Drive-assigned host targets verified: {targets}", flush=True)
+    if args.check_assignments:
+        print("[batch] Assignment-only check PASSED; no generation or cloud calls", flush=True)
+        return 0
+    if args.multi_pc:
+        lane_raw = os.environ.get("MICROGEN_GEMINI_LANE_DIR", "").strip()
+        if not lane_raw:
+            raise SystemExit(
+                "--multi-pc requires a configured shared MICROGEN_GEMINI_LANE_DIR "
+                "for existing Drive-based Gemini request serialization"
+            )
+        lane_path = Path(lane_raw)
+        if not lane_path.is_absolute() or not lane_path.is_dir():
+            raise SystemExit("Shared Gemini lane must be an existing absolute directory")
+        if lane_path.resolve().is_relative_to(args.work_root):
+            raise SystemExit("Gemini lane may not be inside per-PC private scratch")
         parts = {segment.casefold() for segment in args.work_root.parts}
         if (args.work_root.is_relative_to(args.source_root)
                 or parts.intersection({"my drive", "google drive", "onedrive", "dropbox"})):
