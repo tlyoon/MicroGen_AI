@@ -1,8 +1,10 @@
 """Ordered Gemini API-key discovery and failover for MicroGen_AI."""
 from __future__ import annotations
 
+import hashlib
 import os
 import random
+import threading
 import time
 from typing import Callable, TypeVar
 
@@ -15,6 +17,49 @@ from gemini_lane import (
 )
 
 T = TypeVar("T")
+
+# Process-local only: never persist API-key material or health state to Drive.
+# This avoids retrying an unavailable key on every page within one worker.
+_KEY_COOLDOWN_UNTIL: dict[str, float] = {}
+_KEY_COOLDOWN_LOCK = threading.Lock()
+
+
+def _key_fingerprint(key: str) -> str:
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _available_key_order(keys: list[str]) -> list[tuple[int, str]]:
+    indexed = list(enumerate(keys, start=1))
+    if len(indexed) < 2:
+        return indexed
+    now = time.monotonic()
+    with _KEY_COOLDOWN_LOCK:
+        for name, until in list(_KEY_COOLDOWN_UNTIL.items()):
+            if until <= now:
+                _KEY_COOLDOWN_UNTIL.pop(name, None)
+        available = [(index, key) for index, key in indexed
+                     if _key_fingerprint(key) not in _KEY_COOLDOWN_UNTIL]
+    # All keys cooling? Retry all rather than causing a false total outage.
+    return available or indexed
+
+
+def _remember_unavailable_key(key: str, exc: BaseException, total_keys: int) -> None:
+    if total_keys < 2 or is_billing_gemini_error(exc):
+        return  # Preserve the full all-keys billing circuit semantics.
+    code = _error_code(exc)
+    message = _error_text(exc)
+    auth_markers = ("INVALID API KEY", "API KEY NOT VALID", "UNAUTHENTICATED",
+                    "PERMISSION_DENIED", "QUOTA_EXCEEDED", "QUOTA_EXHAUSTED")
+    if not (code in (401, 403, 429)
+            or (code == 400 and "API KEY" in message)
+            or any(marker in message for marker in auth_markers)):
+        return
+    seconds = max(0.0, min(3600.0, _env_float(
+        "MICROGEN_GEMINI_KEY_COOLDOWN_SECONDS", 120.0)))
+    if seconds == 0:
+        return
+    with _KEY_COOLDOWN_LOCK:
+        _KEY_COOLDOWN_UNTIL[_key_fingerprint(key)] = time.monotonic() + seconds
 
 
 def _error_code(exc: BaseException) -> int | None:
@@ -173,7 +218,10 @@ def call_with_key_failover(
     last_key_error: BaseException | None = None
     billing_failed_keys = 0
 
-    for key_index, key in enumerate(keys, start=1):
+    ordered_keys = _available_key_order(keys)
+    for sequence_index, (key_index, key) in enumerate(ordered_keys):
+        next_key_index = (ordered_keys[sequence_index + 1][0]
+                          if sequence_index + 1 < len(ordered_keys) else None)
         transient_failures = 0
         for attempt in range(retries + 1):
             try:
@@ -181,12 +229,13 @@ def call_with_key_failover(
             except Exception as exc:
                 if is_key_failover_error(exc):
                     last_key_error = exc
+                    _remember_unavailable_key(key, exc, len(keys))
                     if is_billing_gemini_error(exc):
                         billing_failed_keys += 1
-                    if key_index < len(keys):
+                    if next_key_index is not None:
                         print(
                             f"[Gemini keys] {label}: key #{key_index} unavailable "
-                            f"({type(exc).__name__}); falling back to key #{key_index + 1}",
+                            f"({type(exc).__name__}); falling back to key #{next_key_index}",
                             flush=True,
                         )
                     break
@@ -197,13 +246,13 @@ def call_with_key_failover(
                 transient_failures += 1
 
                 if (
-                    key_index < len(keys)
+                    next_key_index is not None
                     and transient_failures >= transient_retries_per_key
                 ):
                     print(
                         f"[Gemini keys] {label}: key #{key_index} had "
                         f"{transient_failures} consecutive transient failures "
-                        f"({type(exc).__name__}: {exc}); rotating to key #{key_index + 1}",
+                        f"({type(exc).__name__}: {exc}); rotating to key #{next_key_index}",
                         flush=True,
                     )
                     break
