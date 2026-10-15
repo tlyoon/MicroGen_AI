@@ -399,23 +399,27 @@ The command refuses approval when weakly-grounded scene citations remain. For a 
 
 For a 30-minute legacy video like Thomas 8.5, no old published MP4 is automatically overwritten. The user must expressly authorize any rebuild, then review content/quality before distributing new parts. Because source pages and scene headings are model-derived, even a mechanically verified split requires academic quality review.
 
-## Cross-PC ownership (strong distributed lease)
+## Cross-PC ownership (Drive-native preassigned campaigns; no GCS)
 
-A Google Drive folder is not a reliable distributed mutex. To run different subchapters on several PCs concurrently, install the **optional** Cloud Storage dependency:
+The supported `--multi-pc` mode uses an **immutable, hash-pinned
+assignment manifest** on the already-authorized Google Drive source tree.
+Every subchapter is statically assigned to one registered Windows computer.
+The worker fails closed if the assignment, campaign ID, source root, hostname,
+or pinned manifest SHA256 does not match. Dynamic reassignment is disabled
+until every worker is stopped and a new manifest/hash is distributed.
 
-```powershell
-pip install -r requirements-multipc.txt
-```
+The previously implemented `MICROGEN_GEMINI_LANE_DIR` FIFO remains the
+separate best-effort shared Gemini request queue, with heartbeat/stale-ticket
+handling. **Neither the queue nor Drive file synchronization is an atomic
+cross-PC mutex**. The job-safety model relies on strict non-overlapping
+assignments and all workers sharing one agreed manifest digest; workers using
+uncoordinated manifests are outside this guarantee.
 
-Create a dedicated GCS bucket, configure application-default credentials with *read/create/update/delete* rights to its `microgen/v1/` objects, and give every PC the same `--campaign-id` and `--lease-bucket`. Example:
-
-```powershell
-python microgen_batch.py --multi-pc --campaign-id "thomas-2026-sem1" --lease-bucket "YOUR_GCS_LOCK_BUCKET" --source-root "G:\My Drive\CourseSources" --work-root "$env:LOCALAPPDATA\MicroGenJobs\HP" --targets "5.1,5.2"
-```
-
-Locks use generation-matched compare-and-swap, renewable heartbeats and ownership tokens. A second PC cannot claim the same subchapter during the live lease. If bucket access or ownership checks fail, the job fails closed **before publishing**. This protects against simultaneous worker collisions but still requires the PCs' clocks to be synchronized and Cloud Storage connectivity. Do not remove active local owner lockfiles.
-
-Do not claim a Firestore/GCS lock is enabled when `--multi-pc` was omitted. If a Cloud Storage bucket has not been configured, run **one PC at a time** or distribute jobs non-overlapping manually. The existing `MICROGEN_GEMINI_LANE_DIR` only serializes Gemini requests and is not a job lease.
+No GCS bucket, Cloud SDK, Cloud Storage credentials or paid external locking
+service is required. The old GCS lease module is retained only for legacy tests.
+See [Drive-native campaign instructions](docs/DRIVE_NATIVE_MULTIPC_ASSIGNMENTS.md)
+for manifest schema, two-PC assignment-only tests, queue setup and the
+documented manual reassignment procedure.
 
 Remaining higher-order functionality: fully automatic source-first semantic scene generation, guaranteed 8–9 minute parts without awkward boundaries, timestamp-verified word/equation highlighting, and automatic composite-figure/subpanel QA. These remain explicit future release gates; no runtime approximation is presented as synchronized highlighting.
 

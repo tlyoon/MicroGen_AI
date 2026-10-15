@@ -1,3 +1,9 @@
+# Archived external-GCS lease setup (unsupported by current --multi-pc)
+
+Historical reference only. Use [the supported Drive-native static-assignment guide](DRIVE_NATIVE_MULTIPC_ASSIGNMENTS.md). Do not install GCS dependencies or create a bucket for the current runner.
+
+---
+
 # MicroGen_AI — safe multi-PC ownership setup and acceptance
 
 ## What is already verified
