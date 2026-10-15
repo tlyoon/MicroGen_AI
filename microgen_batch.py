@@ -242,10 +242,15 @@ def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path)
     save_checkpoint(checkpoint_path, cp)
 
 
-def wait_for_gemini_circuit() -> None:
-    """Pause while the shared billing/capacity circuit is open."""
+def wait_for_gemini_circuit(lease=None) -> None:
+    """Pause while the shared billing/capacity circuit is open.
+
+    A failed/lost distributed lease must interrupt even a long capacity wait.
+    """
     last = 0.0
     while True:
+        if lease is not None:
+            lease.assert_held()
         opened, data = circuit_is_open()
         if not opened:
             return
@@ -258,7 +263,75 @@ def wait_for_gemini_circuit() -> None:
                 flush=True,
             )
             last = time.time()
-        time.sleep(min(60.0, wait))
+        time.sleep(min(5.0 if lease is not None else 60.0, wait))
+
+
+def _terminate_stage_tree(proc: subprocess.Popen) -> None:
+    """Stop child tools as well as the stage driver after loss of ownership.
+
+    Merely killing the Python driver can leave FFmpeg, LaTeX, and other
+    descendants writing into scratch. This is only used for a leased worker.
+    """
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    else:
+        import signal
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=10)
+
+
+def _run_leased_stage(command: list[str], *, cwd: Path, log, lease,
+                      timeout_seconds: float) -> int:
+    """Fence live work while the distributed lease is active.
+
+    Check the strong remote ownership token periodically and stop the whole
+    subprocess tree when it is lost, rather than waiting until stage exit.
+    """
+    lease.assert_held()
+    if os.name == "nt":
+        proc = subprocess.Popen(
+            command, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+            text=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        proc = subprocess.Popen(
+            command, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+            text=True, start_new_session=True,
+        )
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        while True:
+            lease.assert_held()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            try:
+                result = proc.wait(timeout=min(5.0, remaining))
+                lease.assert_held()
+                return result
+            except subprocess.TimeoutExpired:
+                continue
+    except BaseException:
+        _terminate_stage_tree(proc)
+        raise
 
 
 def run_subprocess(
@@ -270,24 +343,32 @@ def run_subprocess(
     *,
     gemini_stage: bool,
     retries: int,
+    lease=None,
 ) -> None:
     attempt = 0
     while True:
+        if lease is not None:
+            lease.assert_held()
         if gemini_stage:
-            wait_for_gemini_circuit()
+            wait_for_gemini_circuit(lease)
         with log_path.open("a", encoding="utf-8", errors="replace") as log:
             log.write(f"\n===== {label} :: {script} :: attempt {attempt + 1} =====\n")
             log.flush()
-            proc = subprocess.run(
-                [python_exe, script],
-                cwd=str(stage),
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200")),
-            )
-            log.write(f"\n[{label}] exit={proc.returncode}\n")
-        if proc.returncode == 0:
+            stage_timeout = float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200"))
+            if lease is None:
+                proc = subprocess.run(
+                    [python_exe, script],
+                    cwd=str(stage), stdout=log, stderr=subprocess.STDOUT,
+                    text=True, timeout=stage_timeout,
+                )
+                returncode = proc.returncode
+            else:
+                returncode = _run_leased_stage(
+                    [python_exe, script], cwd=stage, log=log, lease=lease,
+                    timeout_seconds=stage_timeout,
+                )
+            log.write(f"\n[{label}] exit={returncode}\n")
+        if returncode == 0:
             return
 
         # If the request tripped the shared circuit, this is an external pause,
@@ -296,7 +377,7 @@ def run_subprocess(
             opened, _ = circuit_is_open()
             if opened:
                 print(f"[{stage.name}] {label}: Gemini circuit opened; pausing", flush=True)
-                wait_for_gemini_circuit()
+                wait_for_gemini_circuit(lease)
                 continue
 
         if attempt >= retries:
@@ -308,7 +389,11 @@ def run_subprocess(
             f"({attempt}/{retries})",
             flush=True,
         )
+        if lease is not None:
+            lease.assert_held()
         time.sleep(delay)
+        if lease is not None:
+            lease.assert_held()
 
 
 def atomic_publish_file(src: Path, dest: Path) -> None:
@@ -517,6 +602,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     label,
                     gemini_stage=stage_name in GEMINI_STAGES,
                     retries=args.stage_retries,
+                    lease=lease,
                 )
                 if lease is not None:
                     lease.assert_held()
