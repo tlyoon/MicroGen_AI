@@ -242,10 +242,15 @@ def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path)
     save_checkpoint(checkpoint_path, cp)
 
 
-def wait_for_gemini_circuit() -> None:
-    """Pause while the shared billing/capacity circuit is open."""
+def wait_for_gemini_circuit(lease=None) -> None:
+    """Pause while the shared billing/capacity circuit is open.
+
+    A failed/lost distributed lease must interrupt even a long capacity wait.
+    """
     last = 0.0
     while True:
+        if lease is not None:
+            lease.assert_held()
         opened, data = circuit_is_open()
         if not opened:
             return
@@ -258,7 +263,225 @@ def wait_for_gemini_circuit() -> None:
                 flush=True,
             )
             last = time.time()
-        time.sleep(min(60.0, wait))
+        time.sleep(min(5.0 if lease is not None else 60.0, wait))
+
+
+def _assign_windows_kill_job(proc: subprocess.Popen):
+    """Attach a Windows kill-on-close Job Object to the stage process.
+
+    Unlike taskkill /T, this is tied to the actual live process handle and
+    reliably terminates all child processes that remain in the job.
+    Fail closed if assigning the job is forbidden by host policy.
+    """
+    import ctypes
+    from ctypes import wintypes as w
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_ulonglong) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+        )]
+
+    class BasicLimits(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_longlong),
+            ("PerJobUserTimeLimit", ctypes.c_longlong),
+            ("LimitFlags", w.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", w.DWORD),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", w.DWORD),
+            ("SchedulingClass", w.DWORD),
+        ]
+
+    class ExtendedLimits(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", BasicLimits),
+            ("IoInfo", IoCounters),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    dll = ctypes.WinDLL("kernel32", use_last_error=True)
+    dll.CreateJobObjectW.argtypes = (ctypes.c_void_p, w.LPCWSTR)
+    dll.CreateJobObjectW.restype = w.HANDLE
+    dll.SetInformationJobObject.argtypes = (w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD)
+    dll.SetInformationJobObject.restype = w.BOOL
+    dll.AssignProcessToJobObject.argtypes = (w.HANDLE, w.HANDLE)
+    dll.AssignProcessToJobObject.restype = w.BOOL
+    dll.CloseHandle.argtypes = (w.HANDLE,)
+    dll.CloseHandle.restype = w.BOOL
+    handle = dll.CreateJobObjectW(None, None)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        limits = ExtendedLimits()
+        limits.BasicLimitInformation.LimitFlags = 0x2000  # KILL_ON_JOB_CLOSE
+        if not dll.SetInformationJobObject(handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not dll.AssignProcessToJobObject(handle, proc._handle):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return handle
+    except BaseException:
+        dll.CloseHandle(handle)
+        raise
+
+
+def _resume_windows_process(proc: subprocess.Popen) -> None:
+    """Resume a suspended stage only after assigning its Windows Job Object.
+
+    Without CREATE_SUSPENDED, the Python driver can spawn children *before*
+    job assignment, letting those early descendants escape job termination.
+    """
+    import ctypes
+    from ctypes import wintypes as w
+
+    class ThreadEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", w.DWORD),
+            ("cntUsage", w.DWORD),
+            ("th32ThreadID", w.DWORD),
+            ("th32OwnerProcessID", w.DWORD),
+            ("tpBasePri", w.LONG),
+            ("tpDeltaPri", w.LONG),
+            ("dwFlags", w.DWORD),
+        ]
+
+    dll = ctypes.WinDLL("kernel32", use_last_error=True)
+    dll.CreateToolhelp32Snapshot.argtypes = (w.DWORD, w.DWORD)
+    dll.CreateToolhelp32Snapshot.restype = w.HANDLE
+    dll.Thread32First.argtypes = (w.HANDLE, ctypes.POINTER(ThreadEntry))
+    dll.Thread32First.restype = w.BOOL
+    dll.Thread32Next.argtypes = (w.HANDLE, ctypes.POINTER(ThreadEntry))
+    dll.Thread32Next.restype = w.BOOL
+    dll.OpenThread.argtypes = (w.DWORD, w.BOOL, w.DWORD)
+    dll.OpenThread.restype = w.HANDLE
+    dll.ResumeThread.argtypes = (w.HANDLE,)
+    dll.ResumeThread.restype = w.DWORD
+    dll.CloseHandle.argtypes = (w.HANDLE,)
+    dll.CloseHandle.restype = w.BOOL
+
+    snap = dll.CreateToolhelp32Snapshot(0x4, 0)  # TH32CS_SNAPTHREAD
+    if int(snap) == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    resumed = 0
+    try:
+        entry = ThreadEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        ok = dll.Thread32First(snap, ctypes.byref(entry))
+        while ok:
+            if entry.th32OwnerProcessID == proc.pid:
+                thread = dll.OpenThread(0x0002, False, entry.th32ThreadID)  # THREAD_SUSPEND_RESUME
+                if not thread:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    previous = dll.ResumeThread(thread)
+                    if previous == 0xFFFFFFFF:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    resumed += 1
+                finally:
+                    dll.CloseHandle(thread)
+            ok = dll.Thread32Next(snap, ctypes.byref(entry))
+    finally:
+        dll.CloseHandle(snap)
+    if resumed < 1:
+        raise RuntimeError("Cannot resume suspended leased worker; no threads found")
+
+
+def _close_windows_kill_job(handle) -> None:
+    import ctypes
+    dll = ctypes.WinDLL("kernel32", use_last_error=True)
+    dll.CloseHandle.argtypes = (ctypes.c_void_p,)
+    dll.CloseHandle.restype = ctypes.c_int
+    if not dll.CloseHandle(handle):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _terminate_stage_tree(proc: subprocess.Popen) -> None:
+    """Stop child tools as well as the stage driver after loss of ownership.
+
+    Merely killing the Python driver can leave FFmpeg, LaTeX, and other
+    descendants writing into scratch. This is only used for a leased worker.
+    """
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    else:
+        import signal
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=10)
+
+
+def _run_leased_stage(command: list[str], *, cwd: Path, log, lease,
+                      timeout_seconds: float) -> int:
+    """Fence live work while the distributed lease is active.
+
+    Check the strong remote ownership token periodically and stop the whole
+    subprocess tree when it is lost, rather than waiting until stage exit.
+    """
+    lease.assert_held()
+    proc = None
+    windows_job = None
+    try:
+        if os.name == "nt":
+            proc = subprocess.Popen(
+                command, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000004,
+            )
+            # Start suspended, attach the process tree to a kill-on-close job,
+            # then resume. No child can escape before the job exists.
+            windows_job = _assign_windows_kill_job(proc)
+            _resume_windows_process(proc)
+        else:
+            proc = subprocess.Popen(
+                command, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+                text=True, start_new_session=True,
+            )
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            lease.assert_held()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            try:
+                result = proc.wait(timeout=min(5.0, remaining))
+                lease.assert_held()
+                return result
+            except subprocess.TimeoutExpired:
+                continue
+    except BaseException:
+        if windows_job is not None:
+            _close_windows_kill_job(windows_job)
+            windows_job = None
+        if proc is not None:
+            _terminate_stage_tree(proc)
+        raise
+    finally:
+        # Even successful drivers must not leave detached FFmpeg/LaTeX
+        # descendants behind after their main process has exited.
+        if windows_job is not None:
+            _close_windows_kill_job(windows_job)
 
 
 def run_subprocess(
@@ -270,24 +493,32 @@ def run_subprocess(
     *,
     gemini_stage: bool,
     retries: int,
+    lease=None,
 ) -> None:
     attempt = 0
     while True:
+        if lease is not None:
+            lease.assert_held()
         if gemini_stage:
-            wait_for_gemini_circuit()
+            wait_for_gemini_circuit(lease)
         with log_path.open("a", encoding="utf-8", errors="replace") as log:
             log.write(f"\n===== {label} :: {script} :: attempt {attempt + 1} =====\n")
             log.flush()
-            proc = subprocess.run(
-                [python_exe, script],
-                cwd=str(stage),
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200")),
-            )
-            log.write(f"\n[{label}] exit={proc.returncode}\n")
-        if proc.returncode == 0:
+            stage_timeout = float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200"))
+            if lease is None:
+                proc = subprocess.run(
+                    [python_exe, script],
+                    cwd=str(stage), stdout=log, stderr=subprocess.STDOUT,
+                    text=True, timeout=stage_timeout,
+                )
+                returncode = proc.returncode
+            else:
+                returncode = _run_leased_stage(
+                    [python_exe, script], cwd=stage, log=log, lease=lease,
+                    timeout_seconds=stage_timeout,
+                )
+            log.write(f"\n[{label}] exit={returncode}\n")
+        if returncode == 0:
             return
 
         # If the request tripped the shared circuit, this is an external pause,
@@ -296,7 +527,7 @@ def run_subprocess(
             opened, _ = circuit_is_open()
             if opened:
                 print(f"[{stage.name}] {label}: Gemini circuit opened; pausing", flush=True)
-                wait_for_gemini_circuit()
+                wait_for_gemini_circuit(lease)
                 continue
 
         if attempt >= retries:
@@ -308,7 +539,11 @@ def run_subprocess(
             f"({attempt}/{retries})",
             flush=True,
         )
+        if lease is not None:
+            lease.assert_held()
         time.sleep(delay)
+        if lease is not None:
+            lease.assert_held()
 
 
 def atomic_publish_file(src: Path, dest: Path) -> None:
@@ -517,6 +752,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     label,
                     gemini_stage=stage_name in GEMINI_STAGES,
                     retries=args.stage_retries,
+                    lease=lease,
                 )
                 if lease is not None:
                     lease.assert_held()
