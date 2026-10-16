@@ -46,7 +46,13 @@ the incomplete packet.
 - Previews of **every original textbook source page**, together with a
   private copy of `source.pdf` for a reader to check context and equations.
 - Textual warnings from the completion receipt for narrow figures and
-  extracted but unmapped source crops.
+  extracted but unmapped source crops. Each crop warning links directly to
+  the **complete source-page preview** when the receipt identifies a valid
+  page number (for example `page_5` or `page: 5`). This is not a crop
+  reconstruction, caption association, or scientific classification.
+- A separate checkbox for **each** unmapped crop in the Markdown checklist,
+  including its source page or an explicit unresolved-page warning. Crop records
+  on the same source page remain separate decisions.
 - An **advisory** when MP4 duration is 10 minutes or longer. Different
   MicroGen projects may have different per-video length contracts; the
   reviewer determines which applies. The reviewer package does not split

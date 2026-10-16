@@ -10,6 +10,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import shutil
 import tempfile
 import wave
@@ -28,6 +29,44 @@ def esc(value):
 def clock(seconds):
     n = int(seconds)
     return f"{n//3600:02d}:{n//60%60:02d}:{n%60:02d}"
+
+
+def source_page_number(crop, source_page_count):
+    """Return a 1-based textbook page only when a receipt reference is unambiguous."""
+    if not isinstance(crop, dict):
+        return None
+    raw = crop.get("source_page", crop.get("page"))
+    if type(raw) is int:
+        number = raw
+    elif isinstance(raw, str):
+        match = re.fullmatch(r"(?:page[_\s-]*)?([0-9]+)", raw.strip(), flags=re.I)
+        number = int(match.group(1)) if match else None
+    else:
+        return None
+    return number if number is not None and 1 <= number <= source_page_count else None
+
+
+def render_unmapped_crops(crops, source_page_count):
+    """Show traceable *whole-page* previews; never claim to reproduce a lost crop."""
+    if not crops:
+        return "<li>None recorded</li>"
+    rows = []
+    for idx, crop in enumerate(crops, 1):
+        record = crop if isinstance(crop, dict) else {"note": crop}
+        label = record.get("filename") or record.get("name") or f"Crop {idx}"
+        page = source_page_number(record, source_page_count)
+        location = (
+            f'<a href="#source-page-{page:03d}">Inspect source page {page}</a>'
+            if page is not None
+            else "Source page unresolved; inspect the textbook manually"
+        )
+        note = record.get("note")
+        note_html = f" — {esc(note)}" if note else ""
+        rows.append(
+            f"<li><strong>{esc(label)}</strong>: {location}{note_html}. "
+            "This link opens the whole textbook page, not an extracted crop.</li>"
+        )
+    return "".join(rows)
 
 
 def thumbnails(pdf, destination, prefix):
@@ -164,9 +203,26 @@ def build_pack(source, output, *, edition="published"):
             "- [ ] Longer-than-ten-minute lesson policy checked if applicable\n"
             "- [ ] Lecturer release approval provided separately\n\nNotes:\n"
         )
+        if info["unmapped_source_crops"]:
+            checklist += (
+                "\n## Unmapped textbook crop classification (human review required)\n\n"
+                "The link in index.html opens the entire source page, not the missing crop.\n"
+                "For each entry determine whether a teaching figure is omitted; do not assume it is.\n\n"
+            )
+            for idx, item in enumerate(info["unmapped_source_crops"], 1):
+                record = item if isinstance(item, dict) else {"note": item}
+                raw_label = record.get("filename") or record.get("name") or f"Crop {idx}"
+                safe_label = str(raw_label).replace("|", "/").replace("`", "'").replace("[", "(").replace("]", ")").replace("\r", " ").replace("\n", " ")[:120]
+                page_number = source_page_number(record, len(original))
+                where = f"source page {page_number}" if page_number else "source page unresolved"
+                checklist += (
+                    f"- [ ] Crop {idx}, {safe_label} ({where}): "
+                    "classify as required / not needed / uncertain, record explanation.\n"
+                )
         (stage / "REVIEW_CHECKLIST.md").write_text(checklist, encoding="utf-8")
         refs = "".join(
-            f"<figure><img src='{esc(path)}' alt='Source page {idx}' loading='lazy'>"
+            f"<figure id='source-page-{idx:03d}'>"
+            f"<img src='{esc(path)}' alt='Source page {idx}' loading='lazy'>"
             f"<figcaption>Source page {idx}</figcaption></figure>"
             for idx,path in enumerate(original,1)
         )
@@ -175,10 +231,9 @@ def build_pack(source, output, *, edition="published"):
             f"{esc(item.get('display_width_fraction','?'))} of slide</li>"
             for item in info["figure_display_warnings"]
         ) or "<li>None recorded</li>"
-        unmapped = "".join(
-            "<li>" + esc(json.dumps(item, ensure_ascii=False)) + "</li>"
-            for item in info["unmapped_source_crops"]
-        ) or "<li>None recorded</li>"
+        unmapped = render_unmapped_crops(
+            info["unmapped_source_crops"], len(original)
+        )
         duration_warning = (
             "<p class='warning'>This MP4 exceeds ten minutes. Confirm whether "
             "a per-video limit applies to this course before publishing.</p>"
@@ -209,7 +264,8 @@ article p{{white-space:pre-wrap}}video{{width:100%;max-height:460px;background:#
 button{{padding:8px 12px;background:#17577e;color:white;border:0;border-radius:5px;cursor:pointer}}
 label{{display:inline-block;margin:7px}}textarea{{display:block;width:95%;min-height:70px;margin:8px}}
 #sources{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}}
-#sources img{{max-width:100%}}.warning{{padding:12px;background:#ffedc5}}.muted{{color:#596d7d}}
+#sources img{{max-width:100%}}#sources figure:target{{outline:3px solid #17577e;scroll-margin-top:20px}}
+.warning{{padding:12px;background:#ffedc5}}.muted{{color:#596d7d}}
 </style></head><body><header><h1>Section {esc(source.name)} lecturer review</h1>
 <strong>NOT REVIEWED — no academic or audio approval is implied.</strong>
 <p>Edition: {esc(edition)}; slides: {slides}; textbook pages: {len(original)};

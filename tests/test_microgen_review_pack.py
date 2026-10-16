@@ -95,6 +95,40 @@ class ReviewPackTests(unittest.TestCase):
         with self.assertRaisesRegex(review.ReviewPackError,"checksum differs"):
             review.verify_pack(self.output)
 
+    def test_unmapped_crop_page_links_and_safe_fallbacks(self):
+        self.assertEqual(review.source_page_number({"source_page": "page_5"}, 6), 5)
+        self.assertEqual(review.source_page_number({"page": 2}, 6), 2)
+        self.assertEqual(review.source_page_number({"page": "Page 3"}, 6), 3)
+        for crop in ({"source_page": "page_7"}, {"page": -1},
+                     {"page": True}, {"source_page": "<bad>"},
+                     {"filename": "unknown"}):
+            self.assertIsNone(review.source_page_number(crop, 6))
+        html = review.render_unmapped_crops(
+            [{"source_page": "page_5", "filename": "fig_1.png",
+              "note": "<script>alert(1)</script>"},
+             {"source_page": "page_5", "filename": "fig_1.png"},
+             {"page": 999, "name": "<img src=x onerror=alert(1)>"}], 6
+        )
+        self.assertEqual(html.count('href="#source-page-005"'), 2)
+        self.assertIn("Source page unresolved", html)
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertNotIn("<img src=x onerror=alert(1)>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertIn("whole textbook page, not an extracted crop", html)
+
+    def test_unmapped_crop_source_page_has_review_link_and_checklist(self):
+        self.make_valid_fixture()
+        with mock.patch.object(review.quality, "published_manifest_valid", return_value=True):
+            review.build_pack(self.source, self.output)
+        page = (self.output / "index.html").read_text(encoding="utf-8")
+        checklist = (self.output / "REVIEW_CHECKLIST.md").read_text(encoding="utf-8")
+        self.assertIn('href="#source-page-001"', page)
+        self.assertIn("id='source-page-001'", page)
+        self.assertIn("fig_1.png", page)
+        self.assertIn("Unmapped textbook crop classification", checklist)
+        self.assertIn("Crop 1, fig_1.png (source page 1)", checklist)
+        self.assertEqual(review.verify_pack(self.output)["integrity"], "PASS")
+
     def test_source_drift_fails_without_publishing_review(self):
         self.make_valid_fixture()
         with mock.patch.object(review.quality,"published_manifest_valid",
