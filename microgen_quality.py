@@ -122,6 +122,52 @@ def check_graphics(tex: Path) -> list[Path]:
     return found
 
 
+def figure_display_warnings(slides_pdf: Path, *,
+                            min_width_fraction: float = 0.12,
+                            max_height_fraction: float = 0.27) -> list[dict]:
+    """Flag extremely narrow, tall textbook images that are hard to read.
+
+    This is advisory rather than an automatic cropping or figure-replacement
+    algorithm: preserve all original scientific panels and have the lecturer
+    check layout before release. Many single diagrams are appropriately small;
+    the most concerning case is a vertically stacked composite rendered as
+    a tiny, narrow strip on a wide slide.
+    """
+    # Structural PDF validation already ran before this advisory. Some
+    # older unit-test fixtures mock it without creating any actual PDF.
+    if not Path(slides_pdf).is_file() or Path(slides_pdf).stat().st_size == 0:
+        return []
+    issues = []
+    import pymupdf
+    try:
+        # In-memory inspection avoids lingering read handles on Windows Drive
+        # and on TemporaryDirectory fixtures.
+        with pymupdf.open(stream=Path(slides_pdf).read_bytes(), filetype="pdf") as doc:
+            for index, page in enumerate(doc):
+                for entry in page.get_images(full=True):
+                    if int(entry[2]) < 100 or int(entry[3]) < 100:
+                        continue
+                    for rect in page.get_image_rects(entry[0]):
+                        fraction_w = rect.width / page.rect.width
+                        fraction_h = rect.height / page.rect.height
+                        if (fraction_w < min_width_fraction
+                                and fraction_h < max_height_fraction):
+                            issues.append({
+                                "slide": index + 1,
+                                "display_width_fraction": round(fraction_w, 4),
+                                "display_height_fraction": round(fraction_h, 4),
+                                "review_required": True,
+                            })
+    except pymupdf.FileDataError:
+        # Existing main PDF gate is authoritative and already rejects
+        # corrupt real output. Legacy mocked manifest fixtures may contain
+        # placeholder bytes rather than a real PDF.
+        return []
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise QualityError(f"Could not inspect embedded slide figure geometry: {exc}") from exc
+    return issues
+
+
 def check_narration(script: Path, sidecar: Path, pages: int) -> dict:
     require_file(script)
     require_file(sidecar)
@@ -142,6 +188,20 @@ def check_narration(script: Path, sidecar: Path, pages: int) -> dict:
         blocks = [int(x) for x in re.findall(r"(?m)^\*\*Slide\s+(\d+)\s*\[", text)]
         if blocks != numbers:
             raise QualityError("Human-readable narration and JSON sidecar disagree")
+        # Catch cases where Gemini echoes only the prefix of a long slide-1
+        # course title (e.g. omits "Fractions" after "by Partial"). The
+        # false-positive risk is low because arbitrary introductions that
+        # are not literal title prefixes are not rejected.
+        tex = script.parent / "slides.tex"
+        if tex.is_file():
+            match = re.search(r"\\title\{([^{}]+)\}", tex.read_text(encoding="utf-8-sig"))
+            if match:
+                expected_title = " ".join(match.group(1).split())
+                announced_title = " ".join(str(slides[0].get("narration") or "").split())
+                if (len(announced_title) >= 12
+                        and expected_title.casefold().startswith(announced_title.casefold())
+                        and len(expected_title) - len(announced_title) >= 4):
+                    raise QualityError("Slide 1 narration truncates the title given in slides.tex")
         return {"pages": pages, "script_sha256": sha256(script),
                 "sidecar_sha256": sha256(sidecar)}
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
@@ -229,6 +289,7 @@ def canonical_figure_hashes(figures: list[Path]) -> dict[str, str]:
 def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     stage = Path(stage)
     pdf = check_slide_pdf(stage / "slides.pdf", require_footer=require_footer)
+    small_figures = figure_display_warnings(stage / "slides.pdf")
     figures = check_graphics(stage / "slides.tex")
     # Keep the actual crop-to-caption provenance with every published deck.
     # This validates both used figures and any unused mapped figures before
@@ -266,6 +327,9 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if small_figures:
+        result["figure_display_warnings"] = small_figures
+        result["scientific_review_pending"] = True
     if unmapped_source_crops:
         result["unmapped_source_crops"] = unmapped_source_crops
         result["scientific_review_pending"] = True
