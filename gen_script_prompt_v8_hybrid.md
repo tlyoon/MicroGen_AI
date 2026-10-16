@@ -441,6 +441,9 @@ PEDAGOGY
 - Conclusion closes the intellectual loop.
 
 TTS / PACING
+- The title-slide narration must contain the COMPLETE title visible on the title slide. Do not truncate after a preposition, adjective, or partial phrase.
+- Do not infer sign conditions beyond the stated angular interval: tan(u) can be negative on (-pi/2, pi/2), although cos(u) and sec(u) are positive there.
+- For square roots and grouped denominators, speak the grouping unambiguously (e.g. "the square root of the entire fraction ...") rather than leaving the listener to guess operand scope.
 - No raw TeX/LaTeX or production markup appears.
 - Sentences are speakable.
 - Narration respects timing and leaves visual inspection time.

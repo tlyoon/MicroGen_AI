@@ -410,6 +410,8 @@ PEDAGOGY
 - Final Review Questions are thoughtful and source-grounded.
 
 VISUAL QUALITY
+- Multi-part source diagrams must retain EVERY panel, label, curve, and connecting context; a vertically stacked graphic must not become an unreadably narrow strip on a wide slide. Reflow the layout or allocate another slide instead of shrinking or cropping away a panel.
+- Academic parameter domains must be taken exactly from the source, not made stricter without mathematical justification (e.g., Formula 29b requires b > 0 but does not in general require a > 0; also respect the real domain of the radicand).
 - No long sequence of unnecessary heading-plus-bullets slides.
 - Relevant figures are used where they materially improve understanding.
 - Figure-heavy slides reduce competing text.
