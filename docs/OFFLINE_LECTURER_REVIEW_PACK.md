@@ -11,7 +11,7 @@ From the local MicroGen_AI checkout:
 ```powershell
 python microgen_review_pack.py `
   --source "G:\My Drive\Projects\Thomas_calculus_13ed\8\8.4" `
-  --output "G:\My Drive\MicroGen_Experimental_Review_20261016\Lecturer_Packets\8_4" `
+  --output "G:\My Drive\MicroGen_Experimental_Review_20261016\Lecturer_Review_Packets\8_4" `
   --edition published
 ```
 
