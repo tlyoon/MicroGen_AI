@@ -19,6 +19,16 @@ To inspect a corrected candidate that **has not** yet replaced the assigned
 PC's original published output, set `--source` to that verified candidate and
 `--edition qa-candidate`. Do not pretend a candidate is published.
 
+Verify an existing reviewer packet independently (without requesting any original
+lecture files or cloud API):
+
+```powershell
+python microgen_review_pack.py --verify "G:\My Drive\MicroGen_Experimental_Review_20261016\Lecturer_Review_Packets\8_4"
+```
+
+The command checks the package's own media/preview SHA-256 inventory and
+source/video provenance hashes. It reports integrity, **not** lecturer approval.
+
 The source bundle must have an existing, valid
 `.microgen_verified_completion.json` with matching PDFs, WAVs and MP4 hashes.
 The output folder must **not exist** beforehand and cannot be nested inside the

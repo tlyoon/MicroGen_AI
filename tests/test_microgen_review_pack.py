@@ -90,6 +90,10 @@ class ReviewPackTests(unittest.TestCase):
         for name,digest in hashes["files_sha256"].items():
             self.assertEqual(review.quality.sha256(self.output/name),digest,name)
         self.assertIn("| 1 |", (self.output/"REVIEW_CHECKLIST.md").read_text())
+        self.assertEqual(review.verify_pack(self.output)["integrity"],"PASS")
+        (self.output/"index.html").write_text("tampered media review")
+        with self.assertRaisesRegex(review.ReviewPackError,"checksum differs"):
+            review.verify_pack(self.output)
 
     def test_source_drift_fails_without_publishing_review(self):
         self.make_valid_fixture()

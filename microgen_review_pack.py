@@ -249,14 +249,58 @@ Exported notes do not certify student release.</p></header>{duration_warning}
         raise
 
 
+def verify_pack(directory):
+    """Independent, portable integrity check; does not certify academic QA."""
+    root = Path(directory).resolve()
+    try:
+        manifest = json.loads((root/"review_pack_manifest.json").read_text(encoding="utf-8"))
+        info = json.loads((root/"review_inventory.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ReviewPackError("Missing or unreadable review pack metadata") from exc
+    if (manifest.get("schema_version") != 1 or manifest.get("approval") != "NOT_REVIEWED"
+            or info.get("approval") != "NOT_REVIEWED"):
+        raise ReviewPackError("Unexpected review pack schema or approval marker")
+    files = manifest.get("files_sha256")
+    if not isinstance(files, dict) or not files:
+        raise ReviewPackError("No file hashes in reviewer package")
+    for relative, digest in files.items():
+        if not isinstance(relative, str) or not isinstance(digest, str):
+            raise ReviewPackError("Invalid review file hash entry")
+        entry = Path(relative)
+        full = (root/entry).resolve()
+        if (entry.is_absolute() or ".." in entry.parts or not full.is_relative_to(root)
+                or not full.is_file()):
+            raise ReviewPackError(f"Missing or unsafe reviewer asset: {relative}")
+        if quality.sha256(full) != digest:
+            raise ReviewPackError(f"Reviewer asset checksum differs: {relative}")
+    for filename, key in (("media/source.pdf","source_sha256"),
+                          ("media/slides.mp4","mp4_sha256")):
+        if quality.sha256(root/filename) != manifest.get(key):
+            raise ReviewPackError(f"Lecture provenance hash mismatch: {filename}")
+        if manifest[key] != info.get(key):
+            raise ReviewPackError("Inventory and pack manifest hashes disagree")
+    if len(info.get("slides",[])) != info.get("slide_count",len(info.get("slides",[]))):
+        raise ReviewPackError("Review slide inventory differs from slide count")
+    return {"directory":str(root),"integrity":"PASS","files":len(files),
+            "slides":len(info["slides"]),"approval":"NOT_REVIEWED"}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source",required=True,type=Path)
-    parser.add_argument("--output",required=True,type=Path)
+    parser.add_argument("--source",type=Path)
+    parser.add_argument("--output",type=Path)
+    parser.add_argument("--verify",type=Path,help="Validate an existing reviewer package")
     parser.add_argument("--edition",choices=["published","qa-candidate"],default="published")
     args=parser.parse_args(argv)
-    print(json.dumps(build_pack(args.source,args.output,edition=args.edition),
-                     indent=2),flush=True)
+    if args.verify is not None:
+        if args.source is not None or args.output is not None:
+            parser.error("--verify must be used without --source and --output")
+        result=verify_pack(args.verify)
+    else:
+        if args.source is None or args.output is None:
+            parser.error("both --source and --output are required to build a pack")
+        result=build_pack(args.source,args.output,edition=args.edition)
+    print(json.dumps(result,indent=2),flush=True)
     return 0
 
 
