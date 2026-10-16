@@ -40,6 +40,55 @@ STAGES = [
 GEMINI_STAGES = {"figure_mapping", "slides", "narration"}
 
 
+def inspect_local_checkout(repo: Path, *, expected_commit: str | None = None) -> str:
+    """Fail closed before multi-PC paid generation if Git code is unsafe.
+
+    The coordinator must pin the same full commit on all PCs. Synced cloud
+    folders can expose mixed Git objects and incomplete tracked worktrees.
+    """
+    repo = Path(repo).resolve()
+    synced = {"my drive", "google drive", "onedrive", "dropbox"}
+    if {part.casefold() for part in repo.parts} & synced:
+        raise RuntimeError(
+            "Multi-PC code must execute from a private local disk Git clone, "
+            "not a synchronized Drive directory"
+        )
+
+    def git(*arguments: str) -> str:
+        try:
+            process = subprocess.run(
+                ["git", "-C", str(repo), *arguments],
+                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                errors="replace", timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError(f"Cannot verify local Git checkout: {exc}") from exc
+        if process.returncode:
+            raise RuntimeError(
+                f"Local Git checkout verification failed ({' '.join(arguments)}): "
+                + (process.stderr or process.stdout).strip()[:350]
+            )
+        return process.stdout.strip()
+
+    root = Path(git("rev-parse", "--show-toplevel")).resolve()
+    if root != repo:
+        raise RuntimeError(f"Expected repository root {repo}, found {root}")
+    head = git("rev-parse", "HEAD")
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", head):
+        raise RuntimeError("Git HEAD is not a complete 40-character commit SHA")
+    if expected_commit not in (None, "", "unknown"):
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", expected_commit):
+            raise RuntimeError("--commit must be the full 40-character Git SHA")
+        if expected_commit.lower() != head.lower():
+            raise RuntimeError("The checked-out commit does not match --commit")
+    if git("status", "--porcelain=v1", "--untracked-files=normal"):
+        raise RuntimeError(
+            "Multi-PC source checkout is dirty or incompletely synchronized; "
+            "preserve local edits and use a fresh local Git clone"
+        )
+    return head
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -831,6 +880,10 @@ def main() -> int:
     args.repo = args.repo.resolve()
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
+    if args.multi_pc and not args.check_assignments:
+        verified_sha = inspect_local_checkout(args.repo, expected_commit=args.commit)
+        args.commit = verified_sha
+        print(f"[batch] verified local code commit={verified_sha}", flush=True)
     args.work_root.mkdir(parents=True, exist_ok=True)
     # Fail before any paid API requests or multi-gigabyte extraction/rendering.
     disk = quality.require_scratch_space(args.work_root)
