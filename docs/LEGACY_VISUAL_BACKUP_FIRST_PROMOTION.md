@@ -87,6 +87,29 @@ only the corrected PDF, MP4, evidence and receipt have changed. The AAC
 identity, scene/timing report, matched original backups and current media
 are checked. It is a technical audit only.
 
+## Optional bounded Drive synchronization barrier
+
+Some Drive desktop replicas can expose the corrected PDF, MP4, and embedded
+QA evidence before a newly written, leading-dot legacy v2 receipt appears.
+The first independent destination audit may then reject a temporarily absent
+receipt even though its bytes and SHA256 are valid on the owning PC.
+
+For read-only independent destination audits, add:
+
+    --replication-wait-seconds 120
+
+to the existing destination-audit command. The default is 0 seconds (fail
+immediately), and the allowed bound is 0–300 seconds. The barrier waits
+ONLY for expected, still-absent PDF/MP4/receipt/evidence files. If an
+existing file has an unexpected SHA256, it fails IMMEDIATELY without retries.
+An absent file remaining missing at the deadline is a blocking error.
+It does not modify the course, impersonate the owner, regenerate audio,
+or bypass the subsequent complete independent destination audit.
+The original/backup/source/figure/Moodle hash checks always still run.
+
+This specifically addresses the observed 1.5 replica delay on 18 October
+2026, without inventing a distributed lease or silently reassigning jobs.
+
 ## Exclusions and operating contract
 
 1.1: 17 slides but 22 stale WAVs.
