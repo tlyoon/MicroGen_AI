@@ -1,0 +1,5 @@
+# PR #31: Bounded TTS repair candidates
+
+New `microgen_tts_repair.stage_repair` creates **candidate-only** slide WAVs in a distinct, nonexistent output directory after checking the source, normalized speech and existing WAV SHA against the pronunciation-risk ledger. Automatic repair is only allowed when *every* risk on that slide is already covered by a reviewed rule. All other expressions require a scholar-reviewed `tts_text` proposal.
+
+The repair engine uses the configured, pinned TTS provider and refuses mixed voices. It accepts an injected acoustic diagnostic with `defect`, `clear` or `unknown`, makes at most 1–3 attempts, and stops immediately on unavailable evidence or a voice/provenance failure. Every candidate remains **non-publishable and human-listening-unapproved**, even after a clear acoustic result. Historical WAVs, slide PDFs, MP4s and source script are **never overwritten by this module**. Final publication requires a separate approved promotion gate. No new Whisper, cloud lease or hardware assumptions.
