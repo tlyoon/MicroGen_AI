@@ -261,6 +261,15 @@ def main() -> None:
             f"pronunciation issue(s): {issues[:5]}"
         )
 
+    from microgen_tts_lexicon import check_lexicon_slides
+    rule_drift = check_lexicon_slides(
+        [{"slide": n, "tts_text": str(item["tts_text"] or item["narration"])}
+         for n, item in enumerate(items, 1)], normalize_scientific_speech,
+    )
+    if rule_drift:
+        raise PronunciationPreflightError(
+            f"Reviewed pronunciation lexicon mismatch: {rule_drift[:5]}"
+        )
     from microgen_quality import sha256, check_wavs
     from microgen_tts_provenance import (
         TTSProvenanceError, make_record, verify_record,
