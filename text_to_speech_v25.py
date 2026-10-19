@@ -89,6 +89,20 @@ def normalize_scientific_speech(text: str) -> str:
     )
     for symbol, spoken_name in math_symbols:
         out = out.replace(symbol, spoken_name)
+    # Text TTS frequently interprets "y-value" as "yay value" rather than
+    # the name of the mathematical letter Y ("why"). Expand letter names
+    # only in well-defined coordinate/math compounds, never globally.
+    math_letter_compounds = (
+        "value", "values", "axis", "axes", "intercept", "intercepts",
+        "coordinate", "coordinates", "component", "components",
+    )
+    out = re.sub(
+        r"(?<![A-Za-z])(?P<letter>[xy])\s*[-\u2010-\u2015]\s*"
+        r"(?P<noun>" + "|".join(math_letter_compounds) + r")\b",
+        lambda match: ("why" if match["letter"].lower() == "y" else "ex")
+        + " " + match["noun"],
+        out, flags=re.I,
+    )
     unit_patterns = (
         (r"\bkg\s*/\s*m(?:\^?3|³)\b", " kilograms per cubic metre "),
         (r"\bkg\s+m(?:\^\s*-?3|⁻³)\b", " kilograms per cubic metre "),

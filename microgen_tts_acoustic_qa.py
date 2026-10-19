@@ -73,14 +73,19 @@ def mismatch_details(expected: str, heard: str) -> dict:
             "expected_token_start": a,
         })
     wer_proxy = changed / max(1,len(e))
-    # Special case: the original defect was letter C -> 'circa'.
+    # Explicit detection of letter-name errors even when the number of
+    # mismatched words is below the document-wide discrepancy threshold.
     circa_substitutions = [x for x in issues if "circa" in x["recognized"].split()]
+    math_y_to_yay = [x for x in issues
+                     if "y" in x["expected"].split()
+                     and "yay" in x["recognized"].split()]
     return {
         "expected_tokens": len(e),
         "recognized_tokens": len(h),
         "difference_fraction_upper_bound": round(wer_proxy,5),
         "sensitive_mismatches": sum(x["sensitive"] for x in issues),
         "circa_red_flags": len(circa_substitutions),
+        "letter_y_yay_red_flags": len(math_y_to_yay),
         "differences": issues,
     }
 
@@ -146,7 +151,8 @@ def audit_with_recognizer(
                     status = "REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
                 elif any(
                     x["difference_fraction_upper_bound"] > max_difference_fraction or
-                    x["sensitive_mismatches"] or x["circa_red_flags"]
+                    x["sensitive_mismatches"] or x["circa_red_flags"] or
+                    x["letter_y_yay_red_flags"]
                     for x in findings
                 ):
                     status = "REVIEW_REQUIRED_PRONUNCIATION_RISK"
