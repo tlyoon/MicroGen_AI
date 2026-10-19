@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "normalizer_compatibility": "microgen-pr26-math-xy-and-cdot",
+  "provenance": "Reviewed forms for letter names (y-value confirmed by lecturer, c. -> C review context); unreviewed terms do not auto-substitute.",
+  "reviewed_rules": [
+    {
+      "id": "xy-coordinate-compounds",
+      "source_regex": "(?<![A-Za-z])(?P<letter>[xy])\\s*[-\\u2010-\\u2015]\\s*(?P<noun>values?|axis|axes|intercepts?|coordinates?|components?)\\b",
+      "case_insensitive": true,
+      "spoken_template": "{letter_name} {noun}",
+      "contexts": [
+        "mathematical_coordinate_noun"
+      ],
+      "safety": "reviewed_conservative",
+      "examples": [
+        "y-value",
+        "x-axis",
+        "Y-intercepts",
+        "x-coordinate"
+      ],
+      "negative_examples": [
+        "Yale",
+        "x-ray",
+        "Yesterday"
+      ]
+    },
+    {
+      "id": "sentence_math_cdot",
+      "source_regex": "\\b(?P<cue>at|point|approaches|of|equals|variable|constant|coefficient)\\s+c\\.(?=\\s+[A-Z]|$)",
+      "case_insensitive": true,
+      "spoken_template": "{cue} see.",
+      "contexts": [
+        "mathematical_sentence_final"
+      ],
+      "safety": "reviewed_conservative",
+      "examples": [
+        "at c. Next",
+        "of c. Then"
+      ],
+      "negative_examples": [
+        "c. 1900",
+        "C. Smith"
+      ]
+    }
+  ],
+  "review_required": [
+    {
+      "term": "f(x)",
+      "reason": "Function-argument semantics and formal spoken style require review before automated expansion"
+    },
+    {
+      "term": "x_1",
+      "reason": "Index must have reviewed spoken interpretation"
+    },
+    {
+      "term": "sin",
+      "reason": "Abbreviated trig name and adjacent operands require review"
+    },
+    {
+      "term": "d/dx",
+      "reason": "Operator needs explicit spoken interpretation"
+    },
+    {
+      "term": "μ",
+      "reason": "Name may be mu or micro prefix depending on context"
+    },
+    {
+      "term": "Δ",
+      "reason": "Delta or change in, depending on context"
+    }
+  ]
+}
