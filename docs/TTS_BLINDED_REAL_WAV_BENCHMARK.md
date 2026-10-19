@@ -1,0 +1,5 @@
+# PR #34 — Real blinded-ASR benchmark runner
+
+The benchmark runs two named audio recognizers **without sending the expected narration**. For the user-verified pair of Thomas Calculus 2.5 Slide 10 WAVs, it categorizes an explicitly recognized `yay value` as an error, `why value` as clear, and normalized `y-value`, incomplete transcripts, missing recordings and service outages as **unknown**. A detector that incorrectly says the old defective WAV is clear must count as a **false negative** against the human listening label; it is never turned into a success by script comparison.
+
+Metrics are coverage, TP/TN/FP/FN/UNKNOWN, recall, precision and false-alarm rate using SHA-verified real WAVs. No claim of population pronunciation accuracy can be made from two samples, even with perfect accuracy. Default CLI mode performs zero network calls and produces explicit unknown results. Optional `--live` uses distinct configured audio understanding models and local user credentials, subject to quota. It saves a non-overwriting report with each real transcription. No Whisper installed, no original WAV altered, no automatic playback or publication approval.
