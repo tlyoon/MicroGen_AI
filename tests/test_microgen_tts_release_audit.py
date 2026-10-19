@@ -13,6 +13,26 @@ def wav(path):
         f.setnchannels(1);f.setsampwidth(2);f.setframerate(24000)
         f.writeframes(b"\x01\x00"*24000)
 
+def acoustic_fixture(stage,digest,risk=True):
+    from microgen_tts_acoustic_qa import mismatch_details
+    speech="The why value exists."
+    status=("REVIEW_REQUIRED_SOURCE_PRONUNCIATION_RISK"
+            if risk else "ASR_SCREEN_PASS_LISTENING_REQUIRED")
+    return {"schema_version":1,"slide_count":1,
+            "recognition_models":["model-A","model-B"],
+            "voice_provenance_sha256":a.file_hash(
+                stage/".microgen_tts_provenance.json"),
+            "unavailable_recognizer_passes":[],
+            "review_required_slides":[1] if risk else [],
+            "human_listening_approved":False,"publishable":False,
+            "slides":[{"slide":1,"audio_sha256":digest,
+                       "expected_spoken_sha256":__import__("hashlib").sha256(
+                           speech.encode("utf8")).hexdigest(),
+                       "transcripts":[speech,speech],
+                       "comparisons":[mismatch_details(speech,speech)]*2,
+                       "source_pronunciation_risks":[{"code":"math_letter_compound"}] if risk else [],
+                       "assessment":status}]}
+
 def setup(folder):
     (folder/"script_tts.json").write_text(json.dumps(
         {"slides":[{"slide":1,"tts_text":"The y-value exists."}]}),encoding="utf8")
@@ -40,10 +60,7 @@ class ReleaseAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);digest=setup(p)
             video_sha=a.file_hash(p/"slides.mp4")
-            acoustic={"slide_count":1,"voice_provenance_sha256":a.file_hash(
-                      p/".microgen_tts_provenance.json"),"unavailable_recognizer_passes":[],
-                      "slides":[{"slide":1,"audio_sha256":digest,
-                      "assessment":"REVIEW_REQUIRED_SOURCE_PRONUNCIATION_RISK"}]}
+            acoustic=acoustic_fixture(p,digest)
             listening={"slides":[{"slide":1,"wav_sha256":digest,
                                   "reviewer":"external human","approved":True}]}
             signed={"video_sha256":video_sha,"approved":True,"reviewer":"external human"}
@@ -81,13 +98,10 @@ class ReleaseAuditTests(unittest.TestCase):
     def test_acoustic_receipt_with_wrong_hash_or_outage_fails(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);digest=setup(p)
-            base={"slide_count":1,"voice_provenance_sha256":a.file_hash(
-                  p/".microgen_tts_provenance.json"),
-                  "slides":[{"slide":1,"audio_sha256":digest,
-                  "assessment":"ASR_SCREEN_PASS_LISTENING_REQUIRED"}]}
-            self.assertTrue(a._acoustic(base,p,[digest]))
+            base=acoustic_fixture(p,digest)
+            self.assertTrue(a._acoustic(base,p,[digest],["The why value exists."]))
             base["unavailable_recognizer_passes"]=[0]
-            self.assertFalse(a._acoustic(base,p,[digest]))
+            self.assertFalse(a._acoustic(base,p,[digest],["The why value exists."]))
     def test_video_missing_remains_blocked(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);setup(p)

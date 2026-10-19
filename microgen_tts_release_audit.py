@@ -38,25 +38,14 @@ def _listening(receipt:dict|None,hashes:list[str])->bool:
             return False
     return True
 
-def _acoustic(receipt:dict|None,folder:Path, hashes:list[str])->bool:
-    if not isinstance(receipt,dict) or receipt.get("slide_count")!=len(hashes):
-        return False
+def _acoustic(receipt:dict|None,folder:Path, hashes:list[str],
+              spoken:list[str]|None=None)->bool:
+    from microgen_tts_evidence import verify_acoustic_evidence
     bound=folder/".microgen_tts_provenance.json"
-    if not bound.is_file() or receipt.get("voice_provenance_sha256")!=file_hash(bound):
+    if spoken is None or not bound.is_file():
         return False
-    if receipt.get("unavailable_recognizer_passes"):
-        return False
-    rows=receipt.get("slides")
-    if not isinstance(rows,list) or len(rows)!=len(hashes):
-        return False
-    return all(
-        item.get("slide")==i and item.get("audio_sha256")==digest and
-        item.get("assessment") in (
-            "ASR_SCREEN_PASS_LISTENING_REQUIRED",
-            "REVIEW_REQUIRED_SOURCE_PRONUNCIATION_RISK",
-        )
-        for i,(item,digest) in enumerate(zip(rows,hashes),1)
-    )
+    valid,_=verify_acoustic_evidence(receipt,folder,spoken,hashes,file_hash(bound))
+    return valid
 
 def audit_stage(
     folder:Path, *,
@@ -87,7 +76,7 @@ def audit_stage(
     except (OSError,ValueError,RuntimeError,KeyError):
         pass
     audio_ok=manifest_ok
-    audio_screen_ok=_acoustic(acoustic_report,folder,audio_hash)
+    audio_screen_ok=_acoustic(acoustic_report,folder,audio_hash,spoken)
     listening_ok=_listening(listening_receipt,audio_hash)
     video=folder/"slides.mp4"
     video_hash=file_hash(video) if video.is_file() else ""
