@@ -99,6 +99,18 @@ def normalize_scientific_speech(text: str) -> str:
     out = re.sub(r"([A-Za-z0-9)]+)\s*\^\s*3\b", r"\1 cubed", out)
     out = out.replace("²", " squared ").replace("³", " cubed ")
     out = re.sub(r"\s+([,.;:!?])", r"\1", out)
+    # A mathematical point such as "at c. Next..." must be spoken as the
+    # letter C, not expanded by a TTS abbreviation model to "circa".
+    # Keep the punctuation and the original narration unchanged: this
+    # conversion is for synthesis and its content-addressed cache key only.
+    # Require a mathematical cue and a sentence boundary to preserve
+    # historical dates ("c. 1900") and initials ("C. Smith").
+    out = re.sub(
+        r"(?P<prefix>\b(?i:at|point|approaches|of|equals|variable|constant|coefficient)\s+)"
+        r"c\.(?=\s+[A-Z]|$)",
+        lambda match: match["prefix"] + "see.",
+        out,
+    )
     return re.sub(r"\s+", " ", out).strip()
 
 
