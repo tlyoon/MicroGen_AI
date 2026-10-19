@@ -27,6 +27,7 @@ circa limit limits theorem intermediate value derivative derivatives
 continuous continuity discontinuity integral integrals minus plus
 positive negative numerator denominator fraction infinite infinity
 equals equal zero one two three four five six seven eight nine ten
+not never no greater less negative positive above below minus multiplied divided
 """.split())
 
 class AcousticQAError(RuntimeError):
