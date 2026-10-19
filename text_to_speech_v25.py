@@ -78,6 +78,17 @@ def normalize_scientific_speech(text: str) -> str:
     out = str(text or "")
     for source, target in replacements:
         out = out.replace(source, target)
+    # Stable symbol names are safe to normalize without guessing their role.
+    # Ambiguous expression structure is handled by the offline preflight.
+    math_symbols = (
+        ("α", " alpha "), ("β", " beta "), ("γ", " gamma "),
+        ("θ", " theta "), ("λ", " lambda "), ("μ", " mu "),
+        ("ρ", " rho "), ("φ", " phi "), ("ω", " omega "),
+        ("∞", " infinity "), ("≤", " less than or equal to "),
+        ("≥", " greater than or equal to "), ("≠", " not equal to "),
+    )
+    for symbol, spoken_name in math_symbols:
+        out = out.replace(symbol, spoken_name)
     unit_patterns = (
         (r"\bkg\s*/\s*m(?:\^?3|³)\b", " kilograms per cubic metre "),
         (r"\bkg\s+m(?:\^\s*-?3|⁻³)\b", " kilograms per cubic metre "),
@@ -173,7 +184,9 @@ def _sapi_synthesize(text: str, output: Path) -> str:
 
 
 def synthesize(text: str, output: Path) -> str:
+    from microgen_pronunciation import require_safe_speech
     spoken = normalize_scientific_speech(text)
+    require_safe_speech(text, spoken)
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         return _google_synthesize(spoken, output)
@@ -226,6 +239,13 @@ def main() -> None:
     items = _speech_items()
     if not items:
         raise RuntimeError("No slide narration found.")
+    from microgen_pronunciation import audit_slide_items, PronunciationPreflightError
+    issues = audit_slide_items(items, normalize_scientific_speech)
+    if issues:
+        raise PronunciationPreflightError(
+            f"Refusing to synthesize: {len(issues)} unreviewed mathematical "
+            f"pronunciation issue(s): {issues[:5]}"
+        )
 
     from microgen_quality import sha256, check_wavs
     cache = Path(".microgen_tts_cache")
