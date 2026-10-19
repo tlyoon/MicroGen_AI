@@ -110,6 +110,8 @@ def audit_with_recognizer(
     if len(recognition_models) != 2 or not all(recognition_models) or recognition_models[0] == recognition_models[1]:
         raise ValueError("Two distinct audio model identities must be recorded")
     from microgen_tts_provenance import verify_manifest
+    from microgen_tts_risk_register import find_pronunciation_risks
+    from dataclasses import asdict
     folder = Path(folder)
     expected = [normalize(s) for s in raw_texts]
     verify_manifest(folder, expected)
@@ -158,8 +160,14 @@ def audit_with_recognizer(
                     status = "REVIEW_REQUIRED_PRONUNCIATION_RISK"
                 else:
                     status = "ASR_SCREEN_PASS_LISTENING_REQUIRED"
+        source_risks=[asdict(x) for x in find_pronunciation_risks(raw_texts[n-1],text)]
+        # Two script-blind recognizers may both silently repair an actually
+        # mispronounced variable; consensus never cancels source-derived risk.
+        if status == "ASR_SCREEN_PASS_LISTENING_REQUIRED" and source_risks:
+            status = "REVIEW_REQUIRED_SOURCE_PRONUNCIATION_RISK"
         rows.append({
-            "slide": n, "audio_sha256": sha256(wav),
+            "slide": n, "source_pronunciation_risks":source_risks,
+            "audio_sha256": sha256(wav),
             "expected_spoken_sha256": hashlib.sha256(text.encode("utf8")).hexdigest(),
             "transcripts": attempts,
             "assessment": status,
@@ -172,6 +180,7 @@ def audit_with_recognizer(
         "slide_count": len(rows),
         "slides": rows,
         "review_required_slides": [r["slide"] for r in rows if r["assessment"] != "ASR_SCREEN_PASS_LISTENING_REQUIRED"],
+        "risk_review_slides": [r["slide"] for r in rows if r["source_pronunciation_risks"]],
         "unavailable_recognizer_passes": sorted(unavailable_engines),
         # Even a clean ASR screen is not a verified pronunciation or a release pass.
         "human_listening_approved": False,
@@ -195,8 +204,9 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     prompt = (
         "Transcribe the exact audible words in this English university lecture "
         "recording. Do not infer or fix what the speaker *should* have said. "
-        "Preserve actually spoken word mistakes such as 'circa' versus "
-        "'see'. Return only words actually heard, no explanations or timecodes. "
+        "Preserve odd or unexpected words as actually spoken. Do not "
+        "substitute conventional mathematical terminology for what is heard. "
+        "Return only words actually heard, no explanations or timecodes. "
         "When unintelligible insert [unclear]."
     )
     def transcribe(wav: Path) -> str:
