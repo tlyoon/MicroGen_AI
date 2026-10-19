@@ -321,7 +321,8 @@ def main() -> None:
     check_wavs(Path.cwd(), len(items))
     manifest = write_manifest(Path.cwd(), records, normalized_inputs)
     verify_manifest(Path.cwd(), normalized_inputs)
-    print(f"Success: verified {len(items)} audio files with voice-bound {manifest}.")
+    print(f"Success: technically verified {len(items)} audio files with voice-bound {manifest}.")
+    print("[QA] Acoustic transcript screening and independent listening remain REQUIRED before publication.")
 
 
 if __name__ == "__main__":
