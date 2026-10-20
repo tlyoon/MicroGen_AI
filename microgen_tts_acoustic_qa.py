@@ -227,31 +227,24 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
         content = wav.read_bytes()
         if len(content) > 18_000_000:
             raise AcousticQAError("Audio too large to transcribe inline")
-        last_exc = None
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=[types.Part.from_bytes(data=content,mime_type="audio/wav"),
-                              prompt],
-                    config=types.GenerateContentConfig(
-                        temperature=0, max_output_tokens=2400,
-                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                    ),
-                )
-                spoken = (response.text or "").strip()
-                if not spoken:
-                    raise AcousticQAError("Audio model returned empty transcription")
-                return spoken
-            except Exception as exc:
-                last_exc = exc
-                error_text=str(exc).upper()
-                permanent_quota = "QUOTA EXCEEDED" in error_text or "LIMIT: 0" in error_text
-                temporary = "503" in error_text or "UNAVAILABLE" in error_text
-                if attempt == 2 or permanent_quota or not temporary:
-                    break
-                time.sleep(1 + attempt * 2)
-        raise AcousticQAError(f"Independent audio transcription unavailable ({type(last_exc).__name__})")
+        from microgen_tts_service_recovery import (
+            run_bounded_recognition, AudioRecognitionUnavailable,
+        )
+        def single_attempt():
+            response = client.models.generate_content(
+                model=model,
+                contents=[types.Part.from_bytes(data=content,mime_type="audio/wav"),
+                          prompt],
+                config=types.GenerateContentConfig(
+                    temperature=0, max_output_tokens=2400,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                ),
+            )
+            return (response.text or "").strip()
+        try:
+            return run_bounded_recognition(single_attempt,time.sleep,max_attempts=3)
+        except AudioRecognitionUnavailable:
+            raise AcousticQAError("Independent audio transcription unavailable") from None
     return transcribe
 
 
