@@ -61,20 +61,31 @@ class ReleaseAuditTests(unittest.TestCase):
             p=Path(td);digest=setup(p)
             video_sha=a.file_hash(p/"slides.mp4")
             acoustic=acoustic_fixture(p,digest)
-            listening={"slides":[{"slide":1,"wav_sha256":digest,
-                                  "reviewer":"external human","approved":True}]}
-            signed={"video_sha256":video_sha,"approved":True,"reviewer":"external human"}
+            from microgen_tts_review_trust import sign_review_receipt
+            trust={role:{"test-key":(role.encode()*40)[:40]}
+                   for role in ("listening","academic","figures","highlights")}
+            def signed(role,**extra):
+                return sign_review_receipt({"role":role,"key_id":"test-key",
+                    "reviewed_at":"2026-10-20T09:00:00+08:00",
+                    "reviewer":"external human","approved":True,**extra},
+                    trust[role]["test-key"],role)
+            listening=signed("listening",slides=[{"slide":1,"wav_sha256":digest,
+                                                "reviewer":"external human","approved":True}])
+            academic=signed("academic",video_sha256=video_sha)
+            figures=signed("figures",video_sha256=video_sha)
+            highlight=signed("highlights",video_sha256=video_sha)
             with patch.object(a,"check_video",return_value={"seconds":1.5}):
                 result=a.audit_stage(p,acoustic_report=acoustic,listening_receipt=listening,
-                     academic_receipt=signed,figure_receipt=signed,highlight_receipt=signed)
+                     academic_receipt=academic,figure_receipt=figures,
+                     highlight_receipt=highlight,reviewer_trust=trust)
             self.assertTrue(result["ready_for_separate_promotion"])
             self.assertFalse(result["publication_performed"])
             listening["slides"][0]["wav_sha256"]="tampered"
             with patch.object(a,"check_video",return_value={"seconds":1.5}):
                 self.assertFalse(a.audit_stage(p,acoustic_report=acoustic,
-                    listening_receipt=listening,academic_receipt=signed,
-                    figure_receipt=signed,highlight_receipt=signed
-                    )["ready_for_separate_promotion"])
+                    listening_receipt=listening,academic_receipt=academic,
+                    figure_receipt=figures,highlight_receipt=highlight,
+                    reviewer_trust=trust)["ready_for_separate_promotion"])
     def test_at_or_above_600_seconds_never_passes(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);setup(p)
