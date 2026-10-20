@@ -15,13 +15,16 @@ from typing import Callable
 from microgen_tts_acoustic_qa import audit_with_recognizer,gemini_audio_recognizer
 from microgen_tts_quality_campaign import run_qa_campaign
 from microgen_tts_release_audit import audit_stage
+from microgen_tts_recognition_budget import plan_recognition
 from text_to_speech_v25 import normalize_scientific_speech
 
 class AutonomousCampaignError(ValueError):
     pass
 
 
-def preflight_before_paid_recognition(stage:Path,new_output:Path)->dict:
+def preflight_before_paid_recognition(stage:Path,new_output:Path,*,
+                                     max_audio_seconds:float=1200.,
+                                     max_requests:int=120)->dict:
     """Require every non-ASR technical gate BEFORE transcribing any WAV."""
     stage=Path(stage).resolve(strict=True)
     new_output=Path(new_output).resolve(strict=False)
@@ -34,7 +37,11 @@ def preflight_before_paid_recognition(stage:Path,new_output:Path)->dict:
     if blockers:
         raise AutonomousCampaignError(
             "Prepaid technical preflight failed: "+", ".join(blockers))
+    budget=plan_recognition(stage,report["slide_count"],
+                            max_audio_seconds=max_audio_seconds,
+                            max_requests=max_requests)
     return {
+        "resource_budget":budget,
         "slide_count":report["slide_count"],
         "video_duration_seconds":report["video_duration_seconds"],
         "verified_wav_sha256":report["wav_sha256"],
@@ -48,7 +55,8 @@ def run_autonomous_campaign(
     stage:Path, new_output:Path,
     primary:Callable[[Path],str],
     secondary:Callable[[Path],str],
-    *, models:tuple[str,str]=("primary-recognizer","secondary-recognizer")
+    *, models:tuple[str,str]=("primary-recognizer","secondary-recognizer"),
+    max_audio_seconds:float=1200.,max_requests:int=120,
 )->dict:
     """Complete independent acoustic screen and immutable review packet.
 
@@ -60,7 +68,9 @@ def run_autonomous_campaign(
     if (new_output==stage or stage in new_output.parents or
         new_output in stage.parents or new_output.exists() or new_output.is_symlink()):
         raise AutonomousCampaignError("Fresh external output folder required")
-    preflight=preflight_before_paid_recognition(stage,new_output)
+    preflight=preflight_before_paid_recognition(
+        stage,new_output,max_audio_seconds=max_audio_seconds,
+        max_requests=max_requests)
     data=json.loads((stage/"script_tts.json").read_text(encoding="utf8"))
     slides=data.get("slides",[])
     if (not slides or
@@ -96,6 +106,8 @@ def main(argv=None):
     parser.add_argument("new_external_qa_folder",type=Path)
     parser.add_argument("--primary-model",default="gemini-3.5-flash")
     parser.add_argument("--secondary-model",default="gemini-3.8-flash")
+    parser.add_argument("--max-input-audio-seconds",type=float,default=1200.)
+    parser.add_argument("--max-recognition-requests",type=int,default=120)
     parser.add_argument("--offline",action="store_true",
                         help="No network; produces blocked UNKNOWN diagnostics, not fake passes")
     args=parser.parse_args(argv)
@@ -106,7 +118,9 @@ def main(argv=None):
     if (output==stage or stage in output.parents or output in stage.parents
         or output.exists() or output.is_symlink()):
         parser.error("Output must be a new directory outside the lecture source")
-    preflight_before_paid_recognition(stage,output)
+    preflight_before_paid_recognition(stage,output,
+        max_audio_seconds=args.max_input_audio_seconds,
+        max_requests=args.max_recognition_requests)
     if args.offline:
         def unavailable(_):
             raise AutonomousCampaignError("Offline mode has no audio recognizer")
@@ -122,7 +136,9 @@ def main(argv=None):
         first=gemini_audio_recognizer(keys[0],model=args.primary_model)
         second=gemini_audio_recognizer(keys[0],model=args.secondary_model)
     result=run_autonomous_campaign(stage,output,first,second,
-              models=(args.primary_model,args.secondary_model))
+              models=(args.primary_model,args.secondary_model),
+              max_audio_seconds=args.max_input_audio_seconds,
+              max_requests=args.max_recognition_requests)
     print(json.dumps(result,indent=2,ensure_ascii=False))
     return 0 if result["ready_for_separate_promotion"] else 2
 
