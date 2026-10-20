@@ -20,13 +20,18 @@ from text_to_speech_v25 import normalize_scientific_speech as normalize
 def file_hash(path:Path)->str:
     return digest_file(path)
 
-def _approval(receipt:dict|None,video_hash:str)->bool:
-    return (isinstance(receipt,dict) and receipt.get("approved") is True
-            and receipt.get("video_sha256")==video_hash and
-            isinstance(receipt.get("reviewer"),str) and bool(receipt["reviewer"].strip()))
+def _approval(receipt:dict|None,video_hash:str,
+              role:str="academic",trust:dict|None=None)->bool:
+    from microgen_tts_review_trust import verify_review_receipt
+    return (isinstance(receipt,dict) and
+            receipt.get("video_sha256")==video_hash and
+            bool(video_hash) and verify_review_receipt(receipt,role,trust))
 
-def _listening(receipt:dict|None,hashes:list[str])->bool:
-    if not isinstance(receipt,dict) or not isinstance(receipt.get("slides"),list):
+def _listening(receipt:dict|None,hashes:list[str],trust:dict|None=None)->bool:
+    from microgen_tts_review_trust import verify_review_receipt
+    if not verify_review_receipt(receipt,"listening",trust):
+        return False
+    if not isinstance(receipt.get("slides"),list):
         return False
     approved=receipt["slides"]
     if len(approved)!=len(hashes):
@@ -51,7 +56,7 @@ def audit_stage(
     folder:Path, *,
     acoustic_report:dict|None=None, listening_receipt:dict|None=None,
     academic_receipt:dict|None=None, figure_receipt:dict|None=None,
-    highlight_receipt:dict|None=None,
+    highlight_receipt:dict|None=None, reviewer_trust:dict|None=None,
 ) -> dict:
     """No writes; returns fail-closed check matrix and isolated follow-up."""
     folder=Path(folder)
@@ -77,7 +82,7 @@ def audit_stage(
         pass
     audio_ok=manifest_ok
     audio_screen_ok=_acoustic(acoustic_report,folder,audio_hash,spoken)
-    listening_ok=_listening(listening_receipt,audio_hash)
+    listening_ok=_listening(listening_receipt,audio_hash,reviewer_trust)
     video=folder/"slides.mp4"
     video_hash=file_hash(video) if video.is_file() else ""
     video_seconds=None
@@ -89,9 +94,9 @@ def audit_stage(
             video_ok=0<video_seconds<600
         except (OSError,ValueError,RuntimeError):
             video_ok=False
-    academic_ok=_approval(academic_receipt,video_hash) if video_ok else False
-    figures_ok=_approval(figure_receipt,video_hash) if video_ok else False
-    highlights_ok=_approval(highlight_receipt,video_hash) if video_ok else False
+    academic_ok=_approval(academic_receipt,video_hash,"academic",reviewer_trust) if video_ok else False
+    figures_ok=_approval(figure_receipt,video_hash,"figures",reviewer_trust) if video_ok else False
+    highlights_ok=_approval(highlight_receipt,video_hash,"highlights",reviewer_trust) if video_ok else False
     risks=build_risk_register(slides,normalize,seconds,wav_sha256=audio_hash)
     checks={
         "pronunciation_text_preflight":preflight,
@@ -130,14 +135,28 @@ def main(argv=None)->int:
     parser.add_argument("--figures",type=Path)
     parser.add_argument("--highlights",type=Path)
     parser.add_argument("--new-report",type=Path)
+    parser.add_argument("--review-trust-root",type=Path,
+                        help="External role-key mapping file; NEVER under the lecture folder")
     args=parser.parse_args(argv)
+    trusted=None
+    if args.review_trust_root:
+        root=args.review_trust_root.resolve()
+        lesson=args.stage.resolve()
+        if root==lesson or lesson in root.parents:
+            parser.error("Reviewer trust keys must not be stored in lesson stage")
+        values=json.loads(root.read_text(encoding="utf8"))
+        from microgen_tts_review_trust import ROLES
+        if not isinstance(values,dict) or set(values)-ROLES:
+            parser.error("Unexpected reviewer trust-root roles")
+        trusted={role:{key_id:bytes.fromhex(hex_value) for key_id,hex_value in keys.items()}
+                 for role,keys in values.items()}
     def read(path):
         return json.loads(path.read_text(encoding="utf8")) if path else None
     audit=audit_stage(args.stage,acoustic_report=read(args.acoustic),
         listening_receipt=read(args.listening),
         academic_receipt=read(args.academic),
         figure_receipt=read(args.figures),
-        highlight_receipt=read(args.highlights))
+        highlight_receipt=read(args.highlights),reviewer_trust=trusted)
     out=json.dumps(audit,ensure_ascii=False,indent=2)
     if args.new_report:
         if args.new_report.exists() or args.new_report.is_symlink():
