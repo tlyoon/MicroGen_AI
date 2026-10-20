@@ -16,6 +16,7 @@ from microgen_tts_acoustic_qa import audit_with_recognizer,gemini_audio_recogniz
 from microgen_tts_quality_campaign import run_qa_campaign
 from microgen_tts_release_audit import audit_stage
 from microgen_tts_recognition_budget import plan_recognition
+from microgen_tts_model_calibration import check_model_calibration
 from text_to_speech_v25 import normalize_scientific_speech
 
 class AutonomousCampaignError(ValueError):
@@ -57,6 +58,8 @@ def run_autonomous_campaign(
     secondary:Callable[[Path],str],
     *, models:tuple[str,str]=("primary-recognizer","secondary-recognizer"),
     max_audio_seconds:float=1200.,max_requests:int=120,
+    calibration_bundle:tuple[dict,dict,Path]|None=None,
+    require_calibration:bool=False,
 )->dict:
     """Complete independent acoustic screen and immutable review packet.
 
@@ -71,6 +74,17 @@ def run_autonomous_campaign(
     preflight=preflight_before_paid_recognition(
         stage,new_output,max_audio_seconds=max_audio_seconds,
         max_requests=max_requests)
+    if require_calibration and calibration_bundle is None:
+        raise AutonomousCampaignError("Strict model calibration required before paid recognition")
+    calibration_status="MODEL_CALIBRATION_NOT_PROVIDED"
+    calibration=None
+    if calibration_bundle is not None:
+        manifest,report,benchmark_wavs=calibration_bundle
+        calibration=check_model_calibration(
+            manifest,report,Path(benchmark_wavs),expected_models=models)
+        if not calibration["qualified_for_tested_risk_family"]:
+            raise AutonomousCampaignError("Model pair failed known Y-pronunciation calibration")
+        calibration_status="QUALIFIED_FOR_TESTED_Y_PRONUNCIATION_ONLY"
     data=json.loads((stage/"script_tts.json").read_text(encoding="utf8"))
     slides=data.get("slides",[])
     if (not slides or
@@ -84,6 +98,8 @@ def run_autonomous_campaign(
     result={
         "schema_version":1,
         "prepaid_preflight":preflight,
+        "model_calibration_status":calibration_status,
+        "calibration_evidence":calibration,
         "qa_directory":str(new_output),
         "slide_count":campaign["slide_count"],
         "models":list(models),
@@ -108,6 +124,11 @@ def main(argv=None):
     parser.add_argument("--secondary-model",default="gemini-3.8-flash")
     parser.add_argument("--max-input-audio-seconds",type=float,default=1200.)
     parser.add_argument("--max-recognition-requests",type=int,default=120)
+    parser.add_argument("--require-calibration",action="store_true",
+                        help="Strict machine calibration against real labeled audio; no manual gate")
+    parser.add_argument("--calibration-manifest",type=Path)
+    parser.add_argument("--calibration-report",type=Path)
+    parser.add_argument("--calibration-audio",type=Path)
     parser.add_argument("--offline",action="store_true",
                         help="No network; produces blocked UNKNOWN diagnostics, not fake passes")
     args=parser.parse_args(argv)
@@ -121,6 +142,19 @@ def main(argv=None):
     preflight_before_paid_recognition(stage,output,
         max_audio_seconds=args.max_input_audio_seconds,
         max_requests=args.max_recognition_requests)
+    calibration_args=(args.calibration_manifest,args.calibration_report,args.calibration_audio)
+    if any(x is not None for x in calibration_args) and not all(x is not None for x in calibration_args):
+        parser.error("Calibration manifest, report, and audio folder must be supplied together")
+    if args.require_calibration and not all(x is not None for x in calibration_args):
+        parser.error("Strict calibration requires all three calibration inputs")
+    calibration_bundle=(json.loads(args.calibration_manifest.read_text(encoding="utf8")),
+                        json.loads(args.calibration_report.read_text(encoding="utf8")),
+                        args.calibration_audio) if all(x is not None for x in calibration_args) else None
+    if calibration_bundle is not None:
+        verdict=check_model_calibration(*calibration_bundle,
+                       expected_models=(args.primary_model,args.secondary_model))
+        if not verdict["qualified_for_tested_risk_family"]:
+            raise AutonomousCampaignError("Model pair failed known Y-pronunciation calibration")
     if args.offline:
         def unavailable(_):
             raise AutonomousCampaignError("Offline mode has no audio recognizer")
@@ -138,7 +172,9 @@ def main(argv=None):
     result=run_autonomous_campaign(stage,output,first,second,
               models=(args.primary_model,args.secondary_model),
               max_audio_seconds=args.max_input_audio_seconds,
-              max_requests=args.max_recognition_requests)
+              max_requests=args.max_recognition_requests,
+              calibration_bundle=calibration_bundle,
+              require_calibration=args.require_calibration)
     print(json.dumps(result,indent=2,ensure_ascii=False))
     return 0 if result["ready_for_separate_promotion"] else 2
 
