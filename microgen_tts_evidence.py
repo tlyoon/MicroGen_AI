@@ -18,8 +18,32 @@ def verify_acoustic_evidence(report:dict|None, stage:Path, spoken:list[str],
     problems=[]
     if not isinstance(report,dict):
         return False,["acoustic_receipt_missing"]
-    if report.get("schema_version")!=1:
+    version=report.get("schema_version")
+    if version not in (1,2):
         problems.append("acoustic_schema_invalid")
+    # v2 reports must prove every source byte still matches the bytes read
+    # during speech recognition; v1 legacy evidence remains subject to
+    # separate WAV and voice hashes but cannot assert v2 snapshot assurance.
+    if version==2:
+        source=Path(stage)
+        expected_names={".microgen_tts_provenance.json"} | {
+            f"slide{i}.wav" for i in range(1,len(wav_hashes)+1)}
+        if (source/"script_tts.json").is_file():
+            expected_names.add("script_tts.json")
+        snapshots=report.get("input_snapshot_sha256")
+        if not isinstance(snapshots,dict) or set(snapshots)!=expected_names:
+            problems.append("acoustic_source_snapshot_missing_or_extra")
+        else:
+            for name in sorted(expected_names):
+                value=snapshots[name]
+                try:
+                    with (source/name).open("rb") as handle:
+                        digest=hashlib.sha256(handle.read()).hexdigest()
+                except OSError:
+                    problems.append(f"acoustic_source_snapshot_unreadable:{name}")
+                    continue
+                if value!=digest:
+                    problems.append(f"acoustic_source_snapshot_drift:{name}")
     if report.get("slide_count")!=len(wav_hashes) or len(spoken)!=len(wav_hashes):
         problems.append("slide_count_mismatch")
     if report.get("voice_provenance_sha256")!=voice_manifest_hash:
