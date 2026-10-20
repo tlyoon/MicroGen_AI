@@ -24,6 +24,43 @@ class BoundedRepairTests(unittest.TestCase):
             [{"slide":1,"tts_text":raw}],normalize,[1.0],
             wav_sha256=[hashlib.sha256((root/"slide1.wav").read_bytes()).hexdigest()])
         return report
+    def test_uncreated_child_output_is_rejected_without_touching_lecture(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);stage=p/"stage";regis=self.stage(stage)
+            before=(stage/"slide1.wav").read_bytes()
+            for output in (stage/"scratch_candidates",
+                           stage/"subfolder"/"scratch_candidates",
+                           stage/"."/"scratch"):
+                with self.subTest(output=str(output)):
+                    with self.assertRaisesRegex(repair.RepairError,
+                                                "outside the source tree"):
+                        repair.stage_repair(stage,regis,1,output,
+                                            lambda *args: self.fail(
+                                                "Synthesizer must not run"),normalize)
+                    self.assertFalse(output.exists())
+            self.assertEqual((stage/"slide1.wav").read_bytes(),before)
+
+    def test_parent_of_lecture_not_usable_as_repair_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);stage=p/"stage";regis=self.stage(stage)
+            with self.assertRaisesRegex(repair.RepairError,"outside the source tree"):
+                repair.stage_repair(stage,regis,1,p,
+                                    lambda *args: self.fail("Synthesis must not run"),
+                                    normalize)
+
+    def test_symlink_to_source_tree_does_not_bypass_boundary(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);stage=p/"stage";regis=self.stage(stage)
+            alias=p/"alias"
+            try:
+                alias.symlink_to(stage,target_is_directory=True)
+            except (OSError,NotImplementedError) as exc:
+                self.skipTest(f"Symlink creation not permitted: {exc}")
+            with self.assertRaisesRegex(repair.RepairError,"outside the source tree"):
+                repair.stage_repair(stage,regis,1,alias/"candidate",
+                                    lambda *args: self.fail("Synthesis must not run"),
+                                    normalize)
+
     def test_two_defective_then_correct_diagnostics_are_bounded(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);stage=p/"stage";regis=self.stage(stage)

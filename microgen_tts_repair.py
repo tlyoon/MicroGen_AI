@@ -45,7 +45,14 @@ def stage_repair(
     The gate must analyze actual candidate WAVs. A 'clear' diagnostic is NOT
     a human listening approval and never authorizes production promotion.
     """
-    stage=Path(stage);new_stage=Path(new_stage)
+    # Canonicalize before the first output operation. A direct API caller
+    # must not place candidate WAVs anywhere inside the source lesson, even
+    # if the child folder has not been created yet (or is reached via alias).
+    stage=Path(stage).resolve(strict=True)
+    new_stage=Path(new_stage).resolve(strict=False)
+    if (new_stage==stage or stage in new_stage.parents or
+            new_stage in stage.parents):
+        raise RepairError("Repair output must be isolated outside the source tree")
     if max_attempts not in (1,2,3):
         raise RepairError("Attempt cap must be 1 to 3")
     if not isinstance(slide,int) or slide not in authorized_slides(register):
