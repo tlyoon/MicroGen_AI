@@ -187,7 +187,7 @@ def audit_with_recognizer(
     if _input_snapshot(folder,len(expected))!=input_snapshot:
         raise AcousticQAError("Acoustic source bytes changed during recognition; discard all transcripts")
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "input_snapshot_sha256":input_snapshot,
         "recognition_models": list(recognition_models),
         "voice_provenance_sha256": sha256(folder/".microgen_tts_provenance.json"),
