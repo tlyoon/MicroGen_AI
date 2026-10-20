@@ -1,8 +1,9 @@
 """Conservative, independent acoustic TTS QA for MicroGen_AI.
 
-Independent recognition is a diagnostic signal, not evidence that a word
-is phonetically correct. Every candidate remains unpublishable until
-human listening review is recorded through the existing release workflow.
+Independent recognition is a diagnostic signal, not phonetic proof.
+The autonomous technical QA contract does not require manual approval;
+unresolved technical mismatches and missing evidence remain blockers.
+This tool never publishes teaching outputs or signs human review.
 
 No Whisper or ASR library installation is required. Gemini recognition is
 opt-in, credentials are read from the user's established Microvid config.
@@ -242,14 +243,31 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     return transcribe
 
 
+def require_external_new_receipt(folder: Path, destination: Path) -> Path:
+    """Fail before paid recognition if a receipt could alter source assets."""
+    source=Path(folder).resolve(strict=True)
+    output=Path(destination).resolve(strict=False)
+    if output==source or source in output.parents or output in source.parents:
+        raise AcousticQAError("Acoustic evidence must be outside the source lesson tree")
+    if output.exists() or output.is_symlink():
+        raise AcousticQAError("Refusing to overwrite any prior acoustic evidence")
+    if not output.parent.is_dir():
+        raise AcousticQAError("Acoustic report parent must already exist")
+    return output
+
+
 def main(argv: list[str] | None=None) -> int:
     parser=argparse.ArgumentParser(description="Independent MicroGen TTS acoustic QA")
     parser.add_argument("folder",type=Path,help="Isolated lesson folder with verified WAVs")
+    parser.add_argument("--new-report",type=Path,required=True,
+                        help="New receipt file OUTSIDE the lesson tree; never overwritten")
     parser.add_argument("--primary-model",default="gemini-3.5-flash")
     parser.add_argument("--secondary-model",default="gemini-3.8-flash")
     parser.add_argument("--max-slides",type=int,default=0,
                         help="0 means all; nonzero for diagnostic scope only")
     args=parser.parse_args(argv)
+    # Run all inexpensive destination/preflight checks BEFORE paid model calls.
+    out=require_external_new_receipt(args.folder,args.new_report)
     from dotenv import load_dotenv
     from text_to_speech_v25 import normalize_scientific_speech
     from gemini_keys import get_gemini_api_keys
@@ -270,15 +288,9 @@ def main(argv: list[str] | None=None) -> int:
         normalize_scientific_speech,
         independent_recognizer=gemini_audio_recognizer(keys[0],model=args.secondary_model),
         recognition_models=(args.primary_model,args.secondary_model))
-    out=args.folder/RECEIPT
-    if out.exists():
-        raise AcousticQAError("Refusing to overwrite prior acoustic QA receipt")
-    tmp=args.folder/(RECEIPT+".tmp")
-    try:
-        tmp.write_text(json.dumps(receipt,indent=2,ensure_ascii=False),encoding="utf8")
-        os.replace(tmp,out)
-    finally:
-        tmp.unlink(missing_ok=True)
+    # Atomic exclusive creation, no writes under lecture source directory.
+    with out.open("x",encoding="utf8") as destination:
+        destination.write(json.dumps(receipt,indent=2,ensure_ascii=False)+"\n")
     print(json.dumps({"path":str(out),
                       "review_required_slides":receipt["review_required_slides"],
                       "publishable":False},indent=2))
