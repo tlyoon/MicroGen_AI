@@ -14,10 +14,35 @@ from typing import Callable
 
 from microgen_tts_acoustic_qa import audit_with_recognizer,gemini_audio_recognizer
 from microgen_tts_quality_campaign import run_qa_campaign
+from microgen_tts_release_audit import audit_stage
 from text_to_speech_v25 import normalize_scientific_speech
 
 class AutonomousCampaignError(ValueError):
     pass
+
+
+def preflight_before_paid_recognition(stage:Path,new_output:Path)->dict:
+    """Require every non-ASR technical gate BEFORE transcribing any WAV."""
+    stage=Path(stage).resolve(strict=True)
+    new_output=Path(new_output).resolve(strict=False)
+    if (new_output==stage or stage in new_output.parents or
+        new_output in stage.parents or new_output.exists() or new_output.is_symlink()):
+        raise AutonomousCampaignError("Fresh external output folder required")
+    report=audit_stage(stage)
+    blockers=[name for name in report["technical_blockers"]
+              if name!="independent_acoustic_screen"]
+    if blockers:
+        raise AutonomousCampaignError(
+            "Prepaid technical preflight failed: "+", ".join(blockers))
+    return {
+        "slide_count":report["slide_count"],
+        "video_duration_seconds":report["video_duration_seconds"],
+        "verified_wav_sha256":report["wav_sha256"],
+        "verified_video_sha256":report["video_sha256"],
+        "prepaid_checks_passed":True,
+        "manual_review_required":False,
+    }
+
 
 def run_autonomous_campaign(
     stage:Path, new_output:Path,
@@ -35,6 +60,7 @@ def run_autonomous_campaign(
     if (new_output==stage or stage in new_output.parents or
         new_output in stage.parents or new_output.exists() or new_output.is_symlink()):
         raise AutonomousCampaignError("Fresh external output folder required")
+    preflight=preflight_before_paid_recognition(stage,new_output)
     data=json.loads((stage/"script_tts.json").read_text(encoding="utf8"))
     slides=data.get("slides",[])
     if (not slides or
@@ -47,6 +73,7 @@ def run_autonomous_campaign(
     campaign=run_qa_campaign(stage,new_output,acoustic_report=acoustic)
     result={
         "schema_version":1,
+        "prepaid_preflight":preflight,
         "qa_directory":str(new_output),
         "slide_count":campaign["slide_count"],
         "models":list(models),
@@ -79,6 +106,7 @@ def main(argv=None):
     if (output==stage or stage in output.parents or output in stage.parents
         or output.exists() or output.is_symlink()):
         parser.error("Output must be a new directory outside the lecture source")
+    preflight_before_paid_recognition(stage,output)
     if args.offline:
         def unavailable(_):
             raise AutonomousCampaignError("Offline mode has no audio recognizer")
