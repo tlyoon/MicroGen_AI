@@ -17,6 +17,9 @@ from microgen_tts_quality_campaign import run_qa_campaign
 from microgen_tts_release_audit import audit_stage
 from microgen_tts_recognition_budget import plan_recognition
 from microgen_tts_model_calibration import check_model_calibration
+from microgen_tts_targeted_phoneme import scan_stage
+from microgen_tts_phoneme_evidence import verify_scan
+from microgen_tts_blind_phoneme import gemini_phoneme_judge
 from text_to_speech_v25 import normalize_scientific_speech
 
 class AutonomousCampaignError(ValueError):
@@ -60,6 +63,9 @@ def run_autonomous_campaign(
     max_audio_seconds:float=1200.,max_requests:int=120,
     calibration_bundle:tuple[dict,dict,Path]|None=None,
     require_calibration:bool=False,
+    phonetic_reference:tuple[dict,Path]|None=None,
+    phonetic_judges:tuple[Callable,Callable]|None=None,
+    require_calibrated_phoneme:bool=False,
 )->dict:
     """Complete independent acoustic screen and immutable review packet.
 
@@ -85,6 +91,17 @@ def run_autonomous_campaign(
         if not calibration["qualified_for_tested_risk_family"]:
             raise AutonomousCampaignError("Model pair failed known Y-pronunciation calibration")
         calibration_status="QUALIFIED_FOR_TESTED_Y_PRONUNCIATION_ONLY"
+    if require_calibrated_phoneme and (phonetic_reference is None or phonetic_judges is None):
+        raise AutonomousCampaignError("Strict phonetic check requires real reference WAVs and two judges")
+    phonetic_report=None
+    phonetic_verdict=None
+    if require_calibrated_phoneme:
+        reference,ref_dir=phonetic_reference
+        phonetic_report=scan_stage(stage,reference,ref_dir,
+            phonetic_judges[0],phonetic_judges[1],models=models)
+        phonetic_verdict=verify_scan(stage,reference,ref_dir,phonetic_report)
+        if not phonetic_verdict["technically_cleared"]:
+            raise AutonomousCampaignError("Phonetic calibration or tested Y-value check failed; no full-lecture ASR")
     data=json.loads((stage/"script_tts.json").read_text(encoding="utf8"))
     slides=data.get("slides",[])
     if (not slides or
@@ -95,11 +112,16 @@ def run_autonomous_campaign(
         stage,source,primary,normalize_scientific_speech,
         independent_recognizer=secondary,recognition_models=models)
     campaign=run_qa_campaign(stage,new_output,acoustic_report=acoustic)
+    if phonetic_report is not None:
+        with (new_output/"calibrated_phonetic_evidence.json").open("x",encoding="utf8") as output:
+            output.write(json.dumps(phonetic_report,ensure_ascii=False,indent=2)+"\n")
     result={
         "schema_version":1,
         "prepaid_preflight":preflight,
         "model_calibration_status":calibration_status,
         "calibration_evidence":calibration,
+        "strict_phonetic_probe_enabled":require_calibrated_phoneme,
+        "narrow_phonetic_verification":phonetic_verdict,
         "qa_directory":str(new_output),
         "slide_count":campaign["slide_count"],
         "models":list(models),
@@ -129,6 +151,10 @@ def main(argv=None):
     parser.add_argument("--calibration-manifest",type=Path)
     parser.add_argument("--calibration-report",type=Path)
     parser.add_argument("--calibration-audio",type=Path)
+    parser.add_argument("--require-calibrated-phoneme",action="store_true",
+                        help="Optional machine-only check of tested Y-value sounds")
+    parser.add_argument("--phoneme-manifest",type=Path)
+    parser.add_argument("--phoneme-audio-dir",type=Path)
     parser.add_argument("--offline",action="store_true",
                         help="No network; produces blocked UNKNOWN diagnostics, not fake passes")
     args=parser.parse_args(argv)
@@ -155,10 +181,15 @@ def main(argv=None):
                        expected_models=(args.primary_model,args.secondary_model))
         if not verdict["qualified_for_tested_risk_family"]:
             raise AutonomousCampaignError("Model pair failed known Y-pronunciation calibration")
+    if args.require_calibrated_phoneme and not (args.phoneme_manifest and args.phoneme_audio_dir):
+        parser.error("Strict phonetic scan needs reference manifest and WAV folder")
+    phoneme_reference=(json.loads(args.phoneme_manifest.read_text(encoding="utf8")),
+                        args.phoneme_audio_dir) if args.require_calibrated_phoneme else None
     if args.offline:
         def unavailable(_):
             raise AutonomousCampaignError("Offline mode has no audio recognizer")
         first=second=unavailable
+        phonetic_judges=(lambda *_:"UNKNOWN",lambda *_:"UNKNOWN") if args.require_calibrated_phoneme else None
     else:
         from dotenv import load_dotenv
         from gemini_keys import get_gemini_api_keys
@@ -169,12 +200,17 @@ def main(argv=None):
             raise AutonomousCampaignError("No configured audio recognition credentials")
         first=gemini_audio_recognizer(keys[0],model=args.primary_model)
         second=gemini_audio_recognizer(keys[0],model=args.secondary_model)
+        phonetic_judges=(gemini_phoneme_judge(keys[0],model=args.primary_model),
+                          gemini_phoneme_judge(keys[0],model=args.secondary_model)) if args.require_calibrated_phoneme else None
     result=run_autonomous_campaign(stage,output,first,second,
               models=(args.primary_model,args.secondary_model),
               max_audio_seconds=args.max_input_audio_seconds,
               max_requests=args.max_recognition_requests,
               calibration_bundle=calibration_bundle,
-              require_calibration=args.require_calibration)
+              require_calibration=args.require_calibration,
+              phonetic_reference=phoneme_reference,
+              phonetic_judges=phonetic_judges,
+              require_calibrated_phoneme=args.require_calibrated_phoneme)
     print(json.dumps(result,indent=2,ensure_ascii=False))
     return 0 if result["ready_for_separate_promotion"] else 2
 
