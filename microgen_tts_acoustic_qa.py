@@ -92,6 +92,14 @@ def mismatch_details(expected: str, heard: str) -> dict:
     }
 
 
+def _input_snapshot(folder: Path, count: int) -> dict[str,str]:
+    """Pin the actual WAVs, sidecar (if present), and voice-bound manifest."""
+    names=[".microgen_tts_provenance.json"]+[f"slide{i}.wav" for i in range(1,count+1)]
+    if (folder/"script_tts.json").is_file():
+        names.append("script_tts.json")
+    return {name:sha256(folder/name) for name in names}
+
+
 def audit_with_recognizer(
     folder: Path, raw_texts: list[str],
     recognizer: Callable[[Path], str], normalize: Callable[[str],str],
@@ -117,6 +125,7 @@ def audit_with_recognizer(
     folder = Path(folder)
     expected = [normalize(s) for s in raw_texts]
     verify_manifest(folder, expected)
+    input_snapshot=_input_snapshot(folder,len(expected))
     rows = []
     unavailable_engines: set[int] = set()
     for n, text in enumerate(expected,1):
@@ -175,8 +184,11 @@ def audit_with_recognizer(
             "assessment": status,
             "comparisons": findings,
         })
+    if _input_snapshot(folder,len(expected))!=input_snapshot:
+        raise AcousticQAError("Acoustic source bytes changed during recognition; discard all transcripts")
     return {
         "schema_version": 1,
+        "input_snapshot_sha256":input_snapshot,
         "recognition_models": list(recognition_models),
         "voice_provenance_sha256": sha256(folder/".microgen_tts_provenance.json"),
         "slide_count": len(rows),
