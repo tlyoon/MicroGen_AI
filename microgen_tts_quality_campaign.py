@@ -31,7 +31,8 @@ def _store(path:Path,payload:dict):
     with path.open("x",encoding="utf8") as stream:
         stream.write(json.dumps(payload,indent=2,ensure_ascii=False)+"\n")
 
-def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80)->dict:
+def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
+                    acoustic_report:dict|None=None)->dict:
     stage=Path(stage).resolve()
     new_output=Path(new_output).resolve()
     if new_output.exists() or new_output.is_symlink():
@@ -52,7 +53,7 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80)->dict:
     for i in range(1,len(slides)+1):
         metrics=analyze_pcm(stage/f"slide{i}.wav")
         pcm.append({"slide":i,"wav_sha256":wav_hashes[i-1],**metrics})
-    release=audit_stage(stage)
+    release=audit_stage(stage,acoustic_report=acoustic_report)
     if _snap(stage,len(slides))!=snapshot:
         raise QACampaignError("Source SHA changed during preparation")
     # Only after all read-only validations succeed do we create the new folder.
@@ -62,7 +63,12 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80)->dict:
         "slides":pcm,"failed_slides":[r["slide"] for r in pcm if r["blocking_defects"]],
         "pronunciation_verified":False,
     })
-    _store(new_output/"release_readiness_BLOCKED.json",release)
+    readiness_name=("release_readiness_TECHNICAL_READY.json"
+                    if release["ready_for_separate_promotion"]
+                    else "release_readiness_BLOCKED.json")
+    _store(new_output/readiness_name,release)
+    if acoustic_report is not None:
+        _store(new_output/"input_acoustic_evidence.json",acoustic_report)
     excerpts=render_excerpts(stage,slides,register,
         new_output/"listening_clips",max_excerpts=max_review_clips)
     queue=prepare_listening_queue(stage,clip_manifest=excerpts,
@@ -88,14 +94,17 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80)->dict:
         "manual_approval_is_gate":release["manual_approval_is_gate"],
         "unproven_quality_dimensions":release["unproven_quality_dimensions"],
         "acoustic_recognition_run":False,
+        "acoustic_evidence_imported":acoustic_report is not None,
+        "acoustic_evidence_verified":release["checks"]["independent_acoustic_screen"],
         "human_listening_signed":False,
         "published":False,
         "no_original_files_modified":True,
         "report_files":[
             "source_risks.json","pcm_audio_integrity.json",
-            "release_readiness_BLOCKED.json",
+            readiness_name,
             "listening_clips/review_clip_manifest.json",
             "all_slide_listening_queue.json",
+            *(["input_acoustic_evidence.json"] if acoustic_report is not None else []),
         ],
         "notice":"Complete packet generation is NOT a publication approval or phonetic validation.",
     }
@@ -106,8 +115,12 @@ def main(argv=None)->int:
     p=argparse.ArgumentParser(description="Independent, read-only MicroGen TTS QA packet")
     p.add_argument("stage",type=Path)
     p.add_argument("new_output_dir",type=Path)
+    p.add_argument("--acoustic-report",type=Path,
+                   help="Existing independent acoustic evidence JSON; read only")
     a=p.parse_args(argv)
-    result=run_qa_campaign(a.stage,a.new_output_dir)
+    acoustic=(json.loads(a.acoustic_report.read_text(encoding="utf8"))
+              if a.acoustic_report else None)
+    result=run_qa_campaign(a.stage,a.new_output_dir,acoustic_report=acoustic)
     print(json.dumps({"slides":result["slide_count"],
                       "risk_flags":result["risk_count"],
                       "listening_clips":result["review_clips"],
