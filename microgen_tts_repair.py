@@ -13,6 +13,7 @@ from typing import Callable
 
 from microgen_tts_provenance import digest_file, wav_characteristics
 from microgen_tts_lexicon import verify_spoken_rules
+from microgen_tts_wave_integrity import require_structurally_usable_audio,WaveIntegrityError
 
 class RepairError(RuntimeError):
     pass
@@ -86,13 +87,15 @@ def stage_repair(
             characteristics=wav_characteristics(target)
             if characteristics["duration_seconds"]<=0:
                 raise RepairError("Empty WAV")
+            wave_report=require_structurally_usable_audio(target)
             result=acoustic_gate(target,spoken) if acoustic_gate is not None else "unknown"
             if result not in ("clear","defect","unknown"):
                 raise RepairError("Invalid acoustic diagnostic status")
             attempts.append({
                 "attempt":count, "provider":returned, "voice":voice,
                 "speaking_rate":rate,"wav_sha256":digest_file(target),
-                "wav_properties":characteristics,"acoustic_assessment":result,
+                "wav_properties":characteristics,"pcm_integrity":wave_report,
+                "acoustic_assessment":result,
                 "file":target.name,
             })
             if result in ("clear","unknown"):
@@ -102,7 +105,7 @@ def stage_repair(
                              "error_type":type(exc).__name__,
                              "error":"Candidate rejected; no original file modified"})
             # Provider changes and other integrity failures are not retryable.
-            if isinstance(exc,RepairError):
+            if isinstance(exc,(RepairError,WaveIntegrityError)):
                 break
     final=attempts[-1] if attempts else {}
     report={

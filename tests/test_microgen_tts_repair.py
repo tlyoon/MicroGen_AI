@@ -62,6 +62,24 @@ class BoundedRepairTests(unittest.TestCase):
             outcome=repair.stage_repair(stage,regis,1,p/"new",synth,normalize)
             self.assertEqual(outcome["status"],"REPAIR_UNRESOLVED")
             self.assertEqual(outcome["attempt_count"],1)
+    def test_digital_silence_candidate_is_blocked_before_acoustic_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);stage=p/"stage";regis=self.stage(stage)
+            original=hashlib.sha256((stage/"slide1.wav").read_bytes()).hexdigest()
+            called=[]
+            def synth(text,target):
+                with wave.open(str(target),"wb") as writer:
+                    writer.setnchannels(1);writer.setsampwidth(2)
+                    writer.setframerate(24000);writer.writeframes(b"\0\0"*24000)
+                return "google_cloud_chirp3"
+            outcome=repair.stage_repair(stage,regis,1,p/"candidate",synth,normalize,
+                acoustic_gate=lambda wav,txt:called.append(1) or "clear")
+            self.assertEqual(outcome["status"],"REPAIR_UNRESOLVED")
+            self.assertEqual(outcome["attempt_count"],1)
+            self.assertEqual(called,[])
+            self.assertFalse(outcome["publishable"])
+            self.assertEqual(hashlib.sha256((stage/"slide1.wav").read_bytes()).hexdigest(),
+                             original)
     def test_hash_drift_blocks_without_writing(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);stage=p/"stage";regis=self.stage(stage)
