@@ -1,8 +1,9 @@
-"""Read-only end-to-end TTS / video release-evidence audit.
+"""Read-only automated TTS/video QA with optional human certification.
 
-No publication action. Releases require independent acoustic evidence,
-hash-bound explicit human listening, academic, figure and element-level
-highlight approvals. Existing QA video with only slide transitions fails.
+Mandatory technical evidence fails closed. Human approvals are advisory
+by default under the 2026-10-20 autonomous-development contract. The
+report never publishes, fabricates acoustic proof or certifies unchecked
+academic, figure or element-level highlighting properties.
 """
 from __future__ import annotations
 import argparse
@@ -15,6 +16,8 @@ from microgen_tts_provenance import digest_file, wav_characteristics, verify_man
 from microgen_tts_risk_register import build_risk_register
 from microgen_tts_lexicon import check_lexicon_slides
 from microgen_pronunciation import audit_slide_items
+from microgen_tts_wave_integrity import analyze_pcm, WaveIntegrityError
+from microgen_tts_release_policy import decide_release, AUTONOMOUS, MODES
 from text_to_speech_v25 import normalize_scientific_speech as normalize
 
 def file_hash(path:Path)->str:
@@ -57,6 +60,7 @@ def audit_stage(
     acoustic_report:dict|None=None, listening_receipt:dict|None=None,
     academic_receipt:dict|None=None, figure_receipt:dict|None=None,
     highlight_receipt:dict|None=None, reviewer_trust:dict|None=None,
+    qa_policy:str=AUTONOMOUS,
 ) -> dict:
     """No writes; returns fail-closed check matrix and isolated follow-up."""
     folder=Path(folder)
@@ -81,6 +85,20 @@ def audit_stage(
     except (OSError,ValueError,RuntimeError,KeyError):
         pass
     audio_ok=manifest_ok
+    # Gross PCM defects remain automatic blockers even in no-manual-gate
+    # mode. Provenance alone cannot establish that audible content exists.
+    integrity_rows=[]
+    for number in range(1,len(slides)+1):
+        try:
+            pcm=analyze_pcm(folder/f"slide{number}.wav")
+            integrity_rows.append({"slide":number,
+                                   "blocking_defects":pcm["blocking_defects"],
+                                   "warnings":pcm["warnings"]})
+        except (OSError,ValueError,RuntimeError,WaveIntegrityError):
+            integrity_rows.append({"slide":number,
+                                   "blocking_defects":["wav_integrity_unavailable"],
+                                   "warnings":[]})
+    pcm_ok=all(not x["blocking_defects"] for x in integrity_rows)
     audio_screen_ok=_acoustic(acoustic_report,folder,audio_hash,spoken)
     listening_ok=_listening(listening_receipt,audio_hash,reviewer_trust)
     video=folder/"slides.mp4"
@@ -102,6 +120,7 @@ def audit_stage(
         "pronunciation_text_preflight":preflight,
         "reviewed_lexicon":lexicon,
         "voice_bound_wav_provenance":audio_ok,
+        "wav_pcm_integrity":pcm_ok,
         "independent_acoustic_screen":audio_screen_ok,
         "all_slide_listening_approved":listening_ok,
         "video_duration_and_av_integrity":video_ok,
@@ -109,7 +128,7 @@ def audit_stage(
         "figures_review_approved":figures_ok,
         "element_level_highlights_approved":highlights_ok,
     }
-    blockers=[name for name,value in checks.items() if not value]
+    decision=decide_release(checks,qa_policy)
     return {
         "schema_version":1,
         "slide_count":len(slides),
@@ -120,15 +139,18 @@ def audit_stage(
         "source_risks":risks["risk_count"],
         "risk_review_slides":risks["risk_review_slides"],
         "checks":checks,
-        "blockers":blockers,
-        "ready_for_separate_promotion":not blockers,
-        "publication_performed":False,
-        "note":"Read-only audit; external reviewer receipts must be trusted separately. No automatic Moodle promotion.",
+        "pcm_integrity":integrity_rows,
+        **decision,
+        "note":("Read-only QA. Autonomous technical progression does NOT "
+                "certify phonetic, scholarly or element-level visual quality. "
+                "No Moodle promotion, original-file writes or forged approvals."),
     }
 
 def main(argv=None)->int:
     parser=argparse.ArgumentParser(description="Strict read-only MicroGen lecture release audit")
     parser.add_argument("stage",type=Path)
+    parser.add_argument("--qa-policy",choices=sorted(MODES),default=AUTONOMOUS,
+                        help="Autonomous (default) has no manual approval gate; optional human-certified requires signatures")
     parser.add_argument("--acoustic",type=Path)
     parser.add_argument("--listening",type=Path)
     parser.add_argument("--academic",type=Path)
@@ -156,7 +178,8 @@ def main(argv=None)->int:
         listening_receipt=read(args.listening),
         academic_receipt=read(args.academic),
         figure_receipt=read(args.figures),
-        highlight_receipt=read(args.highlights),reviewer_trust=trusted)
+        highlight_receipt=read(args.highlights),reviewer_trust=trusted,
+        qa_policy=args.qa_policy)
     out=json.dumps(audit,ensure_ascii=False,indent=2)
     if args.new_report:
         if args.new_report.exists() or args.new_report.is_symlink():

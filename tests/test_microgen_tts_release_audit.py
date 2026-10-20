@@ -55,7 +55,10 @@ class ReleaseAuditTests(unittest.TestCase):
             self.assertTrue(result["checks"]["video_duration_and_av_integrity"])
             self.assertFalse(result["ready_for_separate_promotion"])
             self.assertFalse(result["publication_performed"])
-            self.assertIn("all_slide_listening_approved",result["blockers"])
+            self.assertNotIn("all_slide_listening_approved",result["blockers"])
+            self.assertIn("all_slide_listening_approved",result["human_reviews_pending"])
+            self.assertIn("independent_acoustic_screen",result["technical_blockers"])
+            self.assertFalse(result["manual_approval_is_gate"])
     def test_full_explicit_receipt_set_only_enables_separate_promotion(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);digest=setup(p)
@@ -77,7 +80,8 @@ class ReleaseAuditTests(unittest.TestCase):
             with patch.object(a,"check_video",return_value={"seconds":1.5}):
                 result=a.audit_stage(p,acoustic_report=acoustic,listening_receipt=listening,
                      academic_receipt=academic,figure_receipt=figures,
-                     highlight_receipt=highlight,reviewer_trust=trust)
+                     highlight_receipt=highlight,reviewer_trust=trust,
+                     qa_policy="human-certified")
             self.assertTrue(result["ready_for_separate_promotion"])
             self.assertFalse(result["publication_performed"])
             listening["slides"][0]["wav_sha256"]="tampered"
@@ -85,7 +89,50 @@ class ReleaseAuditTests(unittest.TestCase):
                 self.assertFalse(a.audit_stage(p,acoustic_report=acoustic,
                     listening_receipt=listening,academic_receipt=academic,
                     figure_receipt=figures,highlight_receipt=highlight,
-                    reviewer_trust=trust)["ready_for_separate_promotion"])
+                    reviewer_trust=trust,
+                    qa_policy="human-certified")["ready_for_separate_promotion"])
+    def test_autonomous_technical_pass_without_human_reviews(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);digest=setup(p)
+            receipt=acoustic_fixture(p,digest)
+            with patch.object(a,"check_video",return_value={"seconds":1.5}):
+                result=a.audit_stage(p,acoustic_report=receipt)
+            self.assertTrue(result["automated_technical_qa_passed"])
+            self.assertTrue(result["ready_for_separate_promotion"])
+            self.assertEqual(result["blockers"],[])
+            self.assertEqual(len(result["human_reviews_pending"]),4)
+            self.assertFalse(result["human_qa_certified"])
+            self.assertFalse(result["publication_performed"])
+            self.assertEqual(result["release_evidence_class"],
+                             "AUTOMATED_TECHNICAL_QA_ONLY")
+            self.assertIn("element_level_visual_highlight_synchronization",
+                          result["unproven_quality_dimensions"])
+
+    def test_opt_in_human_certification_still_requires_valid_signatures(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);digest=setup(p)
+            receipt=acoustic_fixture(p,digest)
+            with patch.object(a,"check_video",return_value={"seconds":1.5}):
+                result=a.audit_stage(p,acoustic_report=receipt,
+                                      qa_policy="human-certified")
+            self.assertTrue(result["automated_technical_qa_passed"])
+            self.assertFalse(result["ready_for_separate_promotion"])
+            self.assertTrue(result["manual_approval_is_gate"])
+            self.assertIn("academic_review_approved",result["blockers"])
+
+    def test_digital_silence_fails_automated_gate_even_with_valid_hashes(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);setup(p)
+            with wave.open(str(p/"slide1.wav"),"wb") as w:
+                w.setnchannels(1);w.setsampwidth(2);w.setframerate(24000)
+                w.writeframes(b"\x00\x00"*24000)
+            with patch.object(a,"check_video",return_value={"seconds":1.5}):
+                result=a.audit_stage(p)
+            self.assertIn("wav_pcm_integrity",result["blockers"])
+            self.assertFalse(result["ready_for_separate_promotion"])
+            self.assertIn("digital_silence",
+                          result["pcm_integrity"][0]["blocking_defects"])
+
     def test_at_or_above_600_seconds_never_passes(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);setup(p)
