@@ -3,7 +3,7 @@
 This is structural provenance verification, not a pronunciation verifier.
 """
 from __future__ import annotations
-import json,re,wave
+import json,math,re,wave
 from pathlib import Path
 from microgen_tts_pcm_features import file_sha256
 
@@ -38,6 +38,11 @@ def verify_snippets(source:Path,external_dir:Path)->dict:
             if (type(a)!=int or type(b)!=int or a<last or b<=a or b>n or
                 (b-a)/rate>10):
                 raise SnippetIntegrityError("Out-of-order or invalid sample interval")
+            start=item.get("start_seconds");end=item.get("end_seconds")
+            if (type(start) not in (int,float) or type(end) not in (int,float)
+                or not math.isfinite(start) or not math.isfinite(end)
+                or abs(start-a/rate)>0.000001 or abs(end-b/rate)>0.000001):
+                raise SnippetIntegrityError("Timestamp/sample mismatch in clip provenance")
             wav=folder/name
             if wav.is_symlink() or file_sha256(wav)!=item.get("sha256"):
                 raise SnippetIntegrityError("Output clip hash changed")
