@@ -8,7 +8,7 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
     if (not isinstance(records,list) or not records or
         type(max_items)!=int or not 1<=max_items<=10000 or len(records)>max_items):
         raise HoldoutError("Missing or unbounded acoustic corpus")
-    groups={};seen_clips=set();sources={}
+    groups={};seen_clips=set();sources={};pcm_sources={};pcm_count=0
     for row in records:
         if not isinstance(row,dict):raise HoldoutError("Malformed sample row")
         source=row.get("source_wav_sha256");clip=row.get("clip_sha256")
@@ -22,6 +22,13 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
         seen_clips.add(clip)
         if source in sources and sources[source]!=group:
             raise HoldoutError("Same source WAV assigned to different groups")
+        pcm=row.get("source_pcm_sha256")
+        if pcm is not None:
+            if not isinstance(pcm,str) or not SHA.fullmatch(pcm):
+                raise HoldoutError("Invalid decoded PCM fingerprint")
+            if pcm in pcm_sources and pcm_sources[pcm]!=group:
+                raise HoldoutError("Identical decoded PCM in different groups")
+            pcm_sources[pcm]=group;pcm_count+=1
         sources[source]=group;groups.setdefault(group,[]).append(row)
     ordered=sorted(groups,key=lambda x:hashlib.sha256(x.encode("utf8")).hexdigest())
     partitions={"train":[],"holdout":[]}
@@ -40,11 +47,14 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
         "train_clip_sha256":[x["clip_sha256"] for x in partitions["train"]],
         "holdout_clip_sha256":[x["clip_sha256"] for x in partitions["holdout"]],
         "source_sha_overlap":sorted(train_sha&eval_sha),
+        "source_pcm_identity_verified":pcm_count==len(records),
         "grouped_holdout_available":nonleaky,
         "unlabelled_clips":missing_labels,
         "scoring_allowed":False,
         "scoring_blockers":(
             ["INSUFFICIENT_DISTINCT_SOURCE_GROUPS"] if not nonleaky else []
+        )+(
+            ["SOURCE_PCM_FINGERPRINTS_MISSING"] if pcm_count<len(records) else []
         )+(
             ["UNLABELLED_CLIPS_PRESENT"] if missing_labels else
             ["PHONEME_LABEL_EVIDENCE_NOT_INDEPENDENTLY_VERIFIED"]
