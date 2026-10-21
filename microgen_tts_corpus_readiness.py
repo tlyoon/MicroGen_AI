@@ -5,13 +5,14 @@ from pathlib import Path
 from microgen_tts_snippet_integrity import verify_snippets
 from microgen_tts_grouped_holdout import partition_corpus
 from microgen_tts_audio_identity import decoded_pcm_sha256
+from microgen_tts_clip_quality import screen_clip
 
 class CorpusAuditError(ValueError):pass
 def audit_corpus(entries:list[dict],*,max_sources:int=40)->dict:
     if (not isinstance(entries,list) or not entries or
         type(max_sources)!=int or not 1<=max_sources<=100 or len(entries)>max_sources):
         raise CorpusAuditError("Unbounded or missing corpus sources")
-    samples=[];checks=[]
+    samples=[];checks=[];clip_diagnostics=[];low_signal=0
     for entry in entries:
         if not isinstance(entry,dict):raise CorpusAuditError("Invalid source entry")
         source=entry.get("source_wav");directory=entry.get("snippet_directory")
@@ -26,17 +27,28 @@ def audit_corpus(entries:list[dict],*,max_sources:int=40)->dict:
                        "verified_clip_count":report["verified_clip_count"],
                        "pcm_source_integrity_passed":True})
         for item in report["clips"]:
+            quality=screen_clip(Path(directory)/item["filename"])
+            if quality["wav_sha256"]!=item["sha256"]:
+                raise CorpusAuditError("Clip changed between PCM and quality verification")
+            if quality["dataset_readiness_blockers"]:
+                low_signal+=1
+            clip_diagnostics.append({"source_sha256":report["source_sha256"],
+                                     "clip_sha256":item["sha256"],
+                                     "signal_quality":quality})
             samples.append({"source_pcm_sha256":pcm_id,
                             "source_wav_sha256":report["source_sha256"],
                             "clip_sha256":item["sha256"],
                             "source_group_id":group,"phoneme_label":None})
     split=partition_corpus(samples)
-    blockers=split["scoring_blockers"]
+    blockers=list(split["scoring_blockers"])
+    if low_signal:blockers.append("LOW_INFORMATION_AUDIO_CLIPS")
     next_step=("Acquire independent real source/voice groups, not additional slices of this source"
         if not split["grouped_holdout_available"] else
         "Acquire independently verified time-localized phonetic labels without leakage")
     return {"schema_version":1,"sources_verified":checks,"sample_count":len(samples),
-            "grouped_holdout":split,"status":"CORPUS_NOT_READY_FOR_PHONETIC_SCORING",
+            "grouped_holdout":split,"clip_signal_diagnostics":clip_diagnostics,
+            "low_information_clip_count":low_signal,
+            "status":"CORPUS_NOT_READY_FOR_PHONETIC_SCORING",
             "phonetic_accuracy_verified":False,"release_gate_modified":False,
             "manual_approval_required_for_development":False,
             "technical_blockers_to_phonetic_benchmark":blockers,
