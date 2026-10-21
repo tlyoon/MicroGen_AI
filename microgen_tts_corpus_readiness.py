@@ -4,6 +4,7 @@ import argparse,json
 from pathlib import Path
 from microgen_tts_snippet_integrity import verify_snippets
 from microgen_tts_grouped_holdout import partition_corpus
+from microgen_tts_audio_identity import decoded_pcm_sha256
 
 class CorpusAuditError(ValueError):pass
 def audit_corpus(entries:list[dict],*,max_sources:int=40)->dict:
@@ -20,11 +21,13 @@ def audit_corpus(entries:list[dict],*,max_sources:int=40)->dict:
             not isinstance(group,str) or not group.strip()):
             raise CorpusAuditError("Missing source, clip folder or grouping metadata")
         report=verify_snippets(Path(source),Path(directory))
-        checks.append({"source_sha256":report["source_sha256"],
+        pcm_id=decoded_pcm_sha256(Path(source))
+        checks.append({"pcm_sha256":pcm_id,"source_sha256":report["source_sha256"],
                        "verified_clip_count":report["verified_clip_count"],
                        "pcm_source_integrity_passed":True})
         for item in report["clips"]:
-            samples.append({"source_wav_sha256":report["source_sha256"],
+            samples.append({"source_pcm_sha256":pcm_id,
+                            "source_wav_sha256":report["source_sha256"],
                             "clip_sha256":item["sha256"],
                             "source_group_id":group,"phoneme_label":None})
     split=partition_corpus(samples)
