@@ -4,7 +4,7 @@ Snippets are unlabelled excerpts. Only independent reference annotation can
 say that a particular snippet contains the target y/why phoneme.
 """
 from __future__ import annotations
-import hashlib,json,re,wave
+import hashlib,json,os,re,shutil,tempfile,wave
 from pathlib import Path
 from microgen_tts_pcm_features import file_sha256
 
@@ -48,23 +48,34 @@ def extract_clips(source:Path,source_sha256:str,intervals:list[dict],
             payloads.append((i,a,b,data))
     if file_sha256(wav)!=source_sha256:
         raise ClipError("Source changed while extracting snippets")
-    # All preflight checks complete before first disk write.
-    dest.mkdir(exist_ok=False)
-    rows=[]
-    for i,a,b,data in payloads:
-        output=dest/f"candidate_{i:02d}.wav"
-        with output.open("xb") as exclusive:
-            with wave.open(exclusive,"wb") as clip:
-                clip.setnchannels(1);clip.setsampwidth(2);clip.setframerate(rate)
-                clip.writeframes(data)
-        rows.append({"candidate_index":i,"file":output.name,
-                     "sha256":file_sha256(output),
-                     "start_sample":a,"end_sample_exclusive":b,
-                     "start_seconds":round(a/rate,6),"end_seconds":round(b/rate,6),
-                     "phoneme_label":None,"label_status":"UNLABELLED_AUDIO_CANDIDATE"})
-    receipt={"schema_version":1,"original_wav_sha256":source_sha256,
-             "source_sample_rate_hz":rate,"snippets":rows,
-             "can_certify_phoneme":False,"human_gate_required":False}
-    with (dest/"snippet_manifest.json").open("x",encoding="utf8") as f:
-        json.dump(receipt,f,indent=2)
-    return receipt
+    # Build inside a fresh disposable sibling. Publish only once every
+    # external artifact and the original source checksum have been checked.
+    temp=Path(tempfile.mkdtemp(prefix=".microgen-clips-pending-",dir=dest.parent))
+    try:
+        rows=[]
+        for i,a,b,data in payloads:
+            output=temp/f"candidate_{i:02d}.wav"
+            with output.open("xb") as exclusive:
+                with wave.open(exclusive,"wb") as clip:
+                    clip.setnchannels(1);clip.setsampwidth(2);clip.setframerate(rate)
+                    clip.writeframes(data)
+            rows.append({"candidate_index":i,"file":output.name,
+                         "sha256":file_sha256(output),
+                         "start_sample":a,"end_sample_exclusive":b,
+                         "start_seconds":round(a/rate,6),"end_seconds":round(b/rate,6),
+                         "phoneme_label":None,"label_status":"UNLABELLED_AUDIO_CANDIDATE"})
+        receipt={"schema_version":1,"original_wav_sha256":source_sha256,
+                 "source_sample_rate_hz":rate,"snippets":rows,
+                 "can_certify_phoneme":False,"human_gate_required":False}
+        with (temp/"snippet_manifest.json").open("x",encoding="utf8") as manifest:
+            json.dump(receipt,manifest,indent=2)
+        if file_sha256(wav)!=source_sha256:
+            raise ClipError("Original WAV changed while writing staged evidence")
+        if dest.exists() or dest.is_symlink():
+            raise ClipError("Destination appeared during staged extraction")
+        os.rename(temp,dest)
+        return receipt
+    finally:
+        # Clean ONLY the temporary sibling created by this call.
+        if temp.exists():
+            shutil.rmtree(temp)
