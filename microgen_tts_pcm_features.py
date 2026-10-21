@@ -39,6 +39,7 @@ def pcm_envelope(path:Path,*,frame_ms:int=20,max_seconds:float=600)->dict:
             raise AcousticFeatureError("WAV duration exceeds analysis limit")
         points=max(1,round(rate*frame_ms/1000))
         rms=[];zero_fraction=[];clip_fraction=[]
+        zero_crossing_fraction=[];mean_abs_pcm_step=[]
         total_square=0;total_count=0
         while total_count<count:
             raw=sound.readframes(min(points,count-total_count))
@@ -52,6 +53,12 @@ def pcm_envelope(path:Path,*,frame_ms:int=20,max_seconds:float=600)->dict:
             rms.append(round(math.sqrt(squares/n)/32768,8))
             zero_fraction.append(round(sum(abs(x)<50 for x in values)/n,6))
             clip_fraction.append(round(sum(abs(x)>=32767 for x in values)/n,6))
+            crossing=0;step_sum=0
+            for previous,current in zip(values,values[1:]):
+                if previous*current<0:crossing+=1
+                step_sum+=abs(int(current)-previous)
+            zero_crossing_fraction.append(round(crossing/max(1,n-1),8))
+            mean_abs_pcm_step.append(round(step_sum/max(1,n-1)/65535,8))
             total_square+=squares;total_count+=n
         if total_count!=count:
             raise AcousticFeatureError("WAV frames were truncated")
@@ -62,6 +69,8 @@ def pcm_envelope(path:Path,*,frame_ms:int=20,max_seconds:float=600)->dict:
         "frame_ms":frame_ms,"frame_samples":points,
         "frame_rms":rms,"frame_zero_fraction":zero_fraction,
         "frame_clipping_fraction":clip_fraction,
+        "frame_zero_crossing_fraction":zero_crossing_fraction,
+        "frame_mean_abs_step":mean_abs_pcm_step,
         "whole_rms":round(math.sqrt(total_square/total_count)/32768,8),
         "frames":len(rms),"signal_label":"UNCLASSIFIED_ACOUSTIC_MEASUREMENTS",
         "phonetic_correctness_proven":False}
