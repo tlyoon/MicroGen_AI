@@ -16,6 +16,10 @@ def revalidate_inventory(snapshot:dict)->dict:
     if (snapshot.get("candidate_count")!=len(rows) or
         current["candidate_count"]!=len(rows)):
         raise InventoryIntegrityError("Source inventory size drift")
+    if (type(snapshot.get("files_skipped")) is not int or
+        snapshot["files_skipped"]!=current["files_skipped"] or
+        snapshot.get("publication_performed") is not False):
+        raise InventoryIntegrityError("Source discovery summary fields changed")
     previous={x.get("relative_path"):x for x in rows if isinstance(x,dict)}
     latest={x["relative_path"]:x for x in current["real_wav_candidates"]}
     if len(previous)!=len(rows) or set(previous)!=set(latest):
