@@ -35,7 +35,9 @@ def audit_corpus(entries:list[dict],*,max_sources:int=40)->dict:
             clip_diagnostics.append({"source_sha256":report["source_sha256"],
                                      "clip_sha256":item["sha256"],
                                      "signal_quality":quality})
-            samples.append({"source_pcm_sha256":pcm_id,
+            clip_pcm_id=decoded_pcm_sha256(Path(directory)/item["filename"])
+            samples.append({"clip_pcm_sha256":clip_pcm_id,
+                            "source_pcm_sha256":pcm_id,
                             "source_wav_sha256":report["source_sha256"],
                             "clip_sha256":item["sha256"],
                             "source_group_id":group,"phoneme_label":None})

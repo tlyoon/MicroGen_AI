@@ -9,6 +9,7 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
         type(max_items)!=int or not 1<=max_items<=10000 or len(records)>max_items):
         raise HoldoutError("Missing or unbounded acoustic corpus")
     groups={};seen_clips=set();sources={};pcm_sources={};pcm_count=0
+    clip_pcm_sources={};clip_pcm_count=0
     for row in records:
         if not isinstance(row,dict):raise HoldoutError("Malformed sample row")
         source=row.get("source_wav_sha256");clip=row.get("clip_sha256")
@@ -29,6 +30,13 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
             if pcm in pcm_sources and pcm_sources[pcm]!=group:
                 raise HoldoutError("Identical decoded PCM in different groups")
             pcm_sources[pcm]=group;pcm_count+=1
+        clip_pcm=row.get("clip_pcm_sha256")
+        if clip_pcm is not None:
+            if not isinstance(clip_pcm,str) or not SHA.fullmatch(clip_pcm):
+                raise HoldoutError("Invalid decoded clip PCM fingerprint")
+            if clip_pcm in clip_pcm_sources and clip_pcm_sources[clip_pcm]!=group:
+                raise HoldoutError("Identical decoded clip PCM in different groups")
+            clip_pcm_sources[clip_pcm]=group;clip_pcm_count+=1
         sources[source]=group;groups.setdefault(group,[]).append(row)
     ordered=sorted(groups,key=lambda x:hashlib.sha256(x.encode("utf8")).hexdigest())
     partitions={"train":[],"holdout":[]}
@@ -48,6 +56,7 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
         "holdout_clip_sha256":[x["clip_sha256"] for x in partitions["holdout"]],
         "source_sha_overlap":sorted(train_sha&eval_sha),
         "source_pcm_identity_verified":pcm_count==len(records),
+        "clip_pcm_identity_verified":clip_pcm_count==len(records),
         "grouped_holdout_available":nonleaky,
         "unlabelled_clips":missing_labels,
         "scoring_allowed":False,
@@ -55,6 +64,8 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
             ["INSUFFICIENT_DISTINCT_SOURCE_GROUPS"] if not nonleaky else []
         )+(
             ["SOURCE_PCM_FINGERPRINTS_MISSING"] if pcm_count<len(records) else []
+        )+(
+            ["CLIP_PCM_FINGERPRINTS_MISSING"] if clip_pcm_count<len(records) else []
         )+(
             ["UNLABELLED_CLIPS_PRESENT"] if missing_labels else
             ["PHONEME_LABEL_EVIDENCE_NOT_INDEPENDENTLY_VERIFIED"]
