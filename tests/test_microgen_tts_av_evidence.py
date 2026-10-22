@@ -56,3 +56,17 @@ def test_two_audio_windows_and_short_cue_abstention(tmp_path,monkeypatch):
     assert report["spoken_words_verified"] is False
     cue["end_seconds"]=1.15
     assert a.probe_audio_cue(video,cue,duration=4)["status"]=="ABSTAIN_CUE_TOO_SHORT"
+
+def test_audio_source_binding_and_mid_read_tampering(tmp_path,monkeypatch):
+    p=tmp_path/"lesson.mp4";p.write_bytes(b"original")
+    fp=hashlib.sha256(p.read_bytes()).hexdigest()
+    monkeypatch.setattr(a,"probe_audio_cue",lambda *args,**kw:{"energy_evidence_pass":False})
+    assert a.fingerprint_bound_audio_cue(p,fp,{},duration=2)["video_sha256_verified"]
+    p.write_bytes(b"tampered")
+    with pytest.raises(a.AudioEvidenceError):a.fingerprint_bound_audio_cue(p,fp,{},duration=2)
+    p.write_bytes(b"original")
+    def tamper(*args,**kw):
+        p.write_bytes(b"tampered again")
+        return {"energy_evidence_pass":False}
+    monkeypatch.setattr(a,"probe_audio_cue",tamper)
+    with pytest.raises(a.AudioEvidenceError):a.fingerprint_bound_audio_cue(p,fp,{},duration=2)
