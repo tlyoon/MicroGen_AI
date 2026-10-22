@@ -81,3 +81,8 @@ def test_target_pixel_delta_and_full_screen_rejection():
     assert result["outside_mean_rgb_delta"]==0
     with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,b,[0,0,4,4])
     with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,png_of((255,0,0))[:-20],[0,0,2,2])
+
+def test_visual_highlight_rejects_whole_slide_transition():
+    a=png_of((0,0,0)); localized=png_of((0,0,0),True);other=png_of((200,200,200))
+    assert h.judge_localized_highlight(h.measure_frame_change(a,localized,[0,0,2,2]))["localized_visual_change_pass"]
+    assert not h.judge_localized_highlight(h.measure_frame_change(a,other,[0,0,2,2]))["localized_visual_change_pass"]

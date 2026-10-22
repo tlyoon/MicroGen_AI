@@ -173,3 +173,15 @@ def measure_frame_change(before_png, after_png, box):
             "outside_mean_rgb_delta":outside_sum/outside_pixels,
             "target_pixel_count":target_pixels,
             "outside_pixel_count":outside_pixels}
+
+def judge_localized_highlight(differences, *, min_target_delta=12.0, max_outside_delta=4.0):
+    if not isinstance(differences, dict):
+        raise HighlightEvidenceError("Pixel measurements required")
+    target=differences.get("target_mean_rgb_delta");outside=differences.get("outside_mean_rgb_delta")
+    if not _finite_number(target) or not _finite_number(outside) or target<0 or outside<0:
+        raise HighlightEvidenceError("Invalid pixel evidence")
+    if not _finite_number(min_target_delta) or not _finite_number(max_outside_delta) or not (0<min_target_delta<=255 and 0<=max_outside_delta<255):
+        raise HighlightEvidenceError("Unsafe pixel thresholds")
+    passed = target>=min_target_delta and outside<=max_outside_delta and target>=outside+8
+    return {"localized_visual_change_pass":bool(passed),
+            "visual_evidence_only":True,"speech_cue_alignment_certified":False}
