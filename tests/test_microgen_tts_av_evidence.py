@@ -38,3 +38,11 @@ def test_pcm_metrics_silence_tone_and_clipping():
     assert a.pcm_energy(clipped)["clipped_fraction"]==1
     for data in (b"",b"\x01",b"x"*40000):
         with pytest.raises(a.AudioEvidenceError):a.pcm_energy(data)
+
+def test_acoustic_threshold_is_not_a_phonetic_label():
+    for rms,clip,expect in [(0,0,"BELOW_SPEECH_LIKE_ENERGY_THRESHOLD"),
+         (.1,0,"ACOUSTIC_ENERGY_PRESENT"),(.8,.8,"UNRELIABLE_CLIPPED_AUDIO")]:
+        result=a.classify_acoustic_activity({"rms":rms,"peak":rms,"clipped_fraction":clip})
+        assert result["activity_label"]==expect and not result["speech_or_phonetic_identity_verified"]
+    with pytest.raises(a.AudioEvidenceError):
+        a.classify_acoustic_activity({"rms":float("inf"),"peak":0,"clipped_fraction":0})
