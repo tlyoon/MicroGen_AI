@@ -67,3 +67,14 @@ def test_consensus_reports_disagreement_and_defects_without_signoff():
     assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWER_DISAGREEMENT"
     packet["observations"][0]={**e,"verdict":"DEFECT","heard_phrase":"circa"}
     assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWERS_REPORT_DEFECT"
+
+def test_review_observation_must_fit_cue():
+    m=manifest()
+    e=event()
+    p={"schema_version":1,"video_sha256":m["video_sha256"],"observations":[e]}
+    assert not g.verify_review_cue_bounds(p,m,duration_seconds=5)["real_spoken_words_aligned_to_element"]
+    e["start_seconds"]=1.9
+    with pytest.raises(g.AnnotationError):g.verify_review_cue_bounds(p,m,duration_seconds=5)
+    e["start_seconds"]=1.
+    p["video_sha256"]="e"*64
+    with pytest.raises(g.AnnotationError):g.verify_review_cue_bounds(p,m,duration_seconds=5)

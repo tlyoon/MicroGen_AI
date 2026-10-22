@@ -130,3 +130,19 @@ def summarize_review_agreement(packet):
                            "heard_phrases":sorted({r["heard_phrase"] for r in rows}),
                            "phonetic_truth_verified":False,"ready_for_publication":False}
     return results
+
+def verify_review_cue_bounds(packet,manifest,*,duration_seconds):
+    validate_review_packet(packet)
+    validate_manifest(manifest)
+    verify_cue_timing(manifest,duration_seconds)
+    if packet["video_sha256"]!=manifest["video_sha256"]:
+        raise AnnotationError("Reviewer packet and cue manifest refer to different MP4s")
+    cues={e["cue_id"]:e for e in manifest["cues"]}
+    for event in packet["observations"]:
+        cue=cues.get(event["cue_id"])
+        if cue is None:
+            raise AnnotationError("Review references unknown visual highlight cue")
+        if not (cue["start_seconds"]<=event["start_seconds"] and
+                event["start_seconds"]+event["window_seconds"]<=cue["end_seconds"]):
+            raise AnnotationError("Review clip lies outside claimed visual cue interval")
+    return {"clock_claims_compatible":True,"real_spoken_words_aligned_to_element":False}
