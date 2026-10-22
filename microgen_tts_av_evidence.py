@@ -30,3 +30,21 @@ def validate_audio_window(video, start, seconds, *, duration):
         raise AudioEvidenceError("Unsafe or out-of-bounds audio window")
     return {"source":str(path),"start_seconds":float(start),"window_seconds":float(seconds),
             "sample_rate":SAMPLE_RATE,"duration_seconds":float(duration)}
+
+def extract_pcm_window(video,start,seconds,*,duration,timeout=25):
+    validate_audio_window(video,start,seconds,duration=duration)
+    if not _finite(timeout) or not 1<=timeout<=60:
+        raise AudioEvidenceError("Invalid FFmpeg timeout")
+    cmd=["ffmpeg","-nostdin","-hide_banner","-loglevel","error",
+         "-ss",format(start,".6f"),"-i",str(video),"-t",format(seconds,".6f"),
+         "-map","0:a:0","-vn","-ac","1","-ar",str(SAMPLE_RATE),
+         "-c:a","pcm_s16le","-f","s16le","-fs","40000","pipe:1"]
+    try:
+        result=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                              check=False,timeout=timeout)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise AudioEvidenceError("Audio FFmpeg subprocess failed") from exc
+    raw=result.stdout
+    if result.returncode!=0 or not isinstance(raw,bytes) or not 800<=len(raw)<=34000 or len(raw)%2:
+        raise AudioEvidenceError("No valid bounded mono PCM output")
+    return raw
