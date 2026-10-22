@@ -64,3 +64,30 @@ def verify_cue_timing(manifest, duration_seconds):
         last_end = cue["end_seconds"]
     return {"temporal_contract_pass": True, "video_duration_seconds": duration_seconds,
             "narration_highlight_sync_verified": False}
+
+def verify_narration_claims(manifest, segments):
+    validate_manifest(manifest)
+    if not isinstance(segments, list) or not (1 <= len(segments) <= 2048):
+        raise HighlightEvidenceError("Explicit bounded narration segments required")
+    by_id = {}; previous_end = 0.0
+    for seg in segments:
+        if not isinstance(seg, dict) or set(seg) != {"narration_id", "start_seconds", "end_seconds"}:
+            raise HighlightEvidenceError("Malformed narration segment")
+        ident, start, end = seg["narration_id"], seg["start_seconds"], seg["end_seconds"]
+        if not isinstance(ident, str) or not _IDENT_RE.fullmatch(ident) or ident in by_id:
+            raise HighlightEvidenceError("Duplicate or invalid narration segment identity")
+        if not _finite_number(start) or not _finite_number(end) or not (previous_end <= start < end):
+            raise HighlightEvidenceError("Narration segments out of order or overlapping")
+        by_id[ident] = (start, end); previous_end = end
+    used = set()
+    for cue in manifest["cues"]:
+        ident = cue["narration_id"]; used.add(ident)
+        if ident not in by_id:
+            raise HighlightEvidenceError("Highlight cue lacks narration segment")
+        start, end = by_id[ident]
+        if cue["start_seconds"] < start or cue["end_seconds"] > end:
+            raise HighlightEvidenceError("Highlight interval exceeds claimed narration")
+    if set(by_id) != used:
+        raise HighlightEvidenceError("Unmapped narration segment")
+    return {"claimed_narration_intervals_consistent": True,
+            "actual_spoken_words_or_onsets_verified": False}
