@@ -91,3 +91,12 @@ def test_readonly_packet_audit_refuses_claims_as_certification(monkeypatch):
     assert not r["ready_for_publication"]
     packet["observations"][1]={**e,"reviewer_id":"R2","verdict":"DEFECT"}
     assert g.audit_pronunciation_packet(packet,m,"example.mp4")["status"]=="ANNOTATIONS_INCOMPLETE_OR_DISPUTED"
+
+def test_review_cli_safely_abstains_without_external_labels(monkeypatch,tmp_path,capsys):
+    p=tmp_path/"test.mp4";p.write_bytes(b"mp4")
+    monkeypatch.setattr(g,"inspect_real_av_video",lambda path:{"duration_seconds":5})
+    assert g.main(["--video",str(p)])==2
+    r=json.loads(capsys.readouterr().out)
+    assert r["status"]=="REVIEW_PACKET_ABSENT" and not r["ready_for_publication"]
+    assert g.main(["--video",str(p),"--review-packet",str(tmp_path/"missing.json")])==2
+    assert json.loads(capsys.readouterr().out)["status"]=="REVIEW_AUDIT_BLOCKED"
