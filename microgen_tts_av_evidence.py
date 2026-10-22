@@ -132,3 +132,22 @@ def inspect_real_av_video(video):
     return {"duration_seconds":seconds,"real_av_streams_checked":True,
             "video_sha256":_sha_file(path),"phoneme_accuracy_verified":False,
             "narration_highlight_sync_verified":False,"ready_for_publication":False}
+
+def audit_audio_manifest(manifest,video):
+    validate_manifest(manifest)
+    if len(manifest["cues"])>32:
+        raise AudioEvidenceError("At most 32 cues allowed in one bounded audit")
+    info=inspect_real_av_video(video)
+    if info["video_sha256"]!=manifest["video_sha256"]:
+        raise AudioEvidenceError("Manifest bound to different MP4")
+    verify_cue_timing(manifest,info["duration_seconds"])
+    rows=[fingerprint_bound_audio_cue(video,manifest["video_sha256"],cue,
+                                     duration=info["duration_seconds"])
+          for cue in manifest["cues"]]
+    passed=all(row["energy_evidence_pass"] for row in rows)
+    return {"schema_version":1,
+            "status":"ACOUSTIC_ENERGY_SUBSET_VERIFIED" if passed else "ACOUSTIC_EVIDENCE_BLOCKED",
+            "video":info,"cues":rows,"all_cues_energy_present":passed,
+            "actual_spoken_words_verified":False,
+            "actual_narration_highlight_sync_verified":False,
+            "ready_for_publication":False,"assets_modified":False}
