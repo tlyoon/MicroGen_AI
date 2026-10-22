@@ -31,3 +31,12 @@ def test_video_timeline_bounds_overlap_and_ordering():
     with pytest.raises(h.HighlightEvidenceError):h.verify_cue_timing(m,599)
     m["cues"][1]["start_seconds"]=2.0
     assert h.verify_cue_timing(m,599)["temporal_contract_pass"]
+
+def test_claimed_narration_mapping_is_not_acoustic_proof():
+    m=example_manifest()
+    seg=[{"narration_id":"sentence1","start_seconds":0.8,"end_seconds":2.2}]
+    assert h.verify_narration_claims(m,seg)["actual_spoken_words_or_onsets_verified"] is False
+    for altered in ([dict(seg[0],narration_id="other")],
+                    [dict(seg[0],start_seconds=1.5)],
+                    seg+[dict(seg[0], narration_id="unused",start_seconds=2.2,end_seconds=2.5)]):
+        with pytest.raises(h.HighlightEvidenceError):h.verify_narration_claims(m,altered)
