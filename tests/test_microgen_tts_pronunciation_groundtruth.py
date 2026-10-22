@@ -1,0 +1,22 @@
+import hashlib,json,pytest
+import microgen_tts_pronunciation_groundtruth as g
+
+def event():
+    return {"event_id":"event_1","cue_id":"cue1","expected_phrase":"c.","heard_phrase":"c dot",
+      "verdict":"CORRECT","start_seconds":1.0,"window_seconds":.2,
+      "pcm_sha256":"a"*64,"reviewer_id":"R1"}
+
+def manifest():
+    return {"schema_version":1,"video_sha256":"d"*64,"cues":[{"cue_id":"cue1",
+      "slide_number":1,"element_id":"math1","narration_id":"narration1",
+      "start_seconds":1.0,"end_seconds":2.0,"box":[0,0,2,2],
+      "slide_image_sha256":"b"*64}]}
+
+def test_pcm_witness_fingerprint_guard(tmp_path,monkeypatch):
+    p=tmp_path/"clip.mp4";p.write_bytes(b"media")
+    sha=hashlib.sha256(p.read_bytes()).hexdigest()
+    monkeypatch.setattr(g,"extract_pcm_window",lambda *args,**kwargs:b"\0"*6400)
+    w=g.witness_pcm(p,sha,1.0,.2,duration_seconds=4)
+    assert w["sample_count"]==3200 and not w["pronunciation_verified"]
+    p.write_bytes(b"mutated")
+    with pytest.raises(g.AnnotationError):g.witness_pcm(p,sha,1.0,.2,duration_seconds=4)
