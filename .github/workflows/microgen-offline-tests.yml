@@ -35,4 +35,4 @@ jobs:
       - name: Unit tests (no API calls)
         run: python -m unittest discover -s tests -v
       - name: Isolated element-highlight evidence contract tests
-        run: python -m pytest -q tests/test_microgen_tts_highlight_evidence.py
+        run: python -m pytest -q tests/test_microgen_tts_highlight_evidence.py tests/test_microgen_tts_av_evidence.py
