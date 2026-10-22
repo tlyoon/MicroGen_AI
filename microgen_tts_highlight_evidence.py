@@ -139,6 +139,12 @@ def capture_frame(video_path, at_seconds, *, timeout=25):
 
 def measure_frame_change(before_png, after_png, box):
     from PIL import Image, UnidentifiedImageError
+    # Pillow tolerates a missing PNG IEND chunk on some platforms/versions.
+    # Independently refuse incomplete FFmpeg evidence frames on every OS.
+    trailer = bytes.fromhex("0000000049454e44ae426082")
+    if any(not isinstance(data, bytes) or not data.endswith(trailer)
+           for data in (before_png, after_png)):
+        raise HighlightEvidenceError("Incomplete PNG frame evidence: missing IEND")
     try:
         with Image.open(io.BytesIO(before_png)) as first, Image.open(io.BytesIO(after_png)) as second:
             if first.size != second.size or first.width*first.height > 16_000_000:

@@ -2,6 +2,11 @@ import hashlib,io,json
 import pytest
 import microgen_tts_highlight_evidence as h
 
+def test_missing_png_iend_is_cross_platform_blocker():
+    valid=png_of((0,0,0))
+    with pytest.raises(h.HighlightEvidenceError):
+        h.measure_frame_change(valid,valid[:-12],[0,0,2,2])
+
 def example_manifest():
     return {"schema_version": 1, "video_sha256": "a"*64, "cues": [
         {"cue_id":"cue1","slide_number":1,"element_id":"eq1","narration_id":"sentence1",
