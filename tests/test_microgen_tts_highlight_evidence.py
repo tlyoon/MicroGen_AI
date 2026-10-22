@@ -99,3 +99,18 @@ def test_video_source_hash_binding_and_visual_witness(tmp_path,monkeypatch):
     assert r["actual_narration_sync_certified"] is False
     p.write_bytes(b"tampered")
     with pytest.raises(h.HighlightEvidenceError):h.verify_cue_visual_witness(m,m["cues"][0],p,599.9)
+
+def test_combined_audit_never_approves_publication(tmp_path,monkeypatch):
+    p=tmp_path/"lecture.mp4";p.write_bytes(b"vid")
+    slide=tmp_path/"slide.png";slide.write_bytes(b"slide")
+    m=example_manifest()
+    m["video_sha256"]=hashlib.sha256(p.read_bytes()).hexdigest()
+    fp=hashlib.sha256(slide.read_bytes()).hexdigest();m["cues"][0]["slide_image_sha256"]=fp
+    monkeypatch.setattr("microgen_quality.check_video", lambda p:{"seconds":3.0})
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    monkeypatch.setattr(h,"capture_frame",lambda p,t:a if t<1 else b)
+    seg=[{"narration_id":"sentence1","start_seconds":0.8,"end_seconds":2.1}]
+    result=h.audit_highlight_evidence(m,seg,{fp:str(slide)},p)
+    assert result["all_cues_visual_evidence_pass"] is True
+    assert result["ready_for_publication"] is False
+    assert result["actual_narration_element_time_sync_certified"] is False
