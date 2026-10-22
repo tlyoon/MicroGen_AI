@@ -49,6 +49,8 @@ def discover_wavs(root:Path,*,max_depth:int=3,max_files:int=80)->dict:
                           "independent_voice_proven":False,"phoneme_label":None})
     return {"schema_version":1,"root":str(base),"real_wav_candidates":found,
             "candidate_count":len(found),"files_skipped":skipped,
+            "discovery_complete":skipped==0,
+            "discovery_status":"COMPLETE" if skipped==0 else "PARTIAL_UNINSPECTED_WAVS",
             "independent_source_groups_verified":False,
             "phonetic_ground_truth_available":False,
             "publication_performed":False}

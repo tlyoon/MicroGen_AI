@@ -20,6 +20,9 @@ def revalidate_inventory(snapshot:dict)->dict:
         snapshot["files_skipped"]!=current["files_skipped"] or
         snapshot.get("publication_performed") is not False):
         raise InventoryIntegrityError("Source discovery summary fields changed")
+    if (snapshot.get("discovery_complete") is not current["discovery_complete"] or
+        snapshot.get("discovery_status")!=current["discovery_status"]):
+        raise InventoryIntegrityError("Source discovery coverage statement changed")
     previous={x.get("relative_path"):x for x in rows if isinstance(x,dict)}
     latest={x["relative_path"]:x for x in current["real_wav_candidates"]}
     if len(previous)!=len(rows) or set(previous)!=set(latest):
@@ -39,6 +42,8 @@ def revalidate_inventory(snapshot:dict)->dict:
     return {"schema_version":1,"status":"SOURCE_WAV_INVENTORY_REVALIDATED",
             "source_root":current["root"],"verified_wav_count":len(rows),
             "unique_decoded_pcm_count":len(set(x["source_pcm_sha256"] for x in latest.values())),
+            "inventory_complete":current["discovery_complete"],
+            "inventory_partial":not current["discovery_complete"],
             "verified_actual_phoneme_labels":0,"independent_voice_groups_proven":False,
             "phonetic_benchmark_ready":False,"publication_performed":False,
             "manual_development_gate_required":False}
