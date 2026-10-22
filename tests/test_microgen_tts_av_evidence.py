@@ -110,3 +110,10 @@ def test_pilot_cli_abstains_without_grounded_cues(tmp_path,monkeypatch,capsys):
     assert not result["ready_for_publication"] and not result["assets_modified"]
     assert a.main(["--video",str(p),"--manifest",str(tmp_path/"missing.json")])==2
     assert json.loads(capsys.readouterr().out)["status"]=="AV_EVIDENCE_BLOCKED"
+
+def test_pcm_decoder_rejects_silent_truncation(tmp_path,monkeypatch):
+    p=tmp_path/"test.mp4";p.write_bytes(b"video")
+    monkeypatch.setattr(a.subprocess,"run",lambda *x,**kw:SimpleNamespace(returncode=0,stdout=b"\0"*1600,stderr=b""))
+    with pytest.raises(a.AudioEvidenceError):a.extract_pcm_window(p,0,.20,duration=5)
+    monkeypatch.setattr(a.subprocess,"run",lambda *x,**kw:SimpleNamespace(returncode=0,stdout=b"\0"*6400,stderr=b""))
+    assert len(a.extract_pcm_window(p,0,.20,duration=5))==6400
