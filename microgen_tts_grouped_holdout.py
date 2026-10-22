@@ -58,6 +58,11 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
                       for name,samples in partitions.items()}
     class_balance=(not missing_labels and
                    all(set(values)=={"WHY","YAY"} for values in declared_classes.values()))
+    class_group_counts={name:{label:len({row["source_group_id"] for row in samples
+                         if row["phoneme_label"]==label}) for label in ("WHY","YAY")}
+                         for name,samples in partitions.items()}
+    class_group_coverage=all(count>=2 for counts in class_group_counts.values()
+                             for count in counts.values())
     return {
         "schema_version":1,"total_clips":len(records),"distinct_source_groups":len(groups),
         "train_clip_sha256":[x["clip_sha256"] for x in partitions["train"]],
@@ -71,6 +76,8 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
         "unlabelled_clips":missing_labels,
         "claimed_label_classes_by_partition":declared_classes,
         "claimed_class_balance_present":class_balance,
+        "claimed_distinct_groups_per_class":class_group_counts,
+        "claimed_per_class_two_group_coverage":class_group_coverage,
         "claimed_labels_independently_validated":False,
         "scoring_allowed":False,
         "scoring_blockers":(
@@ -83,6 +90,9 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
             ["CLIP_PCM_FINGERPRINTS_MISSING"] if clip_pcm_count<len(records) else []
         )+(
             ["MISSING_BOTH_PHONEME_CLASSES_IN_TRAIN_OR_HOLDOUT"] if not missing_labels and not class_balance else []
+        )+(
+            ["TOO_FEW_GROUPS_PER_PHONEME_CLASS"] if not missing_labels and
+                 class_balance and not class_group_coverage else []
         )+(
             ["UNLABELLED_CLIPS_PRESENT"] if missing_labels else
             ["PHONEME_LABEL_EVIDENCE_NOT_INDEPENDENTLY_VERIFIED"]
