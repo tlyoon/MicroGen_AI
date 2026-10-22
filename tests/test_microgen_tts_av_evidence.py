@@ -26,3 +26,15 @@ def test_ffmpeg_pcm_command_guard_and_failure(tmp_path,monkeypatch):
     assert calls[0][1]["timeout"]==25
     monkeypatch.setattr(a.subprocess,"run",lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout=b"\0",stderr=b""))
     with pytest.raises(a.AudioEvidenceError):a.extract_pcm_window(p,1,.2,duration=9)
+
+def test_pcm_metrics_silence_tone_and_clipping():
+    blank=bytes(3200)
+    assert a.pcm_energy(blank)["rms"]==0
+    tone=struct.pack("<1600h", *([8000]*1600))
+    row=a.pcm_energy(tone)
+    assert row["sample_count"]==1600 and .2<row["rms"]<.3
+    assert row["spoken_words_verified"] is False
+    clipped=struct.pack("<800h",*([32767]*800))
+    assert a.pcm_energy(clipped)["clipped_fraction"]==1
+    for data in (b"",b"\x01",b"x"*40000):
+        with pytest.raises(a.AudioEvidenceError):a.pcm_energy(data)
