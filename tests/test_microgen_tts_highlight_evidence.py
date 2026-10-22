@@ -2,6 +2,11 @@ import hashlib,io,json
 import pytest
 import microgen_tts_highlight_evidence as h
 
+def test_missing_png_iend_is_cross_platform_blocker():
+    valid=png_of((0,0,0))
+    with pytest.raises(h.HighlightEvidenceError):
+        h.measure_frame_change(valid,valid[:-12],[0,0,2,2])
+
 def example_manifest():
     return {"schema_version": 1, "video_sha256": "a"*64, "cues": [
         {"cue_id":"cue1","slide_number":1,"element_id":"eq1","narration_id":"sentence1",
@@ -60,3 +65,19 @@ def test_ffmpeg_capture_is_read_only_and_bounded(tmp_path,monkeypatch):
     assert "-nostdin" in calls[0][0] and calls[0][1]["timeout"]==25
     for time in (-1,600,float("inf")):
         with pytest.raises(h.HighlightEvidenceError):h.capture_frame(p,time)
+
+def png_of(color,mark=False):
+    from PIL import Image
+    buf=io.BytesIO();im=Image.new("RGB",(4,4),color)
+    if mark:
+        for y in range(2):
+            for x in range(2):im.putpixel((x,y),(240,240,240))
+    im.save(buf,format="PNG");return buf.getvalue()
+
+def test_target_pixel_delta_and_full_screen_rejection():
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    result=h.measure_frame_change(a,b,[0,0,2,2])
+    assert result["target_mean_rgb_delta"]==240
+    assert result["outside_mean_rgb_delta"]==0
+    with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,b,[0,0,4,4])
+    with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,png_of((255,0,0))[:-20],[0,0,2,2])

@@ -136,3 +136,40 @@ def capture_frame(video_path, at_seconds, *, timeout=25):
     if result.returncode != 0 or not result.stdout or len(result.stdout)>32*1024*1024:
         raise HighlightEvidenceError("Invalid FFmpeg PNG sample")
     return result.stdout
+
+def measure_frame_change(before_png, after_png, box):
+    from PIL import Image, UnidentifiedImageError
+    # Pillow tolerates a missing PNG IEND chunk on some platforms/versions.
+    # Independently refuse incomplete FFmpeg evidence frames on every OS.
+    trailer = bytes.fromhex("0000000049454e44ae426082")
+    if any(not isinstance(data, bytes) or not data.endswith(trailer)
+           for data in (before_png, after_png)):
+        raise HighlightEvidenceError("Incomplete PNG frame evidence: missing IEND")
+    try:
+        with Image.open(io.BytesIO(before_png)) as first, Image.open(io.BytesIO(after_png)) as second:
+            if first.size != second.size or first.width*first.height > 16_000_000:
+                raise HighlightEvidenceError("Frame dimensions mismatch or too large")
+            image_a=first.convert("RGB");image_b=second.convert("RGB")
+    except (OSError,ValueError,UnidentifiedImageError) as exc:
+        raise HighlightEvidenceError("Frame PNG decode failed") from exc
+    width,height=image_a.size
+    if not isinstance(box,list) or len(box)!=4 or any(type(n) is not int for n in box):
+        raise HighlightEvidenceError("Malformed target bounding box")
+    left,top,right,bottom=box
+    if not (0<=left<right<=width and 0<=top<bottom<=height):
+        raise HighlightEvidenceError("Target region lies outside actual video frame")
+    a=image_a.load();b=image_b.load()
+    target_sum=outside_sum=target_pixels=outside_pixels=0
+    for y in range(height):
+        for x in range(width):
+            delta=sum(abs(a[x,y][k]-b[x,y][k]) for k in range(3))/3
+            if left<=x<right and top<=y<bottom:
+                target_sum+=delta;target_pixels+=1
+            else:
+                outside_sum+=delta;outside_pixels+=1
+    if outside_pixels==0:
+        raise HighlightEvidenceError("Cannot distinguish full-frame change from highlight")
+    return {"target_mean_rgb_delta":target_sum/target_pixels,
+            "outside_mean_rgb_delta":outside_sum/outside_pixels,
+            "target_pixel_count":target_pixels,
+            "outside_pixel_count":outside_pixels}
