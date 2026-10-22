@@ -48,3 +48,17 @@ def extract_pcm_window(video,start,seconds,*,duration,timeout=25):
     if result.returncode!=0 or not isinstance(raw,bytes) or not 800<=len(raw)<=34000 or len(raw)%2:
         raise AudioEvidenceError("No valid bounded mono PCM output")
     return raw
+
+def pcm_energy(pcm):
+    if not isinstance(pcm,bytes) or not 800<=len(pcm)<=34000 or len(pcm)%2:
+        raise AudioEvidenceError("Invalid signed PCM16 evidence")
+    n=len(pcm)//2
+    squares=0; peak=0; clipped=0
+    for (value,) in struct.iter_unpack("<h",pcm):
+        absval=abs(value);squares+=value*value
+        peak=max(peak,absval)
+        if absval>=32700:clipped+=1
+    return {"sample_count":n,"rms":math.sqrt(squares/n)/32768.0,
+            "peak":peak/32768.0,"clipped_fraction":clipped/n,
+            "decoded_pcm_sha256":hashlib.sha256(pcm).hexdigest(),
+            "spoken_words_verified":False}
