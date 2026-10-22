@@ -15,7 +15,7 @@ class AcousticReceiptIsolationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);source=p/"lecture";source.mkdir()
             target=p/"candidate-evidence.json"
-            self.assertEqual(a.require_external_new_receipt(source,target),target)
+            self.assertEqual(a.require_external_new_receipt(source,target),target.resolve(strict=False))
             target.write_text("do not alter")
             with self.assertRaises(a.AcousticQAError):
                 a.require_external_new_receipt(source,target)
