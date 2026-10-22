@@ -56,3 +56,13 @@ def validate_event(observation):
     if not all(_finite(x) for x in (start,seconds)) or not (0<=start<600 and .05<=seconds<=1 and start+seconds<600):
         raise AnnotationError("Invalid bounded observation time")
     return {"schema_valid":True,"claimed_reviewer_only":True,"independent_acoustic_truth_verified":False}
+
+def verify_label_clip(video,video_sha,event,*,duration_seconds):
+    validate_event(event)
+    witness=witness_pcm(video,video_sha,event["start_seconds"],event["window_seconds"],
+                        duration_seconds=duration_seconds)
+    if event["pcm_sha256"]!=witness["pcm_sha256"]:
+        raise AnnotationError("Reviewer-referenced PCM clip checksum does not match actual MP4 audio")
+    return {"event_id":event["event_id"],"reviewer_id":event["reviewer_id"],
+            "waveform_source_verified":True,"acoustic_clip":witness,
+            "reviewer_identity_authenticated":False,"phonetic_label_verified":False}
