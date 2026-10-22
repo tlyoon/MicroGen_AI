@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,json,os,wave
 from pathlib import Path
 from microgen_tts_pcm_features import file_sha256
-from microgen_tts_audio_identity import decoded_pcm_sha256
+from microgen_tts_audio_identity import decoded_pcm_sha256,PcmIdentityError
 
 class DiscoveryError(ValueError):pass
 SKIP={"storage",".git","__pycache__",".venv","node_modules","QA_tts_cdot_20261019"}
@@ -39,7 +39,10 @@ def discover_wavs(root:Path,*,max_depth:int=3,max_files:int=80)->dict:
                 if secs>600:skipped+=1;continue
                 digest=file_sha256(wav)
                 pcm=decoded_pcm_sha256(wav)
-            except (OSError,EOFError,wave.Error,ValueError):
+                if file_sha256(wav)!=digest:
+                    skipped+=1
+                    continue
+            except (OSError,EOFError,wave.Error,ValueError,PcmIdentityError):
                 skipped+=1;continue
             found.append({"source_wav":str(wav.resolve(strict=True)),
                           "relative_path":str(wav.relative_to(base)),
