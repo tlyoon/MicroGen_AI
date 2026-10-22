@@ -164,3 +164,37 @@ def audit_multimodal_claims(manifest,segments,source_index,video):
             "phoneme_accuracy_verified":False,
             "figure_or_mathematical_accuracy_verified":False,
             "ready_for_publication":False,"assets_modified":False,"publication_performed":False}
+
+def _strict_read_json(path):
+    from microgen_tts_highlight_evidence import _read_json_strict
+    return _read_json_strict(Path(path))
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Read-only diagnostic MP4 audio+element evidence pilot")
+    parser.add_argument("--video",required=True,type=Path)
+    parser.add_argument("--manifest",type=Path)
+    parser.add_argument("--narration-segments",type=Path)
+    parser.add_argument("--slide-source-index",type=Path)
+    ns=parser.parse_args(argv)
+    try:
+        if all(x is None for x in (ns.manifest,ns.narration_segments,ns.slide_source_index)):
+            av=inspect_real_av_video(ns.video)
+            result={"status":"CUE_EVIDENCE_ABSENT","technical_video":av,
+                    "blocking_reason":"No independently grounded timed element and narration cues supplied"}
+        elif all(x is not None for x in (ns.manifest,ns.narration_segments,ns.slide_source_index)):
+            result=audit_multimodal_claims(_strict_read_json(ns.manifest),
+                    _strict_read_json(ns.narration_segments),
+                    _strict_read_json(ns.slide_source_index),ns.video)
+        else:
+            raise AudioEvidenceError("Partial multimodal evidence inputs")
+    except (AudioEvidenceError,HighlightEvidenceError,OSError,ValueError) as exc:
+        result={"status":"AV_EVIDENCE_BLOCKED","blocking_reason":str(exc)}
+    result["ready_for_publication"]=False
+    result["assets_modified"]=False
+    result["publication_performed"]=False
+    print(json.dumps(result,indent=2,sort_keys=True))
+    return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())
