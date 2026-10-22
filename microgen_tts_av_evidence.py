@@ -45,7 +45,7 @@ def extract_pcm_window(video,start,seconds,*,duration,timeout=25):
     except (OSError,subprocess.TimeoutExpired) as exc:
         raise AudioEvidenceError("Audio FFmpeg subprocess failed") from exc
     raw=result.stdout
-    if result.returncode!=0 or not isinstance(raw,bytes) or not 800<=len(raw)<=34000 or len(raw)%2:
+    if result.returncode!=0 or not isinstance(raw,bytes) or not 800<=len(raw)<=34000 or len(raw)%2 or abs(len(raw)//2-round(float(seconds)*SAMPLE_RATE))>max(16,int(SAMPLE_RATE*.01)):
         raise AudioEvidenceError("No valid bounded mono PCM output")
     return raw
 
