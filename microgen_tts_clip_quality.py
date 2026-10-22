@@ -16,8 +16,10 @@ def screen_clip(path:Path,*,min_rms:float=0.001,
     info=pcm_envelope(path,max_seconds=10.)
     energy=info["frame_rms"]
     clipping=info["frame_clipping_fraction"]
-    active=sum(v>=min_rms for v in energy)/len(energy)
-    clipped=sum(clipping)/len(clipping)
+    frame_counts=info["frame_sample_counts"]
+    samples=sum(frame_counts)
+    active=sum(n for value,n in zip(energy,frame_counts) if value>=min_rms)/samples
+    clipped=sum(value*n for value,n in zip(clipping,frame_counts))/samples
     blockers=[]
     if info["whole_rms"]<min_rms or active<min_speechlike_fraction:
         blockers.append("LOW_INFORMATION_AUDIO")
