@@ -235,3 +235,37 @@ def audit_highlight_evidence(manifest, segments, source_index, video_path):
             "actual_narration_element_time_sync_certified":False,
             "academic_and_figure_quality_certified":False,
             "ready_for_publication":False,"assets_modified":False,"publication_performed":False}
+
+def _read_json_strict(path):
+    p=Path(path)
+    if p.is_symlink() or not p.is_file() or p.stat().st_size>2_000_000:
+        raise HighlightEvidenceError("Unsafe or missing JSON evidence")
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError,UnicodeError,json.JSONDecodeError) as exc:
+        raise HighlightEvidenceError("Cannot parse JSON evidence") from exc
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Read-only nonpublishing lecture highlight evidence audit")
+    parser.add_argument("--manifest",type=Path,required=True)
+    parser.add_argument("--narration-segments",type=Path,required=True)
+    parser.add_argument("--slide-source-index",type=Path,required=True)
+    parser.add_argument("--video",type=Path,required=True)
+    args=parser.parse_args(argv)
+    try:
+        report=audit_highlight_evidence(_read_json_strict(args.manifest),
+                                        _read_json_strict(args.narration_segments),
+                                        _read_json_strict(args.slide_source_index),
+                                        args.video)
+    except HighlightEvidenceError as exc:
+        report={"schema_version":1,"status":"HIGHLIGHT_AUDIT_BLOCKED",
+                "blocking_reason":str(exc),"ready_for_publication":False,
+                "assets_modified":False,"publication_performed":False}
+    print(json.dumps(report,indent=2,sort_keys=True))
+    # Visual changes plus declared intervals are not enough to certify
+    # real narration-to-element synchronization or publication.
+    return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())

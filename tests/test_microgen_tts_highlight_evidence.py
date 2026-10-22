@@ -114,3 +114,12 @@ def test_combined_audit_never_approves_publication(tmp_path,monkeypatch):
     assert result["all_cues_visual_evidence_pass"] is True
     assert result["ready_for_publication"] is False
     assert result["actual_narration_element_time_sync_certified"] is False
+
+def test_readonly_cli_errors_fail_closed(tmp_path,capsys):
+    absent=tmp_path/"absent.json"
+    exit_code=h.main(["--manifest",str(absent),"--narration-segments",str(absent),
+                      "--slide-source-index",str(absent),"--video",str(tmp_path/"absent.mp4")])
+    assert exit_code == 2
+    output=json.loads(capsys.readouterr().out)
+    assert output["status"]=="HIGHLIGHT_AUDIT_BLOCKED"
+    assert output["ready_for_publication"] is False
