@@ -62,3 +62,20 @@ def pcm_energy(pcm):
             "peak":peak/32768.0,"clipped_fraction":clipped/n,
             "decoded_pcm_sha256":hashlib.sha256(pcm).hexdigest(),
             "spoken_words_verified":False}
+
+def classify_acoustic_activity(metrics,*,rms_floor=.018,clipping_limit=.10):
+    if not isinstance(metrics,dict):
+        raise AudioEvidenceError("PCM energy metrics required")
+    rms=metrics.get("rms");peak=metrics.get("peak");clipped=metrics.get("clipped_fraction")
+    if not all(_finite(x) and 0<=x<=1 for x in (rms,peak,clipped)):
+        raise AudioEvidenceError("Nonfinite or invalid PCM energy metrics")
+    if not _finite(rms_floor) or not _finite(clipping_limit) or not (0<rms_floor<1 and 0<=clipping_limit<1):
+        raise AudioEvidenceError("Invalid activity thresholds")
+    if clipped>clipping_limit:
+        label="UNRELIABLE_CLIPPED_AUDIO"
+    elif rms<rms_floor:
+        label="BELOW_SPEECH_LIKE_ENERGY_THRESHOLD"
+    else:
+        label="ACOUSTIC_ENERGY_PRESENT"
+    return {"activity_label":label,"acoustic_energy_present":label=="ACOUSTIC_ENERGY_PRESENT",
+            "speech_or_phonetic_identity_verified":False}
