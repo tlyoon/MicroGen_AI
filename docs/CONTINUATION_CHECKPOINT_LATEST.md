@@ -25,3 +25,27 @@ No original lecture MP4/PDF/WAV modified. No HP/Yoga 6 accessed. No paid API.
 Main unchanged. Next is a genuine nonpublishing real-video pilot with
 externally checked cue timestamps and independent audio/figure evidence.
 CI status on the new PR heads must be independently verified.
+
+## October 22, 2026 — HP development campaign, stacked draft PRs #104–#113
+
+Migrated original MicroGen_AI development to a clean isolated HP-only checkout
+at GitHub #103. Follow-up ten draft PRs add actual read-only MP4 audio-window
+bounds, bounded FFmpeg PCM decoding, decoded energy/clipping measurements,
+conservative energy classification, dual-window cue probing, hash/race guards,
+independent A/V stream checks, bounded manifest-wide acoustic auditing,
+multimodal visual/energy composition and a fail-closed acoustic pilot CLI.
+
+Real original Thomas Calculus 13th-edition section 2.5 slides.mp4 used
+read-only from the source Google Drive directory. Verified SHA-256
+7d27d24d5d6a7ae5bf05cfcef1ea324d628abcf70688437a5555ac1c85b7e9f8
+and duration 550.23s <600s using original read-only duration inventory.
+The MP4-only acoustic pilot intentionally returns CUE_EVIDENCE_ABSENT
+and exit 2; valid actual element cue manifests and independent phonetic
+labels do not exist. ENERGY IS NOT VERIFIED SPEECH/PHONEME IDENTITY.
+No academic/figure/highlight/narration synchronization certification, no
+publication or original asset changes. Protected main untouched. No
+HP concurrent jobs were detected on migration; Dell-115 and Yoga 6
+were not used in this campaign. No paid AI calls or Whisper/GCS leases.
+Continue with real time-localized independently verified cue evidence,
+actual acoustic phoneme labeling and mathematically reviewed slide/figure
+QA before any publishing recommendation.

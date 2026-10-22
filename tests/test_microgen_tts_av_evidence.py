@@ -100,3 +100,13 @@ def test_integrated_evidence_remains_nonpublishing(monkeypatch):
     assert not r["independently_verified_word_level_alignment"]
     monkeypatch.setattr(a,"audit_audio_manifest",lambda *args:{"all_cues_energy_present":False})
     assert a.audit_multimodal_claims({},[],{},"demo.mp4")["status"]=="MULTIMODAL_EVIDENCE_BLOCKED"
+
+def test_pilot_cli_abstains_without_grounded_cues(tmp_path,monkeypatch,capsys):
+    p=tmp_path/"lecture.mp4";p.write_bytes(b"mock")
+    monkeypatch.setattr(a,"inspect_real_av_video",lambda p:{"duration_seconds":123.4,"real_av_streams_checked":True})
+    assert a.main(["--video",str(p)])==2
+    result=json.loads(capsys.readouterr().out)
+    assert result["status"]=="CUE_EVIDENCE_ABSENT"
+    assert not result["ready_for_publication"] and not result["assets_modified"]
+    assert a.main(["--video",str(p),"--manifest",str(tmp_path/"missing.json")])==2
+    assert json.loads(capsys.readouterr().out)["status"]=="AV_EVIDENCE_BLOCKED"
