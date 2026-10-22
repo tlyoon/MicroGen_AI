@@ -151,3 +151,16 @@ def audit_audio_manifest(manifest,video):
             "actual_spoken_words_verified":False,
             "actual_narration_highlight_sync_verified":False,
             "ready_for_publication":False,"assets_modified":False}
+
+def audit_multimodal_claims(manifest,segments,source_index,video):
+    visual=audit_highlight_evidence(manifest,segments,source_index,video)
+    acoustic=audit_audio_manifest(manifest,video)
+    technical=bool(visual["all_cues_visual_evidence_pass"] and acoustic["all_cues_energy_present"])
+    return {"schema_version":1,
+            "status":"MULTIMODAL_TECHNICAL_SUBSET_VERIFIED" if technical else "MULTIMODAL_EVIDENCE_BLOCKED",
+            "visual":visual,"acoustic":acoustic,
+            "visual_and_acoustic_activity_pass":technical,
+            "independently_verified_word_level_alignment":False,
+            "phoneme_accuracy_verified":False,
+            "figure_or_mathematical_accuracy_verified":False,
+            "ready_for_publication":False,"assets_modified":False,"publication_performed":False}

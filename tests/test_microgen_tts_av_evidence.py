@@ -91,3 +91,12 @@ def test_manifest_acoustic_cue_count_and_no_publication(tmp_path,monkeypatch):
     assert not r["actual_narration_highlight_sync_verified"]
     m["cues"]=m["cues"]*33
     with pytest.raises(Exception):a.audit_audio_manifest(m,p)
+
+def test_integrated_evidence_remains_nonpublishing(monkeypatch):
+    monkeypatch.setattr(a,"audit_highlight_evidence",lambda *args:{"all_cues_visual_evidence_pass":True})
+    monkeypatch.setattr(a,"audit_audio_manifest",lambda *args:{"all_cues_energy_present":True})
+    r=a.audit_multimodal_claims({},[],{},"demo.mp4")
+    assert r["visual_and_acoustic_activity_pass"] and not r["ready_for_publication"]
+    assert not r["independently_verified_word_level_alignment"]
+    monkeypatch.setattr(a,"audit_audio_manifest",lambda *args:{"all_cues_energy_present":False})
+    assert a.audit_multimodal_claims({},[],{},"demo.mp4")["status"]=="MULTIMODAL_EVIDENCE_BLOCKED"
