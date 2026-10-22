@@ -21,3 +21,13 @@ def test_manifest_duplicate_and_bad_geometry():
     with pytest.raises(h.HighlightEvidenceError): h.validate_manifest(m)
     m["cues"]=m["cues"][:1];m["cues"][0]["box"]=[0,0,0,2]
     with pytest.raises(h.HighlightEvidenceError):h.validate_manifest(m)
+
+def test_video_timeline_bounds_overlap_and_ordering():
+    m=example_manifest()
+    assert h.verify_cue_timing(m,599.9)["temporal_contract_pass"]
+    for sec in (600, 623, float("nan"), 0):
+        with pytest.raises(h.HighlightEvidenceError):h.verify_cue_timing(m,sec)
+    m["cues"].append(dict(m["cues"][0], cue_id="cue2", start_seconds=1.5, end_seconds=2.5))
+    with pytest.raises(h.HighlightEvidenceError):h.verify_cue_timing(m,599)
+    m["cues"][1]["start_seconds"]=2.0
+    assert h.verify_cue_timing(m,599)["temporal_contract_pass"]

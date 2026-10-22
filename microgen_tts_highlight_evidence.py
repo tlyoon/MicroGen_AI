@@ -52,3 +52,15 @@ def validate_manifest(manifest):
     return {"status": "MANIFEST_SCHEMA_VALID", "cue_count": len(cues),
             "spoken_narration_verified": False, "highlight_sync_verified": False,
             "ready_for_publication": False}
+
+def verify_cue_timing(manifest, duration_seconds):
+    validate_manifest(manifest)
+    if not _finite_number(duration_seconds) or not (0 < duration_seconds < 600):
+        raise HighlightEvidenceError("Video must be strictly under 600 seconds")
+    last_end = 0.0
+    for cue in manifest["cues"]:
+        if cue["start_seconds"] < last_end or cue["end_seconds"] > duration_seconds:
+            raise HighlightEvidenceError("Overlapping, unordered or out-of-range cue")
+        last_end = cue["end_seconds"]
+    return {"temporal_contract_pass": True, "video_duration_seconds": duration_seconds,
+            "narration_highlight_sync_verified": False}
