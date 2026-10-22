@@ -79,3 +79,15 @@ def test_real_av_stream_required(tmp_path,monkeypatch):
     monkeypatch.setattr("microgen_quality.check_video",lambda x:{"seconds":600.0})
     with pytest.raises(a.AudioEvidenceError):a.inspect_real_av_video(p)
     with pytest.raises(a.AudioEvidenceError):a.inspect_real_av_video(tmp_path/"absent.mp4")
+
+def test_manifest_acoustic_cue_count_and_no_publication(tmp_path,monkeypatch):
+    p=tmp_path/"clip.mp4";p.write_bytes(b"one")
+    f=hashlib.sha256(p.read_bytes()).hexdigest()
+    m=sample_manifest(f)
+    monkeypatch.setattr(a,"inspect_real_av_video",lambda path:{"duration_seconds":5,"video_sha256":f})
+    monkeypatch.setattr(a,"fingerprint_bound_audio_cue",lambda *args,**kw:{"energy_evidence_pass":True})
+    r=a.audit_audio_manifest(m,p)
+    assert r["all_cues_energy_present"] and r["ready_for_publication"] is False
+    assert not r["actual_narration_highlight_sync_verified"]
+    m["cues"]=m["cues"]*33
+    with pytest.raises(Exception):a.audit_audio_manifest(m,p)
