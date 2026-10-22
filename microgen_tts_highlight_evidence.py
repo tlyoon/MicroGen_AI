@@ -91,3 +91,30 @@ def verify_narration_claims(manifest, segments):
         raise HighlightEvidenceError("Unmapped narration segment")
     return {"claimed_narration_intervals_consistent": True,
             "actual_spoken_words_or_onsets_verified": False}
+
+def _sha_file(path):
+    digest=hashlib.sha256()
+    with open(path,"rb") as stream:
+        while True:
+            chunk=stream.read(1024*1024)
+            if not chunk:break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def verify_slide_sources(manifest, source_index):
+    validate_manifest(manifest)
+    if not isinstance(source_index, dict):
+        raise HighlightEvidenceError("Explicit source index required")
+    expected = {cue["slide_image_sha256"] for cue in manifest["cues"]}
+    if set(source_index) != expected:
+        raise HighlightEvidenceError("Source index is incomplete or contains extra entries")
+    for fingerprint, filename in source_index.items():
+        if not isinstance(filename, (str, Path)):
+            raise HighlightEvidenceError("Invalid image source")
+        path=Path(filename)
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 80*1024*1024:
+            raise HighlightEvidenceError("Unsafe or missing source image")
+        before=path.stat();digest=_sha_file(path);after=path.stat()
+        if digest!=fingerprint or (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):
+            raise HighlightEvidenceError("Slide source fingerprint mismatch or source mutation")
+    return {"slide_sources_sha256_verified":True, "slide_semantics_verified":False}

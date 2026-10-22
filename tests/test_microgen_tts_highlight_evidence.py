@@ -40,3 +40,12 @@ def test_claimed_narration_mapping_is_not_acoustic_proof():
                     [dict(seg[0],start_seconds=1.5)],
                     seg+[dict(seg[0], narration_id="unused",start_seconds=2.2,end_seconds=2.5)]):
         with pytest.raises(h.HighlightEvidenceError):h.verify_narration_claims(m,altered)
+
+def test_source_sha256_and_missing_file_fail_closed(tmp_path):
+    p=tmp_path/"slide.png";p.write_bytes(b"slide bytes")
+    m=example_manifest(); fp=hashlib.sha256(p.read_bytes()).hexdigest()
+    m["cues"][0]["slide_image_sha256"]=fp
+    assert h.verify_slide_sources(m,{fp:str(p)})["slide_sources_sha256_verified"]
+    p.write_bytes(b"changed")
+    with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{fp:str(p)})
+    with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{})
