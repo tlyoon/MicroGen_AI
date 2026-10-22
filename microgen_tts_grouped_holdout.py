@@ -4,10 +4,13 @@ import hashlib,re
 
 class HoldoutError(ValueError):pass
 SHA=re.compile(r"^[a-f0-9]{64}$")
-def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
+def partition_corpus(records:list[dict],*,max_items:int=5000,
+                     min_source_groups:int=6)->dict:
     if (not isinstance(records,list) or not records or
         type(max_items)!=int or not 1<=max_items<=10000 or len(records)>max_items):
         raise HoldoutError("Missing or unbounded acoustic corpus")
+    if type(min_source_groups) is not int or not 3<=min_source_groups<=100:
+        raise HoldoutError("Invalid minimum independent group threshold")
     groups={};seen_clips=set();sources={};pcm_sources={};pcm_count=0
     clip_pcm_sources={};clip_pcm_count=0
     for row in records:
@@ -58,10 +61,14 @@ def partition_corpus(records:list[dict],*,max_items:int=5000)->dict:
         "source_pcm_identity_verified":pcm_count==len(records),
         "clip_pcm_identity_verified":clip_pcm_count==len(records),
         "grouped_holdout_available":nonleaky,
+        "minimum_group_count_requested":min_source_groups,
+        "minimum_group_count_met":len(groups)>=min_source_groups,
         "unlabelled_clips":missing_labels,
         "scoring_allowed":False,
         "scoring_blockers":(
             ["INSUFFICIENT_DISTINCT_SOURCE_GROUPS"] if not nonleaky else []
+        )+(
+            ["TOO_FEW_GROUPS_FOR_ROBUST_EVALUATION"] if len(groups)<min_source_groups else []
         )+(
             ["SOURCE_PCM_FINGERPRINTS_MISSING"] if pcm_count<len(records) else []
         )+(
