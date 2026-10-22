@@ -39,3 +39,12 @@ def test_review_clip_refuses_forged_hash(tmp_path,monkeypatch):
     with pytest.raises(g.AnnotationError):g.verify_label_clip(p,vid,e,duration_seconds=5)
     monkeypatch.setattr(g,"witness_pcm",lambda *args,**kw:{"pcm_sha256":e["pcm_sha256"]})
     assert not g.verify_label_clip(p,vid,e,duration_seconds=5)["phonetic_label_verified"]
+
+def test_packet_requires_same_clip_and_unique_observers():
+    e=event();copy={**e,"reviewer_id":"R2","verdict":"DEFECT","heard_phrase":"circa"}
+    packet={"schema_version":1,"video_sha256":"d"*64,"observations":[e,copy]}
+    assert g.validate_review_packet(packet)["event_count"]==1
+    with pytest.raises(g.AnnotationError):
+        g.validate_review_packet({**packet,"observations":[e,e]})
+    with pytest.raises(g.AnnotationError):
+        g.validate_review_packet({**packet,"observations":[e,{**copy,"start_seconds":1.1}]})

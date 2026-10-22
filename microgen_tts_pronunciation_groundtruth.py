@@ -66,3 +66,28 @@ def verify_label_clip(video,video_sha,event,*,duration_seconds):
     return {"event_id":event["event_id"],"reviewer_id":event["reviewer_id"],
             "waveform_source_verified":True,"acoustic_clip":witness,
             "reviewer_identity_authenticated":False,"phonetic_label_verified":False}
+
+def validate_review_packet(packet):
+    if not isinstance(packet,dict) or set(packet)!={"schema_version","video_sha256","observations"}:
+        raise AnnotationError("Invalid review packet envelope")
+    if type(packet["schema_version"]) is not int or packet["schema_version"]!=1:
+        raise AnnotationError("Unsupported review schema")
+    sha=packet["video_sha256"]
+    if not isinstance(sha,str) or not _HASH.fullmatch(sha):
+        raise AnnotationError("Review packet video checksum missing")
+    items=packet["observations"]
+    if not isinstance(items,list) or not 1<=len(items)<=128:
+        raise AnnotationError("Review packet must have 1..128 observations")
+    identity=set();event_sources={}
+    for e in items:
+        validate_event(e)
+        key=(e["event_id"],e["reviewer_id"])
+        if key in identity:
+            raise AnnotationError("Duplicate reviewer observation")
+        identity.add(key)
+        common=(e["cue_id"],e["expected_phrase"],e["start_seconds"],e["window_seconds"],e["pcm_sha256"])
+        prior=event_sources.setdefault(e["event_id"],common)
+        if prior!=common:
+            raise AnnotationError("Reviewers disagree on clip identity or source metadata")
+    return {"event_count":len(event_sources),"observation_count":len(items),
+            "packet_structurally_consistent":True,"independent_reviewers_verified":False}
