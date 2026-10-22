@@ -146,3 +146,31 @@ def verify_review_cue_bounds(packet,manifest,*,duration_seconds):
                 event["start_seconds"]+event["window_seconds"]<=cue["end_seconds"]):
             raise AnnotationError("Review clip lies outside claimed visual cue interval")
     return {"clock_claims_compatible":True,"real_spoken_words_aligned_to_element":False}
+
+def audit_pronunciation_packet(packet,manifest,video):
+    shape=validate_review_packet(packet)
+    if shape["event_count"]>32:
+        raise AnnotationError("Too many distinct audio clips for one bounded audit")
+    media=inspect_real_av_video(video)
+    if media["video_sha256"]!=packet["video_sha256"]:
+        raise AnnotationError("Real MP4 does not match observation packet checksum")
+    verify_review_cue_bounds(packet,manifest,duration_seconds=media["duration_seconds"])
+    witness_rows={}
+    for item in packet["observations"]:
+        if item["event_id"] not in witness_rows:
+            witness_rows[item["event_id"]]=verify_label_clip(video,media["video_sha256"],item,
+                duration_seconds=media["duration_seconds"])
+    agreements=summarize_review_agreement(packet)
+    defects=sorted(k for k,v in agreements.items() if v["status"]=="REVIEWERS_REPORT_DEFECT")
+    uncertain=sorted(k for k,v in agreements.items() if v["status"] not in
+         ("REVIEWERS_REPORT_DEFECT","REVIEWERS_REPORT_CORRECT_UNVERIFIED"))
+    return {"schema_version":1,
+       "status":"REVIEWERS_REPORTED_PRONUNCIATION_DEFECT" if defects else
+                "ANNOTATIONS_INCOMPLETE_OR_DISPUTED" if uncertain else
+                "UNAUTHENTICATED_REVIEWER_CORRECTNESS_CLAIMS",
+       "media":media,"event_count":shape["event_count"],
+       "source_bound_pcm_clip_count":len(witness_rows),
+       "agreement":agreements,"defect_event_ids":defects,"unresolved_event_ids":uncertain,
+       "actual_phonemes_verified":False,"reviewer_identity_authenticated":False,
+       "narration_highlight_sync_verified":False,
+       "ready_for_publication":False,"assets_modified":False,"publication_performed":False}

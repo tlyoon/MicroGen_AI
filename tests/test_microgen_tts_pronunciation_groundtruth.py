@@ -78,3 +78,16 @@ def test_review_observation_must_fit_cue():
     e["start_seconds"]=1.
     p["video_sha256"]="e"*64
     with pytest.raises(g.AnnotationError):g.verify_review_cue_bounds(p,m,duration_seconds=5)
+
+def test_readonly_packet_audit_refuses_claims_as_certification(monkeypatch):
+    m=manifest();e=event()
+    packet={"schema_version":1,"video_sha256":m["video_sha256"],
+            "observations":[e,{**e,"reviewer_id":"R2"}]}
+    monkeypatch.setattr(g,"inspect_real_av_video",lambda path:{"video_sha256":m["video_sha256"],"duration_seconds":5})
+    monkeypatch.setattr(g,"verify_label_clip",lambda *a,**kw:{"waveform_source_verified":True})
+    r=g.audit_pronunciation_packet(packet,m,"example.mp4")
+    assert r["source_bound_pcm_clip_count"]==1
+    assert r["status"]=="UNAUTHENTICATED_REVIEWER_CORRECTNESS_CLAIMS"
+    assert not r["ready_for_publication"]
+    packet["observations"][1]={**e,"reviewer_id":"R2","verdict":"DEFECT"}
+    assert g.audit_pronunciation_packet(packet,m,"example.mp4")["status"]=="ANNOTATIONS_INCOMPLETE_OR_DISPUTED"
