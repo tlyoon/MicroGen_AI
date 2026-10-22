@@ -70,3 +70,12 @@ def test_audio_source_binding_and_mid_read_tampering(tmp_path,monkeypatch):
         return {"energy_evidence_pass":False}
     monkeypatch.setattr(a,"probe_audio_cue",tamper)
     with pytest.raises(a.AudioEvidenceError):a.fingerprint_bound_audio_cue(p,fp,{},duration=2)
+
+def test_real_av_stream_required(tmp_path,monkeypatch):
+    p=tmp_path/"clip.mp4";p.write_bytes(b"mock")
+    monkeypatch.setattr("microgen_quality.check_video",lambda x:{"seconds":599.999})
+    assert a.inspect_real_av_video(p)["real_av_streams_checked"]
+    assert not a.inspect_real_av_video(p)["ready_for_publication"]
+    monkeypatch.setattr("microgen_quality.check_video",lambda x:{"seconds":600.0})
+    with pytest.raises(a.AudioEvidenceError):a.inspect_real_av_video(p)
+    with pytest.raises(a.AudioEvidenceError):a.inspect_real_av_video(tmp_path/"absent.mp4")

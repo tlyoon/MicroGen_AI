@@ -116,3 +116,19 @@ def fingerprint_bound_audio_cue(video,expected_sha,cue,*,duration):
     if _sha_file(path)!=before:
         raise AudioEvidenceError("MP4 changed during acoustic witness")
     return {"video_sha256_verified":True,**result}
+
+def inspect_real_av_video(video):
+    from microgen_quality import check_video,QualityError
+    path=Path(video)
+    if path.is_symlink() or not path.is_file() or path.suffix.lower()!=".mp4":
+        raise AudioEvidenceError("Existing regular MP4 required")
+    try:
+        details=check_video(path)
+        seconds=float(details["seconds"])
+    except (OSError,ValueError,RuntimeError,QualityError,KeyError,TypeError) as exc:
+        raise AudioEvidenceError("Real MP4 audio/video stream validation failed") from exc
+    if not _finite(seconds) or not 0<seconds<600:
+        raise AudioEvidenceError("MP4 violates strict sub-600-second contract")
+    return {"duration_seconds":seconds,"real_av_streams_checked":True,
+            "video_sha256":_sha_file(path),"phoneme_accuracy_verified":False,
+            "narration_highlight_sync_verified":False,"ready_for_publication":False}
