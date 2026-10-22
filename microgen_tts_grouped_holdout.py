@@ -53,6 +53,11 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
         raise HoldoutError("Source SHA contamination between train and holdout")
     nonleaky=bool(partitions["train"] and partitions["holdout"])
     missing_labels=sum(x["phoneme_label"] is None for x in records)
+    declared_classes={name:sorted({x["phoneme_label"] for x in samples
+                                   if x["phoneme_label"] is not None})
+                      for name,samples in partitions.items()}
+    class_balance=(not missing_labels and
+                   all(set(values)=={"WHY","YAY"} for values in declared_classes.values()))
     return {
         "schema_version":1,"total_clips":len(records),"distinct_source_groups":len(groups),
         "train_clip_sha256":[x["clip_sha256"] for x in partitions["train"]],
@@ -64,6 +69,9 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
         "minimum_group_count_requested":min_source_groups,
         "minimum_group_count_met":len(groups)>=min_source_groups,
         "unlabelled_clips":missing_labels,
+        "claimed_label_classes_by_partition":declared_classes,
+        "claimed_class_balance_present":class_balance,
+        "claimed_labels_independently_validated":False,
         "scoring_allowed":False,
         "scoring_blockers":(
             ["INSUFFICIENT_DISTINCT_SOURCE_GROUPS"] if not nonleaky else []
@@ -73,6 +81,8 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
             ["SOURCE_PCM_FINGERPRINTS_MISSING"] if pcm_count<len(records) else []
         )+(
             ["CLIP_PCM_FINGERPRINTS_MISSING"] if clip_pcm_count<len(records) else []
+        )+(
+            ["MISSING_BOTH_PHONEME_CLASSES_IN_TRAIN_OR_HOLDOUT"] if not missing_labels and not class_balance else []
         )+(
             ["UNLABELLED_CLIPS_PRESENT"] if missing_labels else
             ["PHONEME_LABEL_EVIDENCE_NOT_INDEPENDENTLY_VERIFIED"]
