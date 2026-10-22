@@ -48,3 +48,12 @@ def test_packet_requires_same_clip_and_unique_observers():
         g.validate_review_packet({**packet,"observations":[e,e]})
     with pytest.raises(g.AnnotationError):
         g.validate_review_packet({**packet,"observations":[e,{**copy,"start_seconds":1.1}]})
+
+def test_two_claimed_reviewers_are_not_authentication():
+    e=event()
+    packet={"schema_version":1,"video_sha256":"d"*64,
+       "observations":[e,{**e,"reviewer_id":"R2"}]}
+    result=g.group_claimed_reviews(packet)
+    assert result["event_1"]["minimum_claims_met"]
+    assert result["event_1"]["identity_independence_authenticated"] is False
+    assert not g.group_claimed_reviews({**packet,"observations":[e]})["event_1"]["minimum_claims_met"]

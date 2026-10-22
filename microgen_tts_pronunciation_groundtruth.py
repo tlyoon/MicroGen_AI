@@ -91,3 +91,19 @@ def validate_review_packet(packet):
             raise AnnotationError("Reviewers disagree on clip identity or source metadata")
     return {"event_count":len(event_sources),"observation_count":len(items),
             "packet_structurally_consistent":True,"independent_reviewers_verified":False}
+
+def group_claimed_reviews(packet,*,min_claimed_reviewers=2):
+    validate_review_packet(packet)
+    if type(min_claimed_reviewers) is not int or not 2<=min_claimed_reviewers<=8:
+        raise AnnotationError("Invalid minimum number of reviewers")
+    groups={}
+    for item in packet["observations"]:
+        groups.setdefault(item["event_id"],[]).append(item)
+    summaries={}
+    for identifier,rows in groups.items():
+        identifiers={e["reviewer_id"] for e in rows}
+        enough=len(identifiers)>=min_claimed_reviewers
+        summaries[identifier]={"claimed_reviewer_count":len(identifiers),
+            "minimum_claims_met":enough,"identity_independence_authenticated":False,
+            "status":"CLAIMED_REVIEWER_COUNT_MET" if enough else "INSUFFICIENT_CLAIMED_REVIEWERS"}
+    return summaries
