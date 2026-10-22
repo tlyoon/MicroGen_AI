@@ -210,3 +210,28 @@ def verify_cue_visual_witness(manifest, cue, video_path, duration_seconds, *, ma
             "before_second":start-margin,"active_second":start+margin,
             "pixel_evidence":difference,**status,
             "actual_narration_sync_certified":False}
+
+def audit_highlight_evidence(manifest, segments, source_index, video_path):
+    from microgen_quality import check_video, QualityError
+    validate_manifest(manifest)
+    video=Path(video_path)
+    if video.is_symlink() or not video.is_file():
+        raise HighlightEvidenceError("Missing or unsafe actual MP4")
+    try:
+        details=check_video(video)
+        duration=float(details["seconds"])
+    except (OSError,ValueError,RuntimeError,QualityError) as exc:
+        raise HighlightEvidenceError("Real A/V stream validation failed") from exc
+    timing=verify_cue_timing(manifest,duration)
+    claimed_narration=verify_narration_claims(manifest,segments)
+    sources=verify_slide_sources(manifest,source_index)
+    cues=[verify_cue_visual_witness(manifest,cue,video,duration) for cue in manifest["cues"]]
+    visual_ok=all(x["localized_visual_change_pass"] for x in cues)
+    return {"schema_version":1,"status":"VISUAL_TECHNICAL_SUBSET_VERIFIED" if visual_ok else "VISUAL_EVIDENCE_BLOCKED",
+            "cue_count":len(cues),"cue_visual_evidence":cues,
+            "timeline":timing,"narration_claims":claimed_narration,"slide_source_checks":sources,
+            "all_cues_visual_evidence_pass":visual_ok,
+            "actual_spoken_phonemes_verified":False,
+            "actual_narration_element_time_sync_certified":False,
+            "academic_and_figure_quality_certified":False,
+            "ready_for_publication":False,"assets_modified":False,"publication_performed":False}
