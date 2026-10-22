@@ -57,3 +57,13 @@ def test_two_claimed_reviewers_are_not_authentication():
     assert result["event_1"]["minimum_claims_met"]
     assert result["event_1"]["identity_independence_authenticated"] is False
     assert not g.group_claimed_reviews({**packet,"observations":[e]})["event_1"]["minimum_claims_met"]
+
+def test_consensus_reports_disagreement_and_defects_without_signoff():
+    e=event()
+    packet={"schema_version":1,"video_sha256":"d"*64,"observations":[e,{**e,"reviewer_id":"R2"}]}
+    s=g.summarize_review_agreement(packet)["event_1"]
+    assert s["status"]=="REVIEWERS_REPORT_CORRECT_UNVERIFIED" and not s["phonetic_truth_verified"]
+    packet["observations"][1]={**e,"reviewer_id":"R2","verdict":"DEFECT","heard_phrase":"circa"}
+    assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWER_DISAGREEMENT"
+    packet["observations"][0]={**e,"verdict":"DEFECT","heard_phrase":"circa"}
+    assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWERS_REPORT_DEFECT"

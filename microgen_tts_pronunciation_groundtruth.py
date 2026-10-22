@@ -107,3 +107,26 @@ def group_claimed_reviews(packet,*,min_claimed_reviewers=2):
             "minimum_claims_met":enough,"identity_independence_authenticated":False,
             "status":"CLAIMED_REVIEWER_COUNT_MET" if enough else "INSUFFICIENT_CLAIMED_REVIEWERS"}
     return summaries
+
+def summarize_review_agreement(packet):
+    grouped=group_claimed_reviews(packet)
+    observations={}
+    for e in packet["observations"]:
+        observations.setdefault(e["event_id"],[]).append(e)
+    results={}
+    for event_id,rows in observations.items():
+        labels={r["verdict"] for r in rows}
+        if not grouped[event_id]["minimum_claims_met"]:
+            state="INSUFFICIENT_REVIEWER_CLAIMS"
+        elif "UNCERTAIN" in labels:
+            state="REVIEW_UNCERTAIN"
+        elif len(labels)>1:
+            state="REVIEWER_DISAGREEMENT"
+        elif labels=={"DEFECT"}:
+            state="REVIEWERS_REPORT_DEFECT"
+        else:
+            state="REVIEWERS_REPORT_CORRECT_UNVERIFIED"
+        results[event_id]={**grouped[event_id],"status":state,
+                           "heard_phrases":sorted({r["heard_phrase"] for r in rows}),
+                           "phonetic_truth_verified":False,"ready_for_publication":False}
+    return results
