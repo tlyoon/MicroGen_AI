@@ -86,3 +86,16 @@ def test_visual_highlight_rejects_whole_slide_transition():
     a=png_of((0,0,0)); localized=png_of((0,0,0),True);other=png_of((200,200,200))
     assert h.judge_localized_highlight(h.measure_frame_change(a,localized,[0,0,2,2]))["localized_visual_change_pass"]
     assert not h.judge_localized_highlight(h.measure_frame_change(a,other,[0,0,2,2]))["localized_visual_change_pass"]
+
+def test_video_source_hash_binding_and_visual_witness(tmp_path,monkeypatch):
+    p=tmp_path/"lecture.mp4";p.write_bytes(b"mp4 bytes")
+    m=example_manifest();m["video_sha256"]=hashlib.sha256(p.read_bytes()).hexdigest()
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    sampled=[]
+    def capture(path,t,**kwargs):sampled.append(t);return a if len(sampled)==1 else b
+    monkeypatch.setattr(h,"capture_frame",capture)
+    r=h.verify_cue_visual_witness(m,m["cues"][0],p,599.9)
+    assert r["localized_visual_change_pass"] and sampled==pytest.approx([0.92,1.08])
+    assert r["actual_narration_sync_certified"] is False
+    p.write_bytes(b"tampered")
+    with pytest.raises(h.HighlightEvidenceError):h.verify_cue_visual_witness(m,m["cues"][0],p,599.9)

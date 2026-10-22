@@ -185,3 +185,28 @@ def judge_localized_highlight(differences, *, min_target_delta=12.0, max_outside
     passed = target>=min_target_delta and outside<=max_outside_delta and target>=outside+8
     return {"localized_visual_change_pass":bool(passed),
             "visual_evidence_only":True,"speech_cue_alignment_certified":False}
+
+def verify_cue_visual_witness(manifest, cue, video_path, duration_seconds, *, margin=0.08):
+    validate_manifest(manifest)
+    verify_cue_timing(manifest,duration_seconds)
+    if cue not in manifest["cues"]:
+        raise HighlightEvidenceError("Cue not bound to manifest")
+    if not _finite_number(margin) or not (0<margin<=0.5):
+        raise HighlightEvidenceError("Unsafe visual witness margin")
+    start,end=cue["start_seconds"],cue["end_seconds"]
+    if not (start>=margin and end-start>2*margin):
+        raise HighlightEvidenceError("Cue lacks separate before and active witness windows")
+    p=Path(video_path)
+    before_sha=_sha_file(p)
+    if before_sha != manifest["video_sha256"]:
+        raise HighlightEvidenceError("Video SHA-256 does not match cue manifest")
+    off=capture_frame(p,start-margin)
+    on=capture_frame(p,start+margin)
+    if _sha_file(p)!=before_sha:
+        raise HighlightEvidenceError("MP4 changed during frame evidence sampling")
+    difference=measure_frame_change(off,on,cue["box"])
+    status=judge_localized_highlight(difference)
+    return {"cue_id":cue["cue_id"], "video_sha256_verified":True,
+            "before_second":start-margin,"active_second":start+margin,
+            "pixel_evidence":difference,**status,
+            "actual_narration_sync_certified":False}
