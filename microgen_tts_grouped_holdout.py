@@ -37,8 +37,8 @@ def partition_corpus(records:list[dict],*,max_items:int=5000,
         if clip_pcm is not None:
             if not isinstance(clip_pcm,str) or not SHA.fullmatch(clip_pcm):
                 raise HoldoutError("Invalid decoded clip PCM fingerprint")
-            if clip_pcm in clip_pcm_sources and clip_pcm_sources[clip_pcm]!=group:
-                raise HoldoutError("Identical decoded clip PCM in different groups")
+            if clip_pcm in clip_pcm_sources:
+                raise HoldoutError("Identical decoded clip PCM reused in dataset")
             clip_pcm_sources[clip_pcm]=group;clip_pcm_count+=1
         sources[source]=group;groups.setdefault(group,[]).append(row)
     ordered=sorted(groups,key=lambda x:hashlib.sha256(x.encode("utf8")).hexdigest())
