@@ -49,3 +49,24 @@ were not used in this campaign. No paid AI calls or Whisper/GCS leases.
 Continue with real time-localized independently verified cue evidence,
 actual acoustic phoneme labeling and mathematically reviewed slide/figure
 QA before any publishing recommendation.
+
+## October 22, 2026 — HP-only pronunciation evidence stack PRs #114–#123
+
+Sequential draft PRs above #113 using HP only, separate checkout and no
+source media modifications. #114 prevents PCM clip truncation; #115 preserves
+real-media clip hashes; #116–#117 validate and bind pronunciation observations
+to exact source PCM; #118 rejects duplicate and mismatched review packets;
+#119 distinguishes claimed reviewers from genuinely authenticated identities;
+#120 repairs caught consensus status-overwrite bug and reports disagreements;
+#121 validates claimed timing against cue windows; #122 audits actual MP4s,
+hash-linked clips, and unauthenticated review verdicts; #123 exposes a
+nonpublishing CLI and latest checkpoint. The actual Thomas Calculus 13th ed
+section 2.5 slides.mp4 is 550.23s and source SHA-256
+7d27d24d5d6a7ae5bf05cfcef1ea324d628abcf70688437a5555ac1c85b7e9f8.
+A 0.2 second PCM witness can be decoded read-only and bound by checksum.
+There are no independently authenticated speaker or phoneme labels supplied,
+so the real pilot MUST abstain. Claimed two-reviewer agreement is NOT proof
+of reviewer independence or accurate phonemes. No math, figure, spoken-word
+to highlighted slide element timing or publishability is certified. Original
+assets, main branch, dirty G: trees, Dell-115 and Yoga 6 remain untouched;
+no paid AI, Whisper, Google Cloud distributed lease or publication.

@@ -174,3 +174,35 @@ def audit_pronunciation_packet(packet,manifest,video):
        "actual_phonemes_verified":False,"reviewer_identity_authenticated":False,
        "narration_highlight_sync_verified":False,
        "ready_for_publication":False,"assets_modified":False,"publication_performed":False}
+
+def _read_json(path):
+    from microgen_tts_highlight_evidence import _read_json_strict
+    return _read_json_strict(Path(path))
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Read-only independent-review evidence diagnostics")
+    parser.add_argument("--video",required=True,type=Path)
+    parser.add_argument("--review-packet",type=Path)
+    parser.add_argument("--highlight-manifest",type=Path)
+    args=parser.parse_args(argv)
+    try:
+        if args.review_packet is None and args.highlight_manifest is None:
+            media=inspect_real_av_video(args.video)
+            result={"status":"REVIEW_PACKET_ABSENT","source_video":media,
+                "blocking_reason":"Independent grounded labels and cue manifest not supplied"}
+        elif args.review_packet is not None and args.highlight_manifest is not None:
+            result=audit_pronunciation_packet(_read_json(args.review_packet),
+                                               _read_json(args.highlight_manifest),args.video)
+        else:
+            raise AnnotationError("Both review packet and highlight manifest required")
+    except (AnnotationError,AudioEvidenceError,HighlightEvidenceError,OSError,ValueError) as exc:
+        result={"status":"REVIEW_AUDIT_BLOCKED","blocking_reason":str(exc)}
+    result["ready_for_publication"]=False
+    result["assets_modified"]=False
+    result["publication_performed"]=False
+    print(json.dumps(result,indent=2,sort_keys=True))
+    return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())
