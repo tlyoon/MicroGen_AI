@@ -20,3 +20,13 @@ def test_pcm_witness_fingerprint_guard(tmp_path,monkeypatch):
     assert w["sample_count"]==3200 and not w["pronunciation_verified"]
     p.write_bytes(b"mutated")
     with pytest.raises(g.AnnotationError):g.witness_pcm(p,sha,1.0,.2,duration_seconds=4)
+
+def test_review_event_rejects_unbounded_and_untrusted_fields():
+    e=event()
+    assert not g.validate_event(e)["independent_acoustic_truth_verified"]
+    for k,v in [("window_seconds",12),("start_seconds",float("nan")),
+      ("verdict","APPROVED"),("expected_phrase",""),("reviewer_id","x!*"),
+      ("pcm_sha256","wrong"),("heard_phrase","circa\nx")]:
+        bad={**e,k:v}
+        with pytest.raises(g.AnnotationError):g.validate_event(bad)
+    with pytest.raises(g.AnnotationError):g.validate_event({**e,"reviewer_authenticated":True})
