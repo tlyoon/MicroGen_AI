@@ -118,3 +118,21 @@ def verify_slide_sources(manifest, source_index):
         if digest!=fingerprint or (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):
             raise HighlightEvidenceError("Slide source fingerprint mismatch or source mutation")
     return {"slide_sources_sha256_verified":True, "slide_semantics_verified":False}
+
+def capture_frame(video_path, at_seconds, *, timeout=25):
+    video=Path(video_path)
+    if not _finite_number(at_seconds) or not (0 <= at_seconds < 600):
+        raise HighlightEvidenceError("Unsafe frame sample time")
+    if video.suffix.lower() != ".mp4" or video.is_symlink() or not video.is_file():
+        raise HighlightEvidenceError("Explicit regular MP4 required")
+    cmd=["ffmpeg","-nostdin","-hide_banner","-loglevel","error",
+         "-ss",format(at_seconds,".6f"),"-i",str(video),
+         "-frames:v","1","-f","image2pipe","-vcodec","png","pipe:1"]
+    try:
+        result=subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              check=False,timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HighlightEvidenceError("FFmpeg sample failed") from exc
+    if result.returncode != 0 or not result.stdout or len(result.stdout)>32*1024*1024:
+        raise HighlightEvidenceError("Invalid FFmpeg PNG sample")
+    return result.stdout

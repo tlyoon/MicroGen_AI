@@ -49,3 +49,14 @@ def test_source_sha256_and_missing_file_fail_closed(tmp_path):
     p.write_bytes(b"changed")
     with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{fp:str(p)})
     with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{})
+
+def test_ffmpeg_capture_is_read_only_and_bounded(tmp_path,monkeypatch):
+    p=tmp_path/"video.mp4";p.write_bytes(b"fixture")
+    class Result: returncode=0;stdout=b"PNGDATA";stderr=b""
+    calls=[]
+    def mocked(cmd,**kwargs):calls.append((cmd,kwargs));return Result()
+    monkeypatch.setattr(h.subprocess,"run",mocked)
+    assert h.capture_frame(p,1.25)==b"PNGDATA"
+    assert "-nostdin" in calls[0][0] and calls[0][1]["timeout"]==25
+    for time in (-1,600,float("inf")):
+        with pytest.raises(h.HighlightEvidenceError):h.capture_frame(p,time)
