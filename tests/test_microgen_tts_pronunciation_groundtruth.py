@@ -30,3 +30,12 @@ def test_review_event_rejects_unbounded_and_untrusted_fields():
         bad={**e,k:v}
         with pytest.raises(g.AnnotationError):g.validate_event(bad)
     with pytest.raises(g.AnnotationError):g.validate_event({**e,"reviewer_authenticated":True})
+
+def test_review_clip_refuses_forged_hash(tmp_path,monkeypatch):
+    p=tmp_path/"test.mp4";p.write_bytes(b"movie")
+    vid=hashlib.sha256(p.read_bytes()).hexdigest()
+    e=event()
+    monkeypatch.setattr(g,"witness_pcm",lambda *args,**kw:{"pcm_sha256":"b"*64})
+    with pytest.raises(g.AnnotationError):g.verify_label_clip(p,vid,e,duration_seconds=5)
+    monkeypatch.setattr(g,"witness_pcm",lambda *args,**kw:{"pcm_sha256":e["pcm_sha256"]})
+    assert not g.verify_label_clip(p,vid,e,duration_seconds=5)["phonetic_label_verified"]
