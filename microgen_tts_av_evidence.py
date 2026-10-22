@@ -102,3 +102,17 @@ def probe_audio_cue(video,cue,*,duration):
     return {"cue_id":cue["cue_id"],"status":"ACOUSTIC_ENERGY_IN_TWO_WINDOWS" if passed else "INSUFFICIENT_CUE_ACOUSTIC_ACTIVITY",
             "samples":rows,"energy_evidence_pass":passed,
             "spoken_words_verified":False}
+
+def fingerprint_bound_audio_cue(video,expected_sha,cue,*,duration):
+    if not isinstance(expected_sha,str) or re.fullmatch(r"[0-9a-f]{64}",expected_sha) is None:
+        raise AudioEvidenceError("Invalid expected MP4 fingerprint")
+    path=Path(video)
+    if path.is_symlink() or not path.is_file():
+        raise AudioEvidenceError("Unsafe or missing video")
+    before=_sha_file(path)
+    if before!=expected_sha:
+        raise AudioEvidenceError("MP4 mismatches its declared source SHA-256")
+    result=probe_audio_cue(path,cue,duration=duration)
+    if _sha_file(path)!=before:
+        raise AudioEvidenceError("MP4 changed during acoustic witness")
+    return {"video_sha256_verified":True,**result}
