@@ -79,3 +79,26 @@ def classify_acoustic_activity(metrics,*,rms_floor=.018,clipping_limit=.10):
         label="ACOUSTIC_ENERGY_PRESENT"
     return {"activity_label":label,"acoustic_energy_present":label=="ACOUSTIC_ENERGY_PRESENT",
             "speech_or_phonetic_identity_verified":False}
+
+def probe_audio_cue(video,cue,*,duration):
+    if not isinstance(cue,dict) or not {"cue_id","start_seconds","end_seconds"}<=set(cue):
+        raise AudioEvidenceError("Cue identity and interval required")
+    start,end=cue["start_seconds"],cue["end_seconds"]
+    if not _finite(start) or not _finite(end) or not (0<=start<end<=duration):
+        raise AudioEvidenceError("Malformed audio cue interval")
+    span=end-start
+    if span < .30:
+        return {"cue_id":cue["cue_id"],"status":"ABSTAIN_CUE_TOO_SHORT",
+                "samples":[],"energy_evidence_pass":False,"spoken_words_verified":False}
+    window=min(.16,span/5)
+    marks=(start+span*.18,start+span*.62)
+    rows=[]
+    for at in marks:
+        raw=extract_pcm_window(video,at,window,duration=duration)
+        stats=pcm_energy(raw)
+        rows.append({"start_seconds":at,"window_seconds":window,
+                     "metrics":stats,"activity":classify_acoustic_activity(stats)})
+    passed=all(x["activity"]["acoustic_energy_present"] for x in rows)
+    return {"cue_id":cue["cue_id"],"status":"ACOUSTIC_ENERGY_IN_TWO_WINDOWS" if passed else "INSUFFICIENT_CUE_ACOUSTIC_ACTIVITY",
+            "samples":rows,"energy_evidence_pass":passed,
+            "spoken_words_verified":False}

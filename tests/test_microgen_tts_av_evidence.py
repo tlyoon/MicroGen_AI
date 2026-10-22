@@ -46,3 +46,13 @@ def test_acoustic_threshold_is_not_a_phonetic_label():
         assert result["activity_label"]==expect and not result["speech_or_phonetic_identity_verified"]
     with pytest.raises(a.AudioEvidenceError):
         a.classify_acoustic_activity({"rms":float("inf"),"peak":0,"clipped_fraction":0})
+
+def test_two_audio_windows_and_short_cue_abstention(tmp_path,monkeypatch):
+    video=tmp_path/"lesson.mp4";video.write_bytes(b"input")
+    monkeypatch.setattr(a,"extract_pcm_window",lambda *args,**kw:struct.pack("<2400h", *([8000]*2400)))
+    cue={"cue_id":"e1","start_seconds":1.0,"end_seconds":2.0}
+    report=a.probe_audio_cue(video,cue,duration=4)
+    assert len(report["samples"])==2 and report["energy_evidence_pass"]
+    assert report["spoken_words_verified"] is False
+    cue["end_seconds"]=1.15
+    assert a.probe_audio_cue(video,cue,duration=4)["status"]=="ABSTAIN_CUE_TOO_SHORT"
