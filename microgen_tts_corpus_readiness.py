@@ -76,6 +76,8 @@ def main(argv=None):
     p=argparse.ArgumentParser(description="Non-publishing real audio corpus audit")
     p.add_argument("source_list_json",type=Path);p.add_argument("new_external_report",type=Path)
     p.add_argument("--inventory",type=Path,help="Optional independently revalidated original WAV inventory")
+    p.add_argument("--require-ready",action="store_true",
+                   help="Nonzero exit when genuine phonetic-scoring readiness is absent")
     args=p.parse_args(argv)
     entries=json.loads(args.source_list_json.read_text(encoding="utf8"))
     if not isinstance(entries,list):p.error("Source list must be JSON array")
@@ -99,5 +101,5 @@ def main(argv=None):
                       "sources":len(result["sources_verified"]),
                       "scoring_blockers":result["technical_blockers_to_phonetic_benchmark"],
                       "publication_performed":False}))
-    return 0
+    return 2 if args.require_ready and not result["phonetic_accuracy_verified"] else 0
 if __name__=="__main__":raise SystemExit(main())
