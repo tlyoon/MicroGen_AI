@@ -34,3 +34,25 @@ def witness_pcm(video, expected_sha256, start_seconds, window_seconds, *, durati
             "rms":measurements["rms"],
             "clipped_fraction":measurements["clipped_fraction"],
             "pronunciation_verified":False}
+
+_EVENT_KEYS={"event_id","cue_id","expected_phrase","heard_phrase","verdict",
+            "start_seconds","window_seconds","pcm_sha256","reviewer_id"}
+
+def validate_event(observation):
+    if not isinstance(observation,dict) or set(observation)!=_EVENT_KEYS:
+        raise AnnotationError("Pronunciation observation does not match strict schema")
+    for key in ("event_id","cue_id","reviewer_id"):
+        if not isinstance(observation[key],str) or not _IDENT.fullmatch(observation[key]):
+            raise AnnotationError("Invalid event or reviewer identifier")
+    for key in ("expected_phrase","heard_phrase"):
+        value=observation[key]
+        if not isinstance(value,str) or not (1<=len(value)<=180) or value!=value.strip() or any(ord(c)<32 or ord(c)==127 for c in value):
+            raise AnnotationError("Invalid expected/heard phrase")
+    if observation["verdict"] not in ("CORRECT","DEFECT","UNCERTAIN"):
+        raise AnnotationError("Review verdict must be explicit")
+    if not isinstance(observation["pcm_sha256"],str) or not _HASH.fullmatch(observation["pcm_sha256"]):
+        raise AnnotationError("Missing audio clip checksum")
+    start=observation["start_seconds"];seconds=observation["window_seconds"]
+    if not all(_finite(x) for x in (start,seconds)) or not (0<=start<600 and .05<=seconds<=1 and start+seconds<600):
+        raise AnnotationError("Invalid bounded observation time")
+    return {"schema_valid":True,"claimed_reviewer_only":True,"independent_acoustic_truth_verified":False}
