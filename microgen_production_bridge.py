@@ -91,3 +91,35 @@ def pdf_element_inventory(pdf):
             result.append({"slide":i,"width":page.rect.width,"height":page.rect.height,
                            "words":bbox,"source_geometry_extracted":True})
     return result
+
+def validate_highlight_cues(cues,page_rows,timeline):
+    if not isinstance(cues,list) or not 1<=len(cues)<=128:
+        raise BridgeError("Explicit bounded highlight cues required")
+    pages={x["slide"]:x for x in page_rows}
+    intervals={x["slide"]:x for x in timeline["slide_intervals"]}
+    seen=set();previous=(-1,0.)
+    for c in cues:
+        if not isinstance(c,dict) or set(c)!={"slide","text","box","start_seconds","end_seconds"}:
+            raise BridgeError("Unexpected cue schema")
+        i=c["slide"]
+        if type(i) is not int or i not in pages or i not in intervals:
+            raise BridgeError("Highlight cue slide not in input")
+        box=c["box"]
+        if (not isinstance(box,list) or len(box)!=4 or
+            any(not _finite(x) for x in box) or
+            not (0<=box[0]<box[2]<=pages[i]["width"]+1 and
+                 0<=box[1]<box[3]<=pages[i]["height"]+1)):
+            raise BridgeError("Invalid cue geometry")
+        text=c["text"]
+        matching=[word for word in pages[i]["words"] if word["text"]==text and
+              all(abs(a-b)<2.0 for a,b in zip(box,word["box"]))]
+        if not matching:raise BridgeError("No actual PDF text element matches cue")
+        start,end=c["start_seconds"],c["end_seconds"]
+        begin=intervals[i]["start_seconds"];finish=intervals[i]["end_seconds"]
+        if not all(_finite(x) for x in (start,end)) or not begin<=start<end<=finish:
+            raise BridgeError("Cue outside measured WAV interval")
+        if (i,start)<previous or (i,start,end) in seen:
+            raise BridgeError("Unordered or duplicate highlights")
+        previous=(i,start);seen.add((i,start,end))
+    return {"cue_geometry_validated":True,"cues":len(cues),
+            "acoustic_word_alignment_verified":False}

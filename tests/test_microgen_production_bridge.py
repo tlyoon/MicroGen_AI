@@ -42,3 +42,14 @@ def test_pdf_element_inventory_real_fitzz(tmp_path):
     rows=b.pdf_element_inventory(tmp_path/"slides.pdf")
     assert len(rows)==2 and "limit" in [x["text"] for x in rows[0]["words"]]
     assert rows[0]["source_geometry_extracted"]
+
+def test_highlight_cues_require_exact_pdf_word_and_wav_bounds(tmp_path):
+    write_lesson(tmp_path)
+    for i in (1,2):write_wav(tmp_path/f"slide{i}.wav",.4)
+    pages=b.pdf_element_inventory(tmp_path/"slides.pdf")
+    timing=b.measured_wav_timeline(tmp_path,2)
+    word=next(w for w in pages[0]["words"] if w["text"]=="limit")
+    cue={"slide":1,"text":"limit","box":word["box"],"start_seconds":.1,"end_seconds":.3}
+    assert b.validate_highlight_cues([cue],pages,timing)["cue_geometry_validated"]
+    with pytest.raises(b.BridgeError):
+        b.validate_highlight_cues([{**cue,"text":"fabricated"}],pages,timing)
