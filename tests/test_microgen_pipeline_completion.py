@@ -80,3 +80,9 @@ def test_mapping_requires_unambiguous_real_pdf_word(tmp_path):
     assert r["real_pdf_geometry_verified"] and not r["narration_phrase_timing_ground_truth_verified"]
     with pytest.raises(m.CampaignError):
        m.bind_narration_anchors(tmp_path/"slides.pdf",t,[{**cue,"word":"notfound"}])
+
+def test_renderer_refuses_staging_inside_source(tmp_path):
+    source=tmp_path/"source";source.mkdir();make_source(source)
+    wav=tmp_path/"wave.wav";write_wav(wav,.25)
+    with pytest.raises(m.CampaignError):
+        m.render_slide_candidate(source,1,wav,[],source/"stage")
