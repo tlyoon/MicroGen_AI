@@ -70,3 +70,13 @@ def test_activity_detection_uses_real_nonzero_pcm(tmp_path):
     assert x["activity_intervals_seconds"] and not x["word_alignment_verified"]
     silence=tmp_path/"silence.wav";write_wav(silence,.2)
     assert m.observe_acoustic_activity(silence)["activity_intervals_seconds"]==[]
+
+def test_mapping_requires_unambiguous_real_pdf_word(tmp_path):
+    make_source(tmp_path)
+    for n in (1,2):write_wav(tmp_path/f"slide{n}.wav",.4)
+    t=m._timeline(tmp_path,2)
+    cue={"slide":1,"word":"limit","start_seconds":.1,"end_seconds":.3,"spoken_phrase":"limit"}
+    r=m.bind_narration_anchors(tmp_path/"slides.pdf",t,[cue])
+    assert r["real_pdf_geometry_verified"] and not r["narration_phrase_timing_ground_truth_verified"]
+    with pytest.raises(m.CampaignError):
+       m.bind_narration_anchors(tmp_path/"slides.pdf",t,[{**cue,"word":"notfound"}])

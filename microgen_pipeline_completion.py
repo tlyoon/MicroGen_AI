@@ -165,3 +165,25 @@ def observe_acoustic_activity(wav_path,*,window_ms=20,floor=.02):
     return {"activity_intervals_seconds":intervals,
             "sample_rate":rate,"waveform_sha256":_sha(p),
             "phoneme_identity_verified":False,"word_alignment_verified":False}
+
+def bind_narration_anchors(pdf,timeline,anchors):
+    from microgen_production_bridge import pdf_element_inventory,validate_highlight_cues
+    pages=pdf_element_inventory(pdf)
+    if not isinstance(anchors,list) or not anchors:
+        raise CampaignError("Explicit narration anchors required")
+    cues=[]
+    for anchor in anchors:
+        if not isinstance(anchor,dict) or set(anchor)!={"slide","word","start_seconds","end_seconds","spoken_phrase"}:
+            raise CampaignError("Untrusted anchor schema")
+        if type(anchor["slide"]) is not int or not 1<=anchor["slide"]<=len(pages):
+            raise CampaignError("Invalid slide anchor")
+        words=[w for w in pages[anchor["slide"]-1]["words"] if
+                 w["text"].casefold()==anchor["word"].casefold()]
+        if len(words)!=1 or not isinstance(anchor["spoken_phrase"],str) or not anchor["spoken_phrase"].strip():
+            raise CampaignError("Ambiguous or missing PDF word mapping")
+        cues.append({"slide":anchor["slide"],"text":words[0]["text"],
+               "box":words[0]["box"],"start_seconds":anchor["start_seconds"],
+               "end_seconds":anchor["end_seconds"]})
+    result=validate_highlight_cues(cues,pages,timeline)
+    return {"cues":cues,"real_pdf_geometry_verified":result["cue_geometry_validated"],
+        "narration_phrase_timing_ground_truth_verified":False}
