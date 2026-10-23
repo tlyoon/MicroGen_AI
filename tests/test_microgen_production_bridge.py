@@ -84,3 +84,9 @@ def test_repair_plan_is_staged_and_no_provider_calls(tmp_path):
     plan=b.candidate_tts_repair_plan(tmp_path)
     assert plan["provider_calls_made"]==0 and plan["stage_only"]
     assert any(q["slide"]==2 for q in plan["proposed_corrections"])
+
+def test_pdf_layout_advisory_does_not_claim_academic_review(tmp_path):
+    write_lesson(tmp_path)
+    report=b.pdf_layout_advisory(tmp_path/"slides.pdf")
+    assert report["academic_meaning_verified"] is False
+    assert not report["figures_modified"]
