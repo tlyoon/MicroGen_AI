@@ -194,3 +194,22 @@ provider name claim. Their purpose is convenient comparison, **not**
 source replacement. Existing original PDF/WAV/MP4 unchanged; no additional
 paid AI calls, Whisper, publication, main branch, Dell-115 or Yoga6.
 See `docs/THOMAS_2_5_PRONUNCIATION_REVIEW_BUNDLE_20261023.md`.
+
+## October 23, 2026 — HP-only offline math-pronunciation diagnostic PR #157
+
+Built from the newest live PR #156. Installed optional offline Vosk 0.3.45
+and the official small English model under HP AppData only, no Whisper,
+no paid APIs or model binaries in repo. Seven real WAVs transcribed with
+Vosk word confidence and timestamps: 3 provisional originals plus four
+historical corrective trials. The original slide6 narration was recognized
+as saying "circa" at local 5.25, 10.47 and 16.53 seconds; the C-dot
+corrective trial instead yielded "see/sea/see" at nearby times. Both
+slide10 Y trials produced two recognized "why" instances rather than one
+in the provisional reference. Slide5 changes were inconclusive.
+Recognition output is a **diagnostic suggestion only**, never authenticated
+phonetic ground truth. The new SHA-bound contrast validator refuses forged
+WAV, misordered timestamps or fake publication approvals. It authorizes
+neither audio replacement nor synchronized highlighting. Full docs:
+`docs/THOMAS_2_5_OFFLINE_ASR_CONTRAST_20261023.md`. Original files
+preserved, HP only, no paid provider, GCS lease, Whisper, YouTube/Moodle
+publication or main changes.
