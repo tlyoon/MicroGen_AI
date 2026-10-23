@@ -129,3 +129,33 @@ def discover_qa_audio_candidates(source,*,limit=128):
             if len(items)>limit:raise OrchestratorError("Too many QA WAV candidates")
     return {"candidates":items,"auto_recovered":0,
             "human_review_replaced":False}
+
+def adopt_verified_wav(workspace,slide,offered,*,sha256,narration_sha256):
+    receipt=verify_workspace(workspace)
+    root=Path(workspace).resolve(strict=True)
+    src=Path(receipt["source_root"])
+    script=read_json(src/"script_tts.json")["slides"]
+    if type(slide) is not int or not 1<=slide<=len(script):
+        raise OrchestratorError("Invalid slide number")
+    from microgen_pipeline_completion import _tts_digest
+    wav=Path(offered).resolve(strict=True)
+    if wav.suffix.lower()!=".wav" or wav.is_symlink() or not wav.is_file() or digest(wav)!=sha256 or narration_sha256!=_tts_digest(script[slide-1]):
+        raise OrchestratorError("Unverified WAV source and exact narration binding")
+    with wave.open(str(wav),"rb") as f:
+        seconds=f.getnframes()/f.getframerate()
+    if not .05<=seconds<600:raise OrchestratorError("Invalid WAV duration")
+    audio=root/"audio"
+    if not audio.is_dir():raise OrchestratorError("Audio stage not created")
+    output=audio/f"slide{slide}.wav"
+    if output.exists() or output.is_symlink():
+        raise OrchestratorError("Never overwrite staged audio")
+    shutil.copyfile(wav,output)
+    if digest(output)!=sha256:
+        output.unlink(missing_ok=True)
+        raise OrchestratorError("WAV modified during adoption")
+    manifest=read_json(root/"audio_inventory.json")
+    manifest["entries"].append({"slide":slide,"sha256":sha256,
+          "source":"explicit_external_source_binding","speaker_authenticated":False})
+    manifest["missing"]=[x for x in manifest["missing"] if x!=slide]
+    atomic_json(root/"audio_inventory.json",manifest)
+    return {"adopted":slide,"wav_sha256":sha256,"human_speech_quality_verified":False}

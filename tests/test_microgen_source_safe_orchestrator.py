@@ -57,3 +57,14 @@ def test_qa_candidates_remain_unverified(tmp_path):
     report=o.discover_qa_audio_candidates(src)
     assert len(report["candidates"])==1
     assert report["candidates"][0]["approved_for_reuse"] is False
+
+def test_explicit_wav_adoption_checks_text_and_hash(tmp_path):
+    src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
+    o.stage_existing_root_wavs(dst)
+    offered=tmp_path/"candidate.wav";write_wave(offered,.4)
+    rows=json.loads((src/"script_tts.json").read_text())["slides"]
+    from microgen_pipeline_completion import _tts_digest
+    proof=_tts_digest(rows[0])
+    with pytest.raises(o.OrchestratorError):
+        o.adopt_verified_wav(dst,1,offered,sha256="0"*64,narration_sha256=proof)
+    assert o.adopt_verified_wav(dst,1,offered,sha256=o.digest(offered),narration_sha256=proof)["adopted"]==1
