@@ -37,3 +37,9 @@ def test_workspace_outside_source_and_sealed(tmp_path):
     assert not r["receipt"]["publication_permitted"]
     with pytest.raises(Exception):o.create_workspace(src,src/"illegal")
     with pytest.raises(Exception):o.create_workspace(src,dst)
+
+def test_workspace_detects_drift_and_forged_approval(tmp_path):
+    src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
+    assert o.verify_workspace(dst)["slide_count"]==2
+    script=src/"script_tts.json";script.write_text(script.read_text()+" ")
+    with pytest.raises(o.OrchestratorError):o.verify_workspace(dst)
