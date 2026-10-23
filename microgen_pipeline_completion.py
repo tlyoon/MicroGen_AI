@@ -134,3 +134,34 @@ def regenerate_staged_wav(source,stage,slide,synthesize,*,voice="en-US-Chirp-HD-
             if output.exists() and not output.is_symlink():output.unlink()
     return {"status":"REGENERATION_FAILED","slide":slide,"attempts":statuses,
         "source_modified":False,"pronunciation_verified":False}
+
+def observe_acoustic_activity(wav_path,*,window_ms=20,floor=.02):
+    """Detect amplitude only; no phonetic or word-alignment certification."""
+    import struct
+    p=Path(wav_path)
+    if p.is_symlink() or not p.is_file():raise CampaignError("Actual WAV required")
+    if not _finite(floor) or not 0<floor<.8 or window_ms not in (10,20,40):
+        raise CampaignError("Invalid audio analysis policy")
+    with wave.open(str(p),"rb") as audio:
+        if audio.getnchannels()!=1 or audio.getsampwidth()!=2 or not 8000<=audio.getframerate()<=48000:
+            raise CampaignError("Mono 16-bit PCM required")
+        rate=audio.getframerate();frames=audio.getnframes()
+        if frames/rate>600 or frames<=0:raise CampaignError("Unbounded PCM source")
+        raw=audio.readframes(frames)
+    if len(raw)!=frames*2:raise CampaignError("Incomplete wave data")
+    samples=struct.unpack("<"+"h"*frames,raw)
+    block=max(1,round(rate*window_ms/1000))
+    flags=[]
+    for i in range(0,frames,block):
+        segment=samples[i:i+block]
+        rms=(sum(x*x for x in segment)/len(segment))**.5/32768
+        flags.append(rms>=floor)
+    intervals=[];left=None
+    for j,active in enumerate(flags+[False]):
+        if active and left is None:left=j
+        if not active and left is not None:
+            intervals.append([round(left*block/rate,5),
+              round(min(j*block,frames)/rate,5)]);left=None
+    return {"activity_intervals_seconds":intervals,
+            "sample_rate":rate,"waveform_sha256":_sha(p),
+            "phoneme_identity_verified":False,"word_alignment_verified":False}
