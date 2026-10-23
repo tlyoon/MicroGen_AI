@@ -195,3 +195,24 @@ def candidate_tts_repair_plan(directory):
              "existing_wav_must_not_be_overwritten":True} for x in changes],
              "requires_consistent_voice":True,
              "provider_calls_made":0,"stage_only":True,"publication_allowed":False}
+
+def pdf_layout_advisory(pdf,*,minimum_font_points=7.0):
+    warnings=[]
+    p=Path(pdf)
+    if p.is_symlink() or not p.is_file():raise BridgeError("Original PDF missing")
+    with fitz.open(p) as doc:
+        for i,page in enumerate(doc,1):
+            for item in page.get_text("dict")["blocks"]:
+                if item.get("type")==0:
+                    for line in item.get("lines",[]):
+                        for span in line.get("spans",[]):
+                            if span.get("text","").strip() and span.get("size",100)<minimum_font_points:
+                                warnings.append({"slide":i,"kind":"SMALL_TEXT","text":span["text"][:60]})
+            for img in page.get_images(full=True):
+                for rect in page.get_image_rects(img[0]):
+                    if rect.is_empty or not page.rect.contains(rect):
+                        warnings.append({"slide":i,"kind":"CLIPPED_IMAGE"})
+                    elif rect.width/page.rect.width<.10:
+                        warnings.append({"slide":i,"kind":"NARROW_IMAGE"})
+    return {"layout_warnings":warnings,"academic_meaning_verified":False,
+            "figures_modified":False,"source_modified":False}
