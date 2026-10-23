@@ -178,3 +178,18 @@ def source_bound_timeline(workspace):
     atomic_json(root/"measured_timeline.json",timeline)
     return {"duration_seconds":timeline["duration_seconds"],
             "slides":receipt["slide_count"],"speech_word_alignment_verified":False}
+
+def plan_source_bound_cues(workspace,anchors):
+    from microgen_pipeline_completion import bind_narration_anchors
+    receipt=verify_workspace(workspace);root=Path(workspace).resolve(strict=True)
+    src=Path(receipt["source_root"])
+    timeline=read_json(root/"measured_timeline.json")
+    aligned=bind_narration_anchors(src/"slides.pdf",timeline,anchors)
+    converted=[]
+    for cue in aligned["cues"]:
+        interval=timeline["slide_intervals"][cue["slide"]-1]
+        converted.append({**cue,"local_start":round(cue["start_seconds"]-interval["start_seconds"],6),
+                          "local_end":round(cue["end_seconds"]-interval["start_seconds"],6)})
+    atomic_json(root/"cues.json",{"version":1,"elements":converted,
+         "spoken_word_alignment_verified":False,"cue_timestamps_provided_externally":True})
+    return {"cue_count":len(converted),"true_spoken_word_alignment_verified":False}

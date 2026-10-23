@@ -73,3 +73,13 @@ def test_timeline_blocks_incomplete_sources(tmp_path):
     src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
     o.stage_existing_root_wavs(dst)
     with pytest.raises(o.OrchestratorError):o.source_bound_timeline(dst)
+
+def test_cue_localization_uses_actual_wav_clock(tmp_path):
+    src=fixture(tmp_path)
+    for i in (1,2):write_wave(src/f"slide{i}.wav",.4)
+    dst=tmp_path/"stage";o.create_workspace(src,dst);o.stage_existing_root_wavs(dst)
+    o.source_bound_timeline(dst)
+    a=[{"slide":2,"word":"limit","start_seconds":.5,"end_seconds":.7,"spoken_phrase":"limit"}]
+    result=o.plan_source_bound_cues(dst,a)
+    assert result["cue_count"]==1
+    assert o.read_json(dst/"cues.json")["elements"][0]["local_start"]==pytest.approx(.1)
