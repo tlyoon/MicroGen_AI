@@ -88,3 +88,8 @@ def test_full_renderer_requires_timeline_and_cues(tmp_path):
     src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
     with pytest.raises((OSError,KeyError,ValueError,o.OrchestratorError)):
         o.render_complete_staged_lesson(dst)
+
+def test_cli_source_2_slides_reports_no_publication(tmp_path,capsys):
+    src=fixture(tmp_path);assert o.main(["--lesson",str(src),"--inspect"])==2
+    result=json.loads(capsys.readouterr().out)
+    assert result["missing"]==[1,2] and not result["ready_for_publication"]

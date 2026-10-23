@@ -111,3 +111,27 @@ corrected slide5 WAV and source PDF permit an isolated technical timed
 overlay demonstration, which is NOT independently proven aligned with
 actual words. No source or historical WAV/MP4 modified; no paid provider
 calls, no Whisper, no publication or access to Dell/Yoga6.
+
+## October 23, 2026 — HP-only source-safe staged production PRs #144–#153
+
+Latest live #143 branch was the source. Ten stacked DRAFT PRs implement
+source audio inventory, safe fingerprinted workspace, source drift checks,
+existing audio staging, non-authoritative alternative WAV discovery,
+explicit file/narration SHA bound alternative adoption, complete WAV
+timeline, external cue to PDF geometry conversion with real per-slide
+timestamps, full staged per-slide video technical rendering, verified
+multipart MP4 with strict <600s enforcement and read-only source CLI.
+
+A complete TWO-SLIDE real FFmpeg/PDF/WAV candidate technical acceptance
+fixture was generated using deterministic synthesized test WAVs. Its
+per-element cue clock was authored by the test and is NOT genuine real
+lecture spoken-word timing. Thomas Calculus §2.5 read-only preflight
+continued to show 17/17 root slide WAVs missing, despite containing
+finished original MP4 and legacy QA corrected WAV samples. No unsupported
+reconstruction of audio and no source media replacement occurred.
+Mathematical, acoustic pronunciation, actual narration-to-highlight
+alignment, full content academic QA and release eligibility remain
+unverified. No new paid TTS calls, Whisper, Moodle/YouTube publication,
+Dell-115/Yoga6, main-branch changes, or historical output changes.
+The stack is unmerged and awaits integration validation. The original
+project is not yet proven production-complete.
