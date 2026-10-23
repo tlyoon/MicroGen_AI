@@ -185,3 +185,13 @@ def preview_math_pronunciation(directory):
            "spoken_input":spoken,"changed":spoken!=original})
     return {"normalization_preview":rows,"displayed_math_untouched":True,
             "tts_invoked":False,"spoken_phonemes_verified":False}
+
+def candidate_tts_repair_plan(directory):
+    original=Path(directory)
+    plan=preview_math_pronunciation(original)
+    changes=[row for row in plan["normalization_preview"] if row["changed"]]
+    return {"schema_version":1,"proposed_corrections":[{"slide":x["slide"],
+             "source_text_sha256":x["source_text_sha256"],"spoken_input":x["spoken_input"],
+             "existing_wav_must_not_be_overwritten":True} for x in changes],
+             "requires_consistent_voice":True,
+             "provider_calls_made":0,"stage_only":True,"publication_allowed":False}

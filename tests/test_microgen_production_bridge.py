@@ -75,3 +75,12 @@ def test_math_speech_preview_preserves_source(tmp_path):
     assert "see." in preview["normalization_preview"][0]["spoken_input"]
     assert p.read_bytes()==changed and original!=changed
     assert preview["tts_invoked"] is False
+
+def test_repair_plan_is_staged_and_no_provider_calls(tmp_path):
+    write_lesson(tmp_path)
+    p=tmp_path/"script_tts.json"
+    j=json.loads(p.read_text());j["slides"][1]["tts_text"]="Evaluate at c."
+    p.write_text(json.dumps(j))
+    plan=b.candidate_tts_repair_plan(tmp_path)
+    assert plan["provider_calls_made"]==0 and plan["stage_only"]
+    assert any(q["slide"]==2 for q in plan["proposed_corrections"])
