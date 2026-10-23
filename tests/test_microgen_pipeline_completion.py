@@ -50,3 +50,16 @@ def test_speech_inputs_normalize_cdot_without_changing_original(tmp_path):
     assert "see." in result["slides"][0]["speech_input"]
     assert result["provider_called"] is False
     assert (tmp_path/"script_tts.json").read_bytes()==before
+
+def test_regenerator_retries_and_keeps_voice_and_source(tmp_path):
+    src=tmp_path/"src";src.mkdir();make_source(src)
+    calls=[]
+    def backend(text,output,**kw):
+        calls.append(kw)
+        if len(calls)<3:raise RuntimeError("test offline synthesized failure")
+        write_wav(output,.3)
+        return dict(kw)
+    result=m.regenerate_staged_wav(src,tmp_path/"isolated",1,backend)
+    assert result["status"]=="REVIEW_REQUIRED" and len(calls)==3
+    assert len({v["voice"] for v in calls})==1
+    assert not (src/"slide1.wav").exists()
