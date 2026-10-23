@@ -1,0 +1,28 @@
+import io,json,math,wave,struct
+from pathlib import Path
+import pytest
+import pymupdf as fitz
+import microgen_production_bridge as b
+
+def write_lesson(root):
+    with fitz.open() as doc:
+        for i in range(2):
+            p=doc.new_page(width=640,height=360)
+            p.insert_text((36,52),"limit as x approaches c.",fontsize=18)
+        doc.save(root/"slides.pdf")
+    (root/"script_tts.json").write_text(json.dumps({"slides":[
+       {"slide":1,"tts_text":"Take the limit at c."},
+       {"slide":2,"tts_text":"Evaluate at c."}]}),encoding="utf8")
+def write_wav(path,seconds):
+    with wave.open(str(path),"wb") as w:
+        w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000)
+        w.writeframes(b"\0\0"*int(seconds*16000))
+
+def test_readonly_inventory_matches_actual_pdf_pages(tmp_path):
+    write_lesson(tmp_path)
+    assert b.inspect_lesson(tmp_path)["page_count"]==2
+    assert not b.inspect_lesson(tmp_path)["complete_audio_set"]
+    obj=json.loads((tmp_path/"script_tts.json").read_text())
+    obj["slides"][1]["slide"]=3
+    (tmp_path/"script_tts.json").write_text(json.dumps(obj))
+    with pytest.raises(b.BridgeError):b.inspect_lesson(tmp_path)
