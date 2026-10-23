@@ -43,3 +43,10 @@ def test_workspace_detects_drift_and_forged_approval(tmp_path):
     assert o.verify_workspace(dst)["slide_count"]==2
     script=src/"script_tts.json";script.write_text(script.read_text()+" ")
     with pytest.raises(o.OrchestratorError):o.verify_workspace(dst)
+
+def test_root_wav_staging_copies_only_existing_tracks(tmp_path):
+    src=fixture(tmp_path);write_wave(src/"slide2.wav",.5)
+    dst=tmp_path/"stage";o.create_workspace(src,dst)
+    report=o.stage_existing_root_wavs(dst)
+    assert report["copied"]==1 and report["missing"]==[1]
+    assert o.digest(dst/"audio"/"slide2.wav")==o.digest(src/"slide2.wav")
