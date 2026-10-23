@@ -187,3 +187,26 @@ def bind_narration_anchors(pdf,timeline,anchors):
     result=validate_highlight_cues(cues,pages,timeline)
     return {"cues":cues,"real_pdf_geometry_verified":result["cue_geometry_validated"],
         "narration_phrase_timing_ground_truth_verified":False}
+
+def render_slide_candidate(source,slide,wav_path,cues,stage):
+    from microgen_production_bridge import render_staged_highlight
+    from microgen_quality import check_video
+    src=Path(source).resolve(strict=True)
+    outdir=_new_stage(src,stage)
+    if type(slide) is not int:raise CampaignError("Invalid slide")
+    with fitz.open(src/"slides.pdf") as doc:
+        if not 1<=slide<=doc.page_count:raise CampaignError("Slide out of bounds")
+        outdir.mkdir(parents=True)
+        pages=outdir/"input_pages";pages.mkdir()
+        one=pages/f"slide{slide}.pdf"
+        with fitz.open() as single:
+            single.insert_pdf(doc,from_page=slide-1,to_page=slide-1)
+            single.save(one)
+    video_dir=outdir/"rendered";video_dir.mkdir()
+    media=video_dir/f"slide{slide}.mp4"
+    report=render_staged_highlight(one,Path(wav_path),cues,media)
+    actual=check_video(media)
+    return {"source_pdf_slide":slide,"video_sha256":_sha(media),
+      "duration_seconds":actual["seconds"],"cue_count":len(cues),
+      "technical_overlay_rendered":True,"real_spoken_word_sync_verified":False,
+      "source_modified":False}
