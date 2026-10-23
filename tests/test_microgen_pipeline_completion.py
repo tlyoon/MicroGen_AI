@@ -92,3 +92,12 @@ def test_compositor_requires_staged_slide_videos(tmp_path):
     timeline={"slide_intervals":[{"slide":1,"start_seconds":0,"end_seconds":10}]}
     with pytest.raises(m.CampaignError):
         m.compose_stage_parts(root,timeline,"ffmpeg")
+
+def test_real_qa_gates_reject_video_only_success():
+    rows=[{"duration_seconds":30.1,"sha256":"a"*64}]
+    report=m.candidate_technical_gate(rows,audio_complete=True,element_manifest_grounded=False)
+    assert "NO_GROUNDED_SPEECH_ELEMENT_ALIGNMENT" in report["unresolved_gates"]
+    assert not report["eligible_for_release"]
+    with pytest.raises(m.CampaignError):
+       m.candidate_technical_gate([{**rows[0],"duration_seconds":600}],
+             audio_complete=True,element_manifest_grounded=True)
