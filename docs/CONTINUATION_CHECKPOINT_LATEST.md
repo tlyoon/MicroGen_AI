@@ -226,3 +226,19 @@ ASR word timestamps remain diagnostic, NOT acoustic ground truth or
 element-highlight evidence sufficient for release. Model weights are
 separate in HP AppData, never included in GitHub. Original files and
 protected main remain untouched. More: `docs/OFFLINE_VOSK_CAPTURE_PR158.md`.
+
+## October 23, 2026 — PR #159 real ASR-to-source-PDF highlighting (HP only)
+
+`microgen_offline_asr_pdf_highlight.py` conservatively links a recognised,
+high-confidence, unique content word in real source-bound candidate speech
+to exactly one source-PDF word bounding box. It never guesses mathematical
+variables, repeated text or equation/figure semantics. Actual §2.5
+corrective trial slide5 produced 3 highlighted source words in a 38.46-s
+video, slide6 produced 1 in 32.10-s video, slide10 produced 3 in 32.92-s
+video. All three real technical demos were staged under HP AppData.
+Subsequent before/during highlight frame crops had RGB mean differences
+24.586, 21.446 and 18.347, showing visible timed overlay pixels.
+No genuine mathematical equation/figure narration alignment or independent
+phonetic review is yet verified; therefore publication=false. Details in
+`docs/THOMAS_2_5_AUDIO_PDF_HIGHLIGHT_PR159.md`. No original teaching
+media, main, Dell/Yoga, paid API, Whisper or publication affected.
