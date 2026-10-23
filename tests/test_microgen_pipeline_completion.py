@@ -101,3 +101,26 @@ def test_real_qa_gates_reject_video_only_success():
     with pytest.raises(m.CampaignError):
        m.candidate_technical_gate([{**rows[0],"duration_seconds":600}],
              audio_complete=True,element_manifest_grounded=True)
+
+def test_source_safe_cli_refuses_false_publication(tmp_path,capsys):
+    make_source(tmp_path)
+    rc=m.main(["--lesson",str(tmp_path)])
+    assert rc==2
+    result=json.loads(capsys.readouterr().out)
+    assert result["audio_recovery_required"] and not result["release_ready"]
+
+
+def test_unattested_release_flags_cannot_authorize_publication():
+    row={"duration_seconds":23,"sha256":"a"*64}
+    result=m.candidate_technical_gate([row],audio_complete=True,
+        element_manifest_grounded=True,academic_review_passed=True,
+        phonetic_review_passed=True)
+    assert result["technical_conditions_claimed_complete"]
+    assert result["eligible_for_release"] is False
+
+
+def test_multipart_refuses_unmarked_and_production_directories(tmp_path):
+    source=tmp_path/"original";source.mkdir();make_source(source)
+    timeline={"slide_intervals":[{"slide":1,"start_seconds":0,"end_seconds":15}]}
+    with pytest.raises(m.CampaignError):
+        m.compose_stage_parts(source,timeline,"ffmpeg")

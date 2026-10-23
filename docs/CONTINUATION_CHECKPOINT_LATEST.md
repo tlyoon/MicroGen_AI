@@ -89,3 +89,25 @@ sources, historical videos/WAVs, protected main and user dirty G: checkout
 were never edited. HP only; no Dell-115/Yoga 6, no Whisper, no new paid API,
 no publication. Academic math/figure semantics and speech correctness remain
 uncertified. PRs are stacked DRAFT until integration and real quality gates.
+
+## October 23, 2026 — HP-only production integration drafts #134–#143
+
+The work starts at the latest live GitHub #133 and is strictly staged in
+a separate HP checkout. #134 makes an authoritative input contract,
+#135 supports explicitly manifest/hash-bound WAV reuse safely into stage,
+#136 source-hashes conservative mathematical TTS normalization,
+#137 uses provider-injected bounded retries with voice consistency,
+#138 performs real mono PCM amplitude-based activity measurement,
+#139 binds explicit narration anchors to unique PDF elements, NOT word
+alignment certification, #140 can render real single slide audio/PDF
+time-controlled MP4 candidates, #141 performs source-staged concatenation
+with an actual strict <600s video duration check, #142 fail-closes academic,
+spoken, and actual element synchronization gates, and #143 exposes one
+source-safe CLI/preflight and a real sample slide demonstration. Some
+stages are callable components, not an unattended complete textbook
+generation pipeline. The real Thomas §2.5 lacks the complete 17-slide
+WAV set, so full regenerations are deliberately blocked. The real
+corrected slide5 WAV and source PDF permit an isolated technical timed
+overlay demonstration, which is NOT independently proven aligned with
+actual words. No source or historical WAV/MP4 modified; no paid provider
+calls, no Whisper, no publication or access to Dell/Yoga6.
