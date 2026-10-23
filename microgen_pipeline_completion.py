@@ -99,3 +99,38 @@ def produce_spoken_inputs(source):
             "speech_input":spoken,"changed":raw!=spoken})
     return {"slides":result,"provider_called":False,
             "phonetic_accuracy_established":False}
+
+def regenerate_staged_wav(source,stage,slide,synthesize,*,voice="en-US-Chirp-HD-F",
+                          provider="google_cloud_chirp3",attempts=3):
+    src=Path(source).resolve(strict=True)
+    dest=_new_stage(src,stage)
+    inputs=produce_spoken_inputs(src)["slides"]
+    if type(slide) is not int or not 1<=slide<=len(inputs):
+        raise CampaignError("Invalid slide")
+    if not callable(synthesize) or type(attempts) is not int or not 1<=attempts<=3:
+        raise CampaignError("Invalid synthesis backend or retry bound")
+    if not isinstance(voice,str) or not voice or not isinstance(provider,str) or not provider:
+        raise CampaignError("Voice and provider must be pinned")
+    dest.mkdir(parents=True)
+    text=inputs[slide-1]["speech_input"]
+    statuses=[]
+    for attempt in range(1,attempts+1):
+        output=dest/f"slide{slide}.attempt{attempt:02d}.wav"
+        try:
+            metadata=synthesize(text,output,voice=voice,provider=provider)
+            if not isinstance(metadata,dict) or metadata.get("voice")!=voice or metadata.get("provider")!=provider:
+                raise CampaignError("Mixed TTS voice or provider")
+            if not output.is_file() or output.is_symlink():raise CampaignError("Missing generated WAV")
+            with wave.open(str(output),"rb") as wav:
+                seconds=wav.getnframes()/wav.getframerate()
+            if not _finite(seconds) or not .05<=seconds<600:
+                raise CampaignError("Invalid regenerated WAV duration")
+            statuses.append({"attempt":attempt,"status":"STAGED","wav_sha256":_sha(output)})
+            return {"status":"REVIEW_REQUIRED","slide":slide,"output":str(output),
+                  "voice":voice,"provider":provider,"attempts":statuses,
+                  "pronunciation_verified":False,"source_modified":False}
+        except Exception as e:
+            statuses.append({"attempt":attempt,"status":"FAILED","error_type":type(e).__name__})
+            if output.exists() and not output.is_symlink():output.unlink()
+    return {"status":"REGENERATION_FAILED","slide":slide,"attempts":statuses,
+        "source_modified":False,"pronunciation_verified":False}
