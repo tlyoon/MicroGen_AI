@@ -113,3 +113,19 @@ def stage_existing_root_wavs(workspace):
         raise
     verify_workspace(root)
     return {"copied":len(entries),"missing":inventory["missing"],"source_modified":False}
+
+def discover_qa_audio_candidates(source,*,limit=128):
+    src=Path(source).resolve(strict=True)
+    if type(limit) is not int or not 1<=limit<=512:raise OrchestratorError("Invalid candidate cap")
+    items=[]
+    for folder in sorted(src.iterdir(),key=lambda p:p.name.casefold()):
+        if not folder.is_dir() or folder.is_symlink() or not folder.name.startswith("QA_"):
+            continue
+        for p in sorted(folder.glob("*.wav")):
+            if p.is_symlink() or not p.is_file():continue
+            items.append({"relative_path":str(p.relative_to(src)),
+                "sha256":digest(p),"narration_binding_verified":False,
+                "approved_for_reuse":False})
+            if len(items)>limit:raise OrchestratorError("Too many QA WAV candidates")
+    return {"candidates":items,"auto_recovered":0,
+            "human_review_replaced":False}

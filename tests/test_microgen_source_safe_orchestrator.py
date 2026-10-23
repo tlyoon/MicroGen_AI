@@ -50,3 +50,10 @@ def test_root_wav_staging_copies_only_existing_tracks(tmp_path):
     report=o.stage_existing_root_wavs(dst)
     assert report["copied"]==1 and report["missing"]==[1]
     assert o.digest(dst/"audio"/"slide2.wav")==o.digest(src/"slide2.wav")
+
+def test_qa_candidates_remain_unverified(tmp_path):
+    src=fixture(tmp_path);qa=src/"QA_audio";qa.mkdir()
+    write_wave(qa/"slide1_corrected.wav",.4)
+    report=o.discover_qa_audio_candidates(src)
+    assert len(report["candidates"])==1
+    assert report["candidates"][0]["approved_for_reuse"] is False
