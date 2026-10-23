@@ -68,3 +68,8 @@ def test_explicit_wav_adoption_checks_text_and_hash(tmp_path):
     with pytest.raises(o.OrchestratorError):
         o.adopt_verified_wav(dst,1,offered,sha256="0"*64,narration_sha256=proof)
     assert o.adopt_verified_wav(dst,1,offered,sha256=o.digest(offered),narration_sha256=proof)["adopted"]==1
+
+def test_timeline_blocks_incomplete_sources(tmp_path):
+    src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
+    o.stage_existing_root_wavs(dst)
+    with pytest.raises(o.OrchestratorError):o.source_bound_timeline(dst)
