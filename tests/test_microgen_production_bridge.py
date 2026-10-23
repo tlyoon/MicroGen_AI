@@ -26,3 +26,13 @@ def test_readonly_inventory_matches_actual_pdf_pages(tmp_path):
     obj["slides"][1]["slide"]=3
     (tmp_path/"script_tts.json").write_text(json.dumps(obj))
     with pytest.raises(b.BridgeError):b.inspect_lesson(tmp_path)
+
+def test_actual_wav_timeline_is_monotone(tmp_path):
+    write_lesson(tmp_path)
+    for i in (1,2):write_wav(tmp_path/f"slide{i}.wav",.4)
+    report=b.measured_wav_timeline(tmp_path,2)
+    assert report["duration_seconds"]==pytest.approx(.8)
+    assert report["slide_intervals"][1]["start_seconds"]==pytest.approx(.4)
+    assert report["individual_word_times_verified"] is False
+    (tmp_path/"slide2.wav").unlink()
+    with pytest.raises(b.BridgeError):b.measured_wav_timeline(tmp_path,2)

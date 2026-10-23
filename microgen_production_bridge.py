@@ -47,3 +47,27 @@ def inspect_lesson(directory):
        "narration_sha256":sha256(stage/"script_tts.json"),
        "complete_audio_set":has_audio,
        "production_ready":False,"source_modified":False}
+
+def measured_wav_timeline(directory,slide_count):
+    import wave
+    stage=Path(directory)
+    if type(slide_count) is not int or not 1<=slide_count<=500:
+        raise BridgeError("Invalid slide count")
+    elapsed=0.
+    events=[]
+    for i in range(1,slide_count+1):
+        p=stage/f"slide{i}.wav"
+        if p.is_symlink() or not p.is_file():raise BridgeError(f"Missing WAV {i}")
+        try:
+            with wave.open(str(p),"rb") as w:
+                duration=w.getnframes()/w.getframerate()
+        except (OSError,EOFError,ValueError,ZeroDivisionError) as exc:
+            raise BridgeError("Unreadable lecture WAV") from exc
+        if not math.isfinite(duration) or not .05<=duration<600:
+            raise BridgeError("Invalid single-slide WAV timing")
+        events.append({"slide":i,"start_seconds":round(elapsed,6),
+           "end_seconds":round(elapsed+duration,6),"wav_sha256":_sha(p)})
+        elapsed+=duration
+    return {"schema_version":1,"slide_intervals":events,
+            "duration_seconds":round(elapsed,6),
+            "individual_word_times_verified":False}
