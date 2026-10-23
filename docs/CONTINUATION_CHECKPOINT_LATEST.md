@@ -158,3 +158,24 @@ promoted/published. Real stage and all technical limitations:
 `docs/THOMAS_2_5_AUDIO_RECOVERY_20261023.md`.
 No original media edits, paid TTS, Whisper, Dell-115, Yoga6, Moodle
 or YouTube publication.
+
+## 23 October 2026 — §2.5 audio-tail technical fix PR #155 (HP only)
+
+Based on live draft #154, add `microgen_audio_tail_video_candidate.py`
+and adversarial + real-media tests. Real old §2.5 MP4 has container duration
+550.23 s but AAC decoding lasts 551.253375 s with another 1.023375 s
+of measurable energy. Stream-copy AAC cannot extend its presentation-time
+timeline; a naïve FFmpeg `-shortest` candidate fails. The verified solution
+holds the last video frame to the explicit decoded-audio endpoint and muxes
+a lossless ALAC master assembled from the exact, source-hash-verified
+17 provisional WAV clips and preserved AAC tail.
+
+Real HP isolated candidate duration **551.25 s**, with exact decoded
+PCM SHA equality to the original track (not acoustic approximation).
+Candidate SHA-256 `93d2b06667b77d7a83e4231890ea42e26a5fbace12a9e2a0cab26f1cbd875fca`.
+ALAC MP4 is only for QA, not necessarily suitable for every video player.
+Original MP4/PDF/WAV remain untouched. The original `c.` and `y`
+pronunciation faults, real narrator-to-highlight alignment, spoken
+identity of the overhang and academic QA are still unresolved.
+No paid AI/TTS, Whisper, publication, Dell-115, Yoga6 or main changes.
+See `docs/THOMAS_2_5_AUDIO_TAIL_CANDIDATE_20261023.md`.
