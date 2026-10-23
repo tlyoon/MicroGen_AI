@@ -216,3 +216,25 @@ def pdf_layout_advisory(pdf,*,minimum_font_points=7.0):
                         warnings.append({"slide":i,"kind":"NARROW_IMAGE"})
     return {"layout_warnings":warnings,"academic_meaning_verified":False,
             "figures_modified":False,"source_modified":False}
+
+def strict_slide_part_plan(timeline,*,ceiling=570.0):
+    if not _finite(ceiling) or not 0<ceiling<600:
+        raise BridgeError("Invalid strict video duration threshold")
+    intervals=timeline.get("slide_intervals")
+    if not isinstance(intervals,list) or not intervals:
+        raise BridgeError("Source-bound audio intervals required")
+    chunks=[];current=[];seconds=0.
+    for item in intervals:
+        duration=item["end_seconds"]-item["start_seconds"]
+        if not _finite(duration) or duration<=0 or duration>=ceiling:
+            raise BridgeError("Slide cannot be split without regenerating its narration")
+        if current and seconds+duration>=ceiling:
+            chunks.append({"slides":current,"planned_seconds":round(seconds,6)})
+            current=[];seconds=0.
+        current.append(item["slide"]);seconds+=duration
+    if current:chunks.append({"slides":current,"planned_seconds":round(seconds,6)})
+    if any(x["planned_seconds"]>=ceiling for x in chunks):
+        raise BridgeError("Unsafe rounding in video part duration")
+    return {"schema_version":1,"parts":chunks,
+            "all_parts_strictly_under_600":True,
+            "rendered_mp4s_verified":False,"narration_cuts_within_slide":False}

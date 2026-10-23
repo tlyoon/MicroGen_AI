@@ -90,3 +90,13 @@ def test_pdf_layout_advisory_does_not_claim_academic_review(tmp_path):
     report=b.pdf_layout_advisory(tmp_path/"slides.pdf")
     assert report["academic_meaning_verified"] is False
     assert not report["figures_modified"]
+
+def test_duration_partition_does_not_cut_single_slide():
+    timeline={"slide_intervals":[
+     {"slide":1,"start_seconds":0,"end_seconds":350},
+     {"slide":2,"start_seconds":350,"end_seconds":700},
+     {"slide":3,"start_seconds":700,"end_seconds":750}]}
+    result=b.strict_slide_part_plan(timeline)
+    assert [p["slides"] for p in result["parts"]]==[[1],[2,3]]
+    with pytest.raises(b.BridgeError):
+        b.strict_slide_part_plan({"slide_intervals":[{"slide":1,"start_seconds":0,"end_seconds":590}]})
