@@ -123,3 +123,51 @@ def validate_highlight_cues(cues,page_rows,timeline):
         previous=(i,start);seen.add((i,start,end))
     return {"cue_geometry_validated":True,"cues":len(cues),
             "acoustic_word_alignment_verified":False}
+
+def render_staged_highlight(pdf,wav,cues,output,*,ffmpeg_exe=None):
+    """Draw cue rectangles only during their declared moments; no source overwrite."""
+    import tempfile,subprocess,shutil,wave
+    source=Path(pdf).resolve(strict=True);audio=Path(wav).resolve(strict=True)
+    out=Path(output).resolve(strict=False)
+    if out.exists() or out.is_symlink() or out.parent==source.parent or out.parent==audio.parent:
+        raise BridgeError("Output must be new and outside source media directory")
+    if source.suffix.lower()!=".pdf" or audio.suffix.lower()!=".wav":
+        raise BridgeError("Original PDF/WAV types required")
+    with wave.open(str(audio),"rb") as track:duration=track.getnframes()/track.getframerate()
+    if not .05<=duration<570:raise BridgeError("Single segment outside duration budget")
+    with fitz.open(source) as doc:
+        if doc.page_count!=1:raise BridgeError("One-slide PDF required")
+        page=doc[0];pw,ph=page.rect.width,page.rect.height
+        if pw<=0 or ph<=0:raise BridgeError("Invalid PDF")
+        with tempfile.TemporaryDirectory(prefix="microgen_overlay_") as temp:
+            target=Path(temp)/"slide.png"
+            pix=page.get_pixmap(matrix=fitz.Matrix(1280/pw,1280/pw),alpha=False)
+            pix.save(str(target))
+            scale=min(1280/pw,720/ph)
+            offx=(1280-pw*scale)/2;offy=(720-ph*scale)/2
+            filters=["scale=1280:720:force_original_aspect_ratio=decrease",
+                     "pad=1280:720:(ow-iw)/2:(oh-ih)/2:white"]
+            for cue in cues:
+                start,end=cue["start_seconds"],cue["end_seconds"]
+                box=cue["box"]
+                if (not all(_finite(x) for x in (start,end,*box)) or
+                    not 0<=start<end<=duration or
+                    not 0<=box[0]<box[2]<=pw or not 0<=box[1]<box[3]<=ph):
+                    raise BridgeError("Invalid overlay instruction")
+                x=round(offx+box[0]*scale);y=round(offy+box[1]*scale)
+                w=max(1,round((box[2]-box[0])*scale));h=max(1,round((box[3]-box[1])*scale))
+                filters.append("drawbox=x=%d:y=%d:w=%d:h=%d:color=yellow@0.90:t=4:enable='between(t,%.5f,%.5f)'"%(x,y,w,h,start,end))
+            from gen_video_v22 import ffmpeg_executable
+            ffmpeg=ffmpeg_exe or ffmpeg_executable()
+            if not ffmpeg:raise BridgeError("FFmpeg unavailable")
+            cmd=[str(ffmpeg),"-nostdin","-hide_banner","-loglevel","error","-y","-loop","1",
+                 "-framerate","12","-i",str(target),"-i",str(audio),
+                 "-t",f"{duration:.6f}","-vf",",".join(filters),
+                 "-r","12","-c:v","libx264","-preset","ultrafast",
+                 "-pix_fmt","yuv420p","-c:a","aac",str(out)]
+            proc=subprocess.run(cmd,capture_output=True,timeout=120)
+            if proc.returncode or not out.is_file():
+                raise BridgeError("Staged FFmpeg highlight rendering failed: "+proc.stderr.decode("utf8","replace")[-400:])
+    return {"candidate_mp4":str(out),"duration_seconds":duration,"cue_count":len(cues),
+            "source_modified":False,"academic_accuracy_verified":False,
+            "narration_sync_verified":False}

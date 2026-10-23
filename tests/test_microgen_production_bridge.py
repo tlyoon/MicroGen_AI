@@ -53,3 +53,14 @@ def test_highlight_cues_require_exact_pdf_word_and_wav_bounds(tmp_path):
     assert b.validate_highlight_cues([cue],pages,timing)["cue_geometry_validated"]
     with pytest.raises(b.BridgeError):
         b.validate_highlight_cues([{**cue,"text":"fabricated"}],pages,timing)
+
+def test_highlight_render_rejects_source_overwrite(tmp_path):
+    write_lesson(tmp_path)
+    one=tmp_path/"one.pdf"
+    with fitz.open(tmp_path/"slides.pdf") as src:
+        with fitz.open() as doc:
+            doc.insert_pdf(src,from_page=0,to_page=0)
+            doc.save(one)
+    wav=tmp_path/"slide1.wav";write_wav(wav,.5)
+    with pytest.raises(b.BridgeError):
+        b.render_staged_highlight(one,wav,[],tmp_path/"slides.mp4")
