@@ -232,3 +232,41 @@ def render_complete_staged_lesson(workspace,*,ffmpeg=None):
         "source_pdf_sha256":receipt["source_pdf_sha256"],
         "narration_element_sync_certified":False})
     return {"rendered_slides":len(results),"true_spoken_alignment_verified":False}
+
+def finalize_staged_parts(workspace,*,ffmpeg):
+    from microgen_pipeline_completion import compose_stage_parts
+    from microgen_quality import check_video
+    receipt=verify_workspace(workspace)
+    root=Path(workspace).resolve(strict=True)
+    manifest=read_json(root/"render_receipt.json")
+    if len(manifest["slides"])!=receipt["slide_count"]:
+        raise OrchestratorError("Incomplete staged render")
+    for row in manifest["slides"]:
+        video=root/"rendered"/f"slide{row['slide']}.mp4"
+        if not video.is_file() or digest(video)!=row["sha256"]:
+            raise OrchestratorError("Video modified after rendering")
+    result=compose_stage_parts(root,read_json(root/"measured_timeline.json"),ffmpeg)
+    atomic_json(root/"parts_receipt.json",{"parts":result["parts"],
+         "all_parts_strictly_under_600":result["all_parts_below_600"],
+         "publish_allowed":False,"verified_word_sync":False})
+    return {"parts":len(result["parts"]),"under_600":result["all_parts_below_600"],
+            "release_ready":False,"publication_performed":False}
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Original MicroGen_AI read-only source-safe production work")
+    parser.add_argument("--lesson",required=True,type=Path)
+    parser.add_argument("--inspect",action="store_true")
+    args=parser.parse_args(argv)
+    try:
+        result=source_audio_inventory(args.lesson)
+        result["status"]="SOURCE_PREFLIGHT_ONLY"
+        result["ready_for_publication"]=False
+        print(json.dumps(result,indent=2,sort_keys=True))
+    except Exception as exc:
+        print(json.dumps({"status":"SOURCE_PREFLIGHT_BLOCKED","error_type":type(exc).__name__,
+            "ready_for_publication":False},indent=2))
+    return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())
