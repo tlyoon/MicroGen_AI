@@ -28,3 +28,12 @@ def test_inventory_reports_real_missing_wavs(tmp_path):
     x=o.source_audio_inventory(src)
     assert x["missing"]==[2] and x["slides"][0]["sha256"]
     assert not x["wave_provenance_verified"]
+
+def test_workspace_outside_source_and_sealed(tmp_path):
+    src=fixture(tmp_path)
+    dst=tmp_path/"stage"
+    r=o.create_workspace(src,dst)
+    assert (dst/"workspace_receipt.json").is_file()
+    assert not r["receipt"]["publication_permitted"]
+    with pytest.raises(Exception):o.create_workspace(src,src/"illegal")
+    with pytest.raises(Exception):o.create_workspace(src,dst)
