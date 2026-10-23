@@ -171,3 +171,17 @@ def render_staged_highlight(pdf,wav,cues,output,*,ffmpeg_exe=None):
     return {"candidate_mp4":str(out),"duration_seconds":duration,"cue_count":len(cues),
             "source_modified":False,"academic_accuracy_verified":False,
             "narration_sync_verified":False}
+
+def preview_math_pronunciation(directory):
+    from text_to_speech_v25 import normalize_scientific_speech
+    data=json.loads((Path(directory)/"script_tts.json").read_text(encoding="utf8"))
+    rows=[]
+    for r in data["slides"]:
+        original=str(r.get("tts_text") or r.get("narration") or "")
+        if not original.strip():raise BridgeError("Empty narration source")
+        spoken=normalize_scientific_speech(original)
+        if not spoken.strip():raise BridgeError("Normalization erased narration")
+        rows.append({"slide":r["slide"],"source_text_sha256":hashlib.sha256(original.encode()).hexdigest(),
+           "spoken_input":spoken,"changed":spoken!=original})
+    return {"normalization_preview":rows,"displayed_math_untouched":True,
+            "tts_invoked":False,"spoken_phonemes_verified":False}
