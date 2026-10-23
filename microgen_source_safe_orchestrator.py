@@ -71,3 +71,18 @@ def create_workspace(source,destination):
         shutil.rmtree(dst)
         raise
     return {"workspace":str(dst),"receipt":receipt,"source_modified":False}
+
+def verify_workspace(destination):
+    dest=Path(destination).resolve(strict=True)
+    receipt=read_json(dest/"workspace_receipt.json")
+    if set(receipt)!={"version","source_root","source_pdf_sha256","narration_sha256","slide_count","publication_permitted"} or receipt["version"]!=1 or receipt["publication_permitted"] is not False:
+        raise OrchestratorError("Invalid workspace receipt")
+    src=Path(receipt["source_root"]).resolve(strict=True)
+    if dest==src or dest in src.parents or src in dest.parents:
+        raise OrchestratorError("Workspace inside source")
+    if digest(src/"slides.pdf")!=receipt["source_pdf_sha256"] or digest(src/"script_tts.json")!=receipt["narration_sha256"]:
+        raise OrchestratorError("Lecture source has changed since staging")
+    marker=read_json(dest/".microgen_safe_staging.json")
+    if marker!={"source_root":str(src),"source_sha256":receipt["source_pdf_sha256"]}:
+        raise OrchestratorError("Invalid source-bound compositor marker")
+    return receipt
