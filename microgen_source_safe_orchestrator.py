@@ -193,3 +193,42 @@ def plan_source_bound_cues(workspace,anchors):
     atomic_json(root/"cues.json",{"version":1,"elements":converted,
          "spoken_word_alignment_verified":False,"cue_timestamps_provided_externally":True})
     return {"cue_count":len(converted),"true_spoken_word_alignment_verified":False}
+
+def render_complete_staged_lesson(workspace,*,ffmpeg=None):
+    from microgen_production_bridge import render_staged_highlight
+    from microgen_quality import check_video
+    receipt=verify_workspace(workspace)
+    root=Path(workspace).resolve(strict=True)
+    src=Path(receipt["source_root"])
+    timeline=read_json(root/"measured_timeline.json")
+    cue_doc=read_json(root/"cues.json")
+    if cue_doc.get("version")!=1 or "elements" not in cue_doc:
+        raise OrchestratorError("Missing bounded cue evidence")
+    output=root/"rendered";pages=root/"page_pdf"
+    if output.exists() or pages.exists():
+        raise OrchestratorError("Candidate render already attempted; no overwrite")
+    output.mkdir();pages.mkdir()
+    results=[]
+    with fitz.open(src/"slides.pdf") as original:
+        if original.page_count!=receipt["slide_count"]:
+            raise OrchestratorError("Slide deck changed")
+        for i in range(1,original.page_count+1):
+            verify_workspace(root)
+            doc=pages/f"slide{i}.pdf"
+            with fitz.open() as slice_pdf:
+                slice_pdf.insert_pdf(original,from_page=i-1,to_page=i-1)
+                slice_pdf.save(doc)
+            cues=[{"start_seconds":c["local_start"],"end_seconds":c["local_end"],
+                   "box":c["box"]} for c in cue_doc["elements"] if c["slide"]==i]
+            vid=output/f"slide{i}.mp4"
+            info=render_staged_highlight(doc,root/"audio"/f"slide{i}.wav",
+                     cues,vid,ffmpeg_exe=ffmpeg)
+            result=check_video(vid)
+            if result["seconds"]>=600:
+                raise OrchestratorError("Slide output violates absolute duration ceiling")
+            results.append({"slide":i,"duration_seconds":result["seconds"],
+                            "sha256":result["sha256"],"cues":len(cues)})
+    atomic_json(root/"render_receipt.json",{"slides":results,
+        "source_pdf_sha256":receipt["source_pdf_sha256"],
+        "narration_element_sync_certified":False})
+    return {"rendered_slides":len(results),"true_spoken_alignment_verified":False}

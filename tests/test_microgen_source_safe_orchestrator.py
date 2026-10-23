@@ -83,3 +83,8 @@ def test_cue_localization_uses_actual_wav_clock(tmp_path):
     result=o.plan_source_bound_cues(dst,a)
     assert result["cue_count"]==1
     assert o.read_json(dst/"cues.json")["elements"][0]["local_start"]==pytest.approx(.1)
+
+def test_full_renderer_requires_timeline_and_cues(tmp_path):
+    src=fixture(tmp_path);dst=tmp_path/"stage";o.create_workspace(src,dst)
+    with pytest.raises((OSError,KeyError,ValueError,o.OrchestratorError)):
+        o.render_complete_staged_lesson(dst)
