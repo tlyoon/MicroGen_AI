@@ -135,3 +135,26 @@ unverified. No new paid TTS calls, Whisper, Moodle/YouTube publication,
 Dell-115/Yoga6, main-branch changes, or historical output changes.
 The stack is unmerged and awaits integration validation. The original
 project is not yet proven production-complete.
+
+## 23 October 2026 — HP-only Thomas Calculus §2.5 MP4 audio salvage (PR #154)
+
+On an isolated checkout stacked on live draft PR #153, add the
+`microgen_legacy_audio_demux.py` source-sha-bound AAC recovery path.
+The legacy source report confirms 17 original PDF visual scenes and 16
+scene boundaries at the matching MP4 checksum. A real read-only §2.5 pilot
+has now reconstructed 17 **provisional** candidate WAVs in HP AppData,
+not the original source folder. Their visible-video timeline totals
+550.23 s. The MP4 AAC track actually decodes to 551.253375 s: another
+1.023375 s (RMS ~0.064126) exists beyond the video endpoint, preserved
+as a separately labelled audio tail for independent listening.
+Unaltered original MP4/PDF/narration hashes were verified.
+
+This fixes the technical no-WAV blocker for staged analysis, not the
+phonetic or lecture release blocker: original `c.`/ `y` problems and
+word-to-highlight timing remain unverified. Source scene boundaries are
+not speech onset ground truth. The recovered AAC WAVs must never be
+presented as authentic individual TTS recordings or automatically
+promoted/published. Real stage and all technical limitations:
+`docs/THOMAS_2_5_AUDIO_RECOVERY_20261023.md`.
+No original media edits, paid TTS, Whisper, Dell-115, Yoga6, Moodle
+or YouTube publication.
