@@ -24,3 +24,17 @@ def test_source_contract_is_finite_and_blocking(tmp_path):
     assert c["slide_count"]==2 and not c["source_audio_complete"]
     assert c["next_action"]=="RECOVER_OR_SYNTHESIZE_MISSING_AUDIO"
     assert not c["ready_for_publication"]
+
+def test_audio_recovery_rejects_wrong_narration_and_does_not_write_source(tmp_path):
+    src=tmp_path/"source";src.mkdir();make_source(src)
+    wave_file=tmp_path/"offered.wav";write_wav(wave_file,.3)
+    entries=[{"slide":i,"path":str(wave_file),"wav_sha256":m._sha(wave_file),
+               "narration_sha256":m._tts_digest({"tts_text":f"At c. {i}"})} for i in (1,2)]
+    originals=(src/"script_tts.json").read_bytes()
+    r=m.recover_source_bound_wavs(src,tmp_path/"recovered",entries)
+    assert (Path(r["audio_stage"])/"slide2.wav").is_file()
+    assert (src/"script_tts.json").read_bytes()==originals
+    entries[1]["narration_sha256"]="f"*64
+    with pytest.raises(m.CampaignError):
+        m.recover_source_bound_wavs(src,tmp_path/"another",entries)
+    assert not (tmp_path/"another").exists()

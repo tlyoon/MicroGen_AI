@@ -46,3 +46,39 @@ def production_contract(source):
        "slide_count":n,"source_audio_complete":evidence["complete_audio_set"],
        "next_action":"PLAN_AND_STAGE" if evidence["complete_audio_set"] else "RECOVER_OR_SYNTHESIZE_MISSING_AUDIO",
        "source_modified":False,"ready_for_publication":False}
+
+def recover_source_bound_wavs(source,stage,entries):
+    """Manifest must bind every offered waveform to exactly the current slide text."""
+    src=Path(source).resolve(strict=True)
+    dest=_new_stage(src,stage)
+    data=json.loads((src/"script_tts.json").read_text(encoding="utf8"))
+    rows=data["slides"]; n=len(rows)
+    if not isinstance(entries,list) or len(entries)!=n:
+        raise CampaignError("Full explicit WAV inventory required")
+    if sorted(x.get("slide") for x in entries)!=list(range(1,n+1)):
+        raise CampaignError("Duplicate, missing, or extra audio slide")
+    checked=[]
+    for entry in sorted(entries,key=lambda e:e["slide"]):
+        number=entry["slide"];origin=Path(entry["path"]).resolve(strict=True)
+        expected=_tts_digest(rows[number-1])
+        if (origin.suffix.lower()!=".wav" or origin.is_symlink() or
+            not origin.is_file() or entry.get("narration_sha256")!=expected or
+            entry.get("wav_sha256")!=_sha(origin)):
+            raise CampaignError("Untrusted external WAV or narration binding")
+        with wave.open(str(origin),"rb") as wav:
+            length=wav.getnframes()/wav.getframerate()
+        if not _finite(length) or not .05<=length<600:
+            raise CampaignError("Invalid WAV evidence")
+        checked.append((number,origin))
+    # No staging side effects until every source has been verified.
+    dest.mkdir(parents=True)
+    try:
+        for number,origin in checked:
+            target=dest/f"slide{number}.wav"
+            shutil.copyfile(origin,target)
+            if _sha(target)!=_sha(origin):raise CampaignError("WAV changed in copy")
+    except Exception:
+        shutil.rmtree(dest)
+        raise
+    return {"audio_stage":str(dest),"slide_count":n,
+            "source_bound":True,"source_modified":False}
