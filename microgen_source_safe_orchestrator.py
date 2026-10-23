@@ -51,3 +51,23 @@ def source_audio_inventory(source):
     return {"contract":contract,"slides":rows,
         "missing":[r["slide"] for r in rows if not r["present"]],
         "wave_provenance_verified":False,"original_assets_modified":False}
+
+def create_workspace(source,destination):
+    from microgen_pipeline_completion import _new_stage
+    src=Path(source).resolve(strict=True)
+    dst=_new_stage(src,destination)
+    report=source_audio_inventory(src)
+    dst.mkdir(parents=True,exist_ok=False)
+    try:
+        contract=report["contract"]
+        receipt={"version":1,"source_root":str(src),
+          "source_pdf_sha256":contract["source_pdf_sha256"],
+          "narration_sha256":contract["narration_sha256"],
+          "slide_count":contract["slide_count"],"publication_permitted":False}
+        atomic_json(dst/"workspace_receipt.json",receipt)
+        atomic_json(dst/".microgen_safe_staging.json",
+                   {"source_root":str(src),"source_sha256":contract["source_pdf_sha256"]})
+    except Exception:
+        shutil.rmtree(dst)
+        raise
+    return {"workspace":str(dst),"receipt":receipt,"source_modified":False}
