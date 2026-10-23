@@ -63,3 +63,10 @@ def test_regenerator_retries_and_keeps_voice_and_source(tmp_path):
     assert result["status"]=="REVIEW_REQUIRED" and len(calls)==3
     assert len({v["voice"] for v in calls})==1
     assert not (src/"slide1.wav").exists()
+
+def test_activity_detection_uses_real_nonzero_pcm(tmp_path):
+    p=tmp_path/"speech.wav";write_wav(p,.2,amplitude=9000)
+    x=m.observe_acoustic_activity(p)
+    assert x["activity_intervals_seconds"] and not x["word_alignment_verified"]
+    silence=tmp_path/"silence.wav";write_wav(silence,.2)
+    assert m.observe_acoustic_activity(silence)["activity_intervals_seconds"]==[]
