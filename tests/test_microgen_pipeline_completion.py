@@ -86,3 +86,9 @@ def test_renderer_refuses_staging_inside_source(tmp_path):
     wav=tmp_path/"wave.wav";write_wav(wav,.25)
     with pytest.raises(m.CampaignError):
         m.render_slide_candidate(source,1,wav,[],source/"stage")
+
+def test_compositor_requires_staged_slide_videos(tmp_path):
+    root=tmp_path/"stage";root.mkdir()
+    timeline={"slide_intervals":[{"slide":1,"start_seconds":0,"end_seconds":10}]}
+    with pytest.raises(m.CampaignError):
+        m.compose_stage_parts(root,timeline,"ffmpeg")

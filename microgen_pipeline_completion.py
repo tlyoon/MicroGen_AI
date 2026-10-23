@@ -210,3 +210,39 @@ def render_slide_candidate(source,slide,wav_path,cues,stage):
       "duration_seconds":actual["seconds"],"cue_count":len(cues),
       "technical_overlay_rendered":True,"real_spoken_word_sync_verified":False,
       "source_modified":False}
+
+def compose_stage_parts(stage,timeline,ffmpeg_exe):
+    from microgen_production_bridge import strict_slide_part_plan
+    from microgen_quality import check_video
+    root=Path(stage).resolve(strict=True)
+    plan=strict_slide_part_plan(timeline)
+    results=[]
+    for part in plan["parts"]:
+        number=len(results)+1
+        dest=root/f"part{number:02d}.mp4"
+        if dest.exists():raise CampaignError("Will not overwrite any video")
+        clips=[root/"rendered"/f"slide{i}.mp4" for i in part["slides"]]
+        if any(not p.is_file() or p.is_symlink() for p in clips):
+            raise CampaignError("Staged slide video missing")
+        with tempfile.TemporaryDirectory(prefix="microgen_concat_") as temp:
+            listing=Path(temp)/"inputs.txt"
+            # Copy all clips to trusted temporary path so concat paths need no quoting.
+            items=[]
+            for i,clip in enumerate(clips):
+                checked=check_video(clip)
+                if not 0<checked["seconds"]<600:raise CampaignError("Invalid slide MP4")
+                target=Path(temp)/f"{i:04}.mp4"
+                shutil.copy2(clip,target)
+                items.append(target)
+            listing.write_text("\n".join("file '%s'"%p.as_posix() for p in items),encoding="utf8")
+            args=[str(ffmpeg_exe),"-nostdin","-loglevel","error","-y","-f","concat",
+                  "-safe","0","-i",str(listing),"-c","copy",str(dest)]
+            proc=subprocess.run(args,capture_output=True,timeout=120)
+            if proc.returncode:raise CampaignError("FFmpeg multipart concat failed")
+        out=check_video(dest)
+        if out["seconds"]>=600:
+            dest.unlink(missing_ok=True)
+            raise CampaignError("Part fails absolute video duration contract")
+        results.append({"slides":part["slides"],"duration_seconds":out["seconds"],
+             "sha256":_sha(dest)})
+    return {"parts":results,"all_parts_below_600":True,"published":False}
