@@ -82,3 +82,20 @@ def recover_source_bound_wavs(source,stage,entries):
         raise
     return {"audio_stage":str(dest),"slide_count":n,
             "source_bound":True,"source_modified":False}
+
+def produce_spoken_inputs(source):
+    from text_to_speech_v25 import normalize_scientific_speech
+    p=Path(source)
+    data=json.loads((p/"script_tts.json").read_text(encoding="utf8"))
+    result=[]
+    for index,row in enumerate(data["slides"],1):
+        if row.get("slide")!=index:raise CampaignError("Unordered slide narration")
+        raw=str(row.get("tts_text") or row.get("narration") or "")
+        spoken=normalize_scientific_speech(raw)
+        if not raw.strip() or not spoken.strip():
+            raise CampaignError("Empty narration")
+        result.append({"slide":index,"source_hash":hashlib.sha256(raw.encode()).hexdigest(),
+            "speech_input_sha256":hashlib.sha256(spoken.encode()).hexdigest(),
+            "speech_input":spoken,"changed":raw!=spoken})
+    return {"slides":result,"provider_called":False,
+            "phonetic_accuracy_established":False}

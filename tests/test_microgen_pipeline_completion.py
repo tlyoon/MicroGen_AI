@@ -38,3 +38,15 @@ def test_audio_recovery_rejects_wrong_narration_and_does_not_write_source(tmp_pa
     with pytest.raises(m.CampaignError):
         m.recover_source_bound_wavs(src,tmp_path/"another",entries)
     assert not (tmp_path/"another").exists()
+
+def test_speech_inputs_normalize_cdot_without_changing_original(tmp_path):
+    make_source(tmp_path)
+    file=tmp_path/"script_tts.json"
+    rows=json.loads(file.read_text(encoding="utf8"))
+    rows["slides"][0]["tts_text"]="At c. Next, take the limit."
+    file.write_text(json.dumps(rows),encoding="utf8")
+    before=file.read_bytes()
+    result=m.produce_spoken_inputs(tmp_path)
+    assert "see." in result["slides"][0]["speech_input"]
+    assert result["provider_called"] is False
+    assert (tmp_path/"script_tts.json").read_bytes()==before
