@@ -86,3 +86,30 @@ def verify_workspace(destination):
     if marker!={"source_root":str(src),"source_sha256":receipt["source_pdf_sha256"]}:
         raise OrchestratorError("Invalid source-bound compositor marker")
     return receipt
+
+def stage_existing_root_wavs(workspace):
+    receipt=verify_workspace(workspace)
+    src=Path(receipt["source_root"]);root=Path(workspace).resolve(strict=True)
+    audio=root/"audio"
+    if audio.exists():raise OrchestratorError("Audio stage already exists")
+    inventory=source_audio_inventory(src)
+    audio.mkdir()
+    entries=[]
+    try:
+        for row in inventory["slides"]:
+            if not row["present"]:continue
+            from_path=src/f"slide{row['slide']}.wav"
+            target=audio/from_path.name
+            shutil.copyfile(from_path,target)
+            if digest(target)!=row["sha256"]:
+                raise OrchestratorError("Source WAV changed during recovery")
+            entries.append({"slide":row["slide"],"sha256":row["sha256"],
+                            "source":"unchanged_root_wav","speaker_authenticated":False})
+        atomic_json(root/"audio_inventory.json",{"entries":entries,
+            "missing":inventory["missing"],"speech_correctness_verified":False})
+    except Exception:
+        shutil.rmtree(audio)
+        (root/"audio_inventory.json").unlink(missing_ok=True)
+        raise
+    verify_workspace(root)
+    return {"copied":len(entries),"missing":inventory["missing"],"source_modified":False}
