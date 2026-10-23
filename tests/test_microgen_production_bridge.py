@@ -36,3 +36,9 @@ def test_actual_wav_timeline_is_monotone(tmp_path):
     assert report["individual_word_times_verified"] is False
     (tmp_path/"slide2.wav").unlink()
     with pytest.raises(b.BridgeError):b.measured_wav_timeline(tmp_path,2)
+
+def test_pdf_element_inventory_real_fitzz(tmp_path):
+    write_lesson(tmp_path)
+    rows=b.pdf_element_inventory(tmp_path/"slides.pdf")
+    assert len(rows)==2 and "limit" in [x["text"] for x in rows[0]["words"]]
+    assert rows[0]["source_geometry_extracted"]
