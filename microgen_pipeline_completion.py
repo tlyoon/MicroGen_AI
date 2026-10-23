@@ -197,6 +197,9 @@ def render_slide_candidate(source,slide,wav_path,cues,stage):
     with fitz.open(src/"slides.pdf") as doc:
         if not 1<=slide<=doc.page_count:raise CampaignError("Slide out of bounds")
         outdir.mkdir(parents=True)
+        (outdir/".microgen_safe_staging.json").write_text(
+            json.dumps({"source_root":str(src),"source_sha256":_sha(src/"slides.pdf")}),
+            encoding="utf8")
         pages=outdir/"input_pages";pages.mkdir()
         one=pages/f"slide{slide}.pdf"
         with fitz.open() as single:
@@ -215,6 +218,14 @@ def compose_stage_parts(stage,timeline,ffmpeg_exe):
     from microgen_production_bridge import strict_slide_part_plan
     from microgen_quality import check_video
     root=Path(stage).resolve(strict=True)
+    marker=root/".microgen_safe_staging.json"
+    if Path(stage).is_symlink() or not marker.is_file():
+        raise CampaignError("Independent source-bound staging receipt required")
+    receipt=json.loads(marker.read_text(encoding="utf8"))
+    source=Path(receipt["source_root"]).resolve(strict=True)
+    if (source==root or source in root.parents or root in source.parents or
+        _sha(source/"slides.pdf")!=receipt["source_sha256"]):
+        raise CampaignError("Staging folder or source checksum unsafe")
     plan=strict_slide_part_plan(timeline)
     results=[]
     for part in plan["parts"]:
@@ -235,7 +246,7 @@ def compose_stage_parts(stage,timeline,ffmpeg_exe):
                 shutil.copy2(clip,target)
                 items.append(target)
             listing.write_text("\n".join("file '%s'"%p.as_posix() for p in items),encoding="utf8")
-            args=[str(ffmpeg_exe),"-nostdin","-loglevel","error","-y","-f","concat",
+            args=[str(ffmpeg_exe),"-nostdin","-loglevel","error","-n","-f","concat",
                   "-safe","0","-i",str(listing),"-c","copy",str(dest)]
             proc=subprocess.run(args,capture_output=True,timeout=120)
             if proc.returncode:raise CampaignError("FFmpeg multipart concat failed")
@@ -264,4 +275,29 @@ def candidate_technical_gate(part_reports,*,audio_complete,element_manifest_grou
     if not phonetic_review_passed:blockers.append("PRONUNCIATION_NOT_VERIFIED")
     return {"technical_video_durations_pass":True,
         "candidate_parts":len(part_reports),"unresolved_gates":blockers,
-        "eligible_for_release":not blockers,"publish_performed":False}
+        "technical_conditions_claimed_complete":not blockers,
+        "eligible_for_release":False,"publish_performed":False}
+
+def production_preflight(source):
+    contract=production_contract(source)
+    pronunciation=produce_spoken_inputs(source)
+    return {"schema_version":1,"production_contract":contract,
+         "pronunciation_changes":sum(r["changed"] for r in pronunciation["slides"]),
+         "audio_recovery_required":not contract["source_audio_complete"],
+         "actual_word_alignment_verified":False,
+         "release_ready":False,"source_modified":False}
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="MicroGen source-safe lecture-production preflight")
+    parser.add_argument("--lesson",required=True,type=Path)
+    args=parser.parse_args(argv)
+    try:report=production_preflight(args.lesson)
+    except (CampaignError,BridgeError,OSError,ValueError,RuntimeError,KeyError) as exc:
+        report={"status":"PRODUCTION_PREFLIGHT_BLOCKED","reason":str(exc),
+                "release_ready":False,"source_modified":False}
+    print(json.dumps(report,sort_keys=True,indent=2))
+    return 2 if not report.get("release_ready") else 0
+
+if __name__=="__main__":
+    raise SystemExit(main())
