@@ -238,3 +238,36 @@ def strict_slide_part_plan(timeline,*,ceiling=570.0):
     return {"schema_version":1,"parts":chunks,
             "all_parts_strictly_under_600":True,
             "rendered_mp4s_verified":False,"narration_cuts_within_slide":False}
+
+def inspect_real_lesson(directory):
+    source=inspect_lesson(directory)
+    report={"schema_version":1,"inventory":source,
+            "source_sha256s_verified":True,
+            "staged_highlight_video_created":False,
+            "production_narration_sync_verified":False,
+            "academic_quality_certified":False,
+            "ready_for_publication":False,"source_modified":False}
+    try:
+        if source["complete_audio_set"]:
+            timeline=measured_wav_timeline(directory,source["page_count"])
+            report["part_plan"]=strict_slide_part_plan(timeline)
+        else:
+            report["blocking_reason"]="No complete slideN.wav audio set: cannot render full synchronized lecture"
+    except BridgeError as exc:
+        report["blocking_reason"]=str(exc)
+    return report
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Read-only original-package lecture production preflight")
+    parser.add_argument("--lesson",type=Path,required=True)
+    args=parser.parse_args(argv)
+    try:report=inspect_real_lesson(args.lesson)
+    except (BridgeError,OSError,ValueError,RuntimeError) as exc:
+        report={"status":"PILOT_BLOCKED","blocking_reason":str(exc),
+         "ready_for_publication":False,"source_modified":False}
+    print(json.dumps(report,sort_keys=True,indent=2))
+    return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())

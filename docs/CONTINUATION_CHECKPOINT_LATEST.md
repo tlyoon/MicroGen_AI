@@ -70,3 +70,22 @@ of reviewer independence or accurate phonemes. No math, figure, spoken-word
 to highlighted slide element timing or publishability is certified. Original
 assets, main branch, dirty G: trees, Dell-115 and Yoga 6 remain untouched;
 no paid AI, Whisper, Google Cloud distributed lease or publication.
+
+## October 23, 2026 — HP-only original package production bridge PRs #124–#133
+
+Based on live draft PR #123 and a new isolated HP checkout. Adds input
+inventory, source-grounded measured WAV timeline, actual PyMuPDF word geometry,
+strict cue geometry/time matching, FFmpeg timed overlay rendering for isolated
+one-slide MP4 candidates, context-aware TTS text preview, bounded stage-only
+repair planning, PDF figure/text legibility advisories, strict slide-boundary
+multipart planning, and a real read-only Thomas Calculus §2.5 preflight.
+
+Actual corrected slide5 audio and PDF can be used for an isolated
+technical overlay demonstration, but its synthetic cue timestamps do not
+prove real narration-to-equation synchrony. The original full §2.5 lesson
+lacks a complete root-level slideN.wav production audio set, and automatic
+word-level alignment still needs independent evidence. Original teaching
+sources, historical videos/WAVs, protected main and user dirty G: checkout
+were never edited. HP only; no Dell-115/Yoga 6, no Whisper, no new paid API,
+no publication. Academic math/figure semantics and speech correctness remain
+uncertified. PRs are stacked DRAFT until integration and real quality gates.

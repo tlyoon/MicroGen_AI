@@ -100,3 +100,11 @@ def test_duration_partition_does_not_cut_single_slide():
     assert [p["slides"] for p in result["parts"]]==[[1],[2,3]]
     with pytest.raises(b.BridgeError):
         b.strict_slide_part_plan({"slide_intervals":[{"slide":1,"start_seconds":0,"end_seconds":590}]})
+
+def test_real_lesson_preflight_abstains_for_missing_wavs(tmp_path,capsys):
+    write_lesson(tmp_path)
+    assert b.main(["--lesson",str(tmp_path)])==2
+    report=json.loads(capsys.readouterr().out)
+    assert report["ready_for_publication"] is False
+    assert "blocking_reason" in report
+    assert report["source_modified"] is False
