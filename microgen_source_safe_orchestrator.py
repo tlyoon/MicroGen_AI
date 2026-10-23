@@ -159,3 +159,22 @@ def adopt_verified_wav(workspace,slide,offered,*,sha256,narration_sha256):
     manifest["missing"]=[x for x in manifest["missing"] if x!=slide]
     atomic_json(root/"audio_inventory.json",manifest)
     return {"adopted":slide,"wav_sha256":sha256,"human_speech_quality_verified":False}
+
+def source_bound_timeline(workspace):
+    from microgen_pipeline_completion import _timeline
+    receipt=verify_workspace(workspace)
+    root=Path(workspace).resolve(strict=True)
+    tracks=[root/"audio"/f"slide{i}.wav" for i in range(1,receipt["slide_count"]+1)]
+    if any(not p.is_file() or p.is_symlink() for p in tracks):
+        raise OrchestratorError("Incomplete staged WAV inventory")
+    inventory=read_json(root/"audio_inventory.json")
+    if inventory["missing"] or len(inventory["entries"])!=receipt["slide_count"]:
+        raise OrchestratorError("Unverified audio inventory")
+    for i,p in enumerate(tracks,1):
+        rows=[x for x in inventory["entries"] if x["slide"]==i]
+        if len(rows)!=1 or digest(p)!=rows[0]["sha256"]:
+            raise OrchestratorError("Staged audio or manifest tampered")
+    timeline=_timeline(root/"audio",receipt["slide_count"])
+    atomic_json(root/"measured_timeline.json",timeline)
+    return {"duration_seconds":timeline["duration_seconds"],
+            "slides":receipt["slide_count"],"speech_word_alignment_verified":False}
