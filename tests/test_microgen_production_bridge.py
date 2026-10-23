@@ -64,3 +64,14 @@ def test_highlight_render_rejects_source_overwrite(tmp_path):
     wav=tmp_path/"slide1.wav";write_wav(wav,.5)
     with pytest.raises(b.BridgeError):
         b.render_staged_highlight(one,wav,[],tmp_path/"slides.mp4")
+
+def test_math_speech_preview_preserves_source(tmp_path):
+    write_lesson(tmp_path)
+    p=tmp_path/"script_tts.json"
+    original=p.read_bytes()
+    j=json.loads(p.read_text());j["slides"][0]["tts_text"]="Take the limit at c. Next, use the y-axis."
+    p.write_text(json.dumps(j));changed=p.read_bytes()
+    preview=b.preview_math_pronunciation(tmp_path)
+    assert "see." in preview["normalization_preview"][0]["spoken_input"]
+    assert p.read_bytes()==changed and original!=changed
+    assert preview["tts_invoked"] is False
