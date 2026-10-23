@@ -179,3 +179,18 @@ pronunciation faults, real narrator-to-highlight alignment, spoken
 identity of the overhang and academic QA are still unresolved.
 No paid AI/TTS, Whisper, publication, Dell-115, Yoga6 or main changes.
 See `docs/THOMAS_2_5_AUDIO_TAIL_CANDIDATE_20261023.md`.
+
+## October 23 2026 — §2.5 source-bound pronunciation trial review (HP PR #156)
+
+From live draft PR #155, real read-only section §2.5 QA candidate inspection
+found 3 slide references and 4 different historical replacement WAVs.
+Created separate source-bound review bundle under HP AppData:
+`2_5_pronunciation_review_PR156`. The C-dot slide5/6 SHA records match the
+existing QA metadata and current script/video provenance. The first
+slide10 Y trial matches its source-video+WAV receipt, while the later PR35
+slide10 trial's source-video binding cannot be independently verified
+from its receipt. All are unapproved, and voice identity is only a
+provider name claim. Their purpose is convenient comparison, **not**
+source replacement. Existing original PDF/WAV/MP4 unchanged; no additional
+paid AI calls, Whisper, publication, main branch, Dell-115 or Yoga6.
+See `docs/THOMAS_2_5_PRONUNCIATION_REVIEW_BUNDLE_20261023.md`.
