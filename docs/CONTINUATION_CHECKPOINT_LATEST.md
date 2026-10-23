@@ -213,3 +213,16 @@ neither audio replacement nor synchronized highlighting. Full docs:
 `docs/THOMAS_2_5_OFFLINE_ASR_CONTRAST_20261023.md`. Original files
 preserved, HP only, no paid provider, GCS lease, Whisper, YouTube/Moodle
 publication or main changes.
+
+## October 23 2026 — PR #158 optional local Vosk ASR capture (HP only)
+
+Add `microgen_offline_vosk_capture.py`: SHA-bounded, independent
+Vosk word-time recognition with optional installed local model and FFmpeg,
+no code-owned model download, no Whisper, paid API, voice certification
+or automatic publication. A real seven-WAV run on Thomas §2.5 produced
+`2_5_offline_vosk_capture_PR158.json` in isolated HP AppData,
+reproducing PR #157 source-bound pronunciation comparison results.
+ASR word timestamps remain diagnostic, NOT acoustic ground truth or
+element-highlight evidence sufficient for release. Model weights are
+separate in HP AppData, never included in GitHub. Original files and
+protected main remain untouched. More: `docs/OFFLINE_VOSK_CAPTURE_PR158.md`.
