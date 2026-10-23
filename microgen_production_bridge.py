@@ -71,3 +71,23 @@ def measured_wav_timeline(directory,slide_count):
     return {"schema_version":1,"slide_intervals":events,
             "duration_seconds":round(elapsed,6),
             "individual_word_times_verified":False}
+
+def pdf_element_inventory(pdf):
+    p=Path(pdf)
+    if p.is_symlink() or not p.is_file():raise BridgeError("Original PDF required")
+    result=[]
+    with fitz.open(p) as doc:
+        if not 1<=doc.page_count<=500:raise BridgeError("Unbounded slide PDF")
+        for i,page in enumerate(doc,1):
+            words=page.get_text("words")
+            bbox=[]
+            for word in words:
+                x0,y0,x1,y1,txt=word[:5]
+                if not all(math.isfinite(float(x)) for x in (x0,y0,x1,y1)):
+                    raise BridgeError("Invalid element geometry")
+                if not (0<=x0<x1<=page.rect.width+1 and 0<=y0<y1<=page.rect.height+1):
+                    continue
+                bbox.append({"text":txt,"box":[round(x0,3),round(y0,3),round(x1,3),round(y1,3)]})
+            result.append({"slide":i,"width":page.rect.width,"height":page.rect.height,
+                           "words":bbox,"source_geometry_extracted":True})
+    return result
