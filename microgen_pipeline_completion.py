@@ -246,3 +246,22 @@ def compose_stage_parts(stage,timeline,ffmpeg_exe):
         results.append({"slides":part["slides"],"duration_seconds":out["seconds"],
              "sha256":_sha(dest)})
     return {"parts":results,"all_parts_below_600":True,"published":False}
+
+def candidate_technical_gate(part_reports,*,audio_complete,element_manifest_grounded,
+                             academic_review_passed=False,phonetic_review_passed=False):
+    if not isinstance(part_reports,list) or not part_reports:
+        raise CampaignError("Actual verified candidate parts required")
+    for row in part_reports:
+        if (not isinstance(row,dict) or
+            not _finite(row.get("duration_seconds")) or
+            not 0<row["duration_seconds"]<600 or
+            not isinstance(row.get("sha256"),str) or len(row["sha256"])!=64):
+            raise CampaignError("Invalid part verification evidence")
+    blockers=[]
+    if not audio_complete:blockers.append("MISSING_SOURCE_BOUND_WAVS")
+    if not element_manifest_grounded:blockers.append("NO_GROUNDED_SPEECH_ELEMENT_ALIGNMENT")
+    if not academic_review_passed:blockers.append("ACADEMIC_QA_NOT_VERIFIED")
+    if not phonetic_review_passed:blockers.append("PRONUNCIATION_NOT_VERIFIED")
+    return {"technical_video_durations_pass":True,
+        "candidate_parts":len(part_reports),"unresolved_gates":blockers,
+        "eligible_for_release":not blockers,"publish_performed":False}
