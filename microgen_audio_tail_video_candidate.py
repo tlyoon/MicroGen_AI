@@ -61,7 +61,7 @@ def _assemble_verified_pcm_master(root, receipt, output):
             "pcm_seconds":samples/16000}
 
 
-def render_audio_tail_candidate(workspace,*,ffmpeg):
+def render_audio_tail_candidate(workspace,*,ffmpeg,source_decoder_ffmpeg=None):
     root=Path(workspace).resolve(strict=True)
     verify_workspace(root)
     evidence=inspect_legacy_scene_receipt(root)
@@ -84,7 +84,10 @@ def render_audio_tail_candidate(workspace,*,ffmpeg):
     if target>=599.5:
         raise LegacyRecoveryError("Candidate cannot meet strict 600-second limit")
     ff=Path(ffmpeg)
-    if not ff.is_file():raise LegacyRecoveryError("Explicit local FFmpeg executable required")
+    source_ff=Path(source_decoder_ffmpeg) if source_decoder_ffmpeg is not None else ff
+    if (not ff.is_file() or ff.is_symlink() or
+            not source_ff.is_file() or source_ff.is_symlink()):
+        raise LegacyRecoveryError("Explicit regular render and source-decoder FFmpeg required")
     video=Path(evidence["mp4_path"])
     before=digest(video)
     if before!=evidence["mp4_sha256"]:
@@ -93,7 +96,11 @@ def render_audio_tail_candidate(workspace,*,ffmpeg):
     if directory.exists() or directory.is_symlink():
         raise LegacyRecoveryError("Refuse overwrite of prior candidate")
     # Decode beforehand for a grounded audio identity baseline.
-    original_pcm=_decoded_audio_hash(video,ff)
+    # AAC decoders from two FFmpeg builds can output distinct PCM samples.
+    # The recovery WAVs are verified against the SAME decoder that created
+    # them; the lossless candidate is separately decoded with the renderer.
+    # No hashes or equality checks may be relaxed for compatibility.
+    original_pcm=_decoded_audio_hash(video,source_ff)
     if abs(original_pcm["pcm_seconds"]-target)>.12:
         raise LegacyRecoveryError("Overhang receipt does not match decoded AAC samples")
     directory.mkdir()
@@ -138,6 +145,9 @@ def render_audio_tail_candidate(workspace,*,ffmpeg):
       "visual_final_slide_held":True,
       "spoken_word_sync_verified":False,"pronunciation_verified":False,
       "academic_review_verified":False,"publication_allowed":False,
-      "historical_source_modified":False}
+      "historical_source_modified":False,
+      "source_decoder_executable_sha256":digest(source_ff),
+      "video_renderer_executable_sha256":digest(ff),
+      "source_decoder_may_differ_from_renderer":source_ff!=ff}
     atomic_json(root/"technical_tail_candidate_receipt.json",result)
     return result

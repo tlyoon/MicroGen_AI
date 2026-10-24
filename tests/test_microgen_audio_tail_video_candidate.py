@@ -6,11 +6,13 @@ import microgen_audio_tail_video_candidate as c
 import microgen_legacy_audio_demux as r
 from test_microgen_legacy_audio_demux import build_synthetic_legacy
 
+
 def test_tail_render_requires_real_demux_receipt(tmp_path):
     _,stage,ff=build_synthetic_legacy(tmp_path)
     with pytest.raises((FileNotFoundError,c.LegacyRecoveryError)):
         c.render_audio_tail_candidate(stage,ffmpeg=ff)
     assert not (stage/"technical_candidate").exists()
+
 
 def test_synthetic_audio_without_mismatch_is_not_enough(tmp_path):
     _,stage,ff=build_synthetic_legacy(tmp_path)
@@ -18,6 +20,7 @@ def test_synthetic_audio_without_mismatch_is_not_enough(tmp_path):
     with pytest.raises(c.LegacyRecoveryError):
         c.render_audio_tail_candidate(stage,ffmpeg=ff)
     assert not (stage/"technical_candidate").exists()
+
 
 def test_rejects_forged_tail_wav_without_overwriting(tmp_path,monkeypatch):
     source,stage,ff=build_synthetic_legacy(tmp_path)
@@ -42,8 +45,6 @@ def test_lossless_tail_extension_preserves_decoded_pcm_on_short_video(tmp_path,m
     data=json.loads(report.read_text())
     data["candidate_seconds"]=1.85
     report.write_text(json.dumps(data))
-    # This fixture deliberately models a 1.85 s visual timeline plus 2.4 s
-    # decoded soundtrack. Genuine content timestamps are not being asserted.
     monkeypatch.setattr(r,"check_video",lambda _:{"seconds":1.85})
     r.recover_legacy_scene_wavs(stage,ffmpeg=ff)
     candidate=c.render_audio_tail_candidate(stage,ffmpeg=ff)
@@ -53,3 +54,32 @@ def test_lossless_tail_extension_preserves_decoded_pcm_on_short_video(tmp_path,m
     assert candidate["candidate_video_seconds"]<600
     assert candidate["publication_allowed"] is False
     assert (stage/"technical_candidate_lossless_timed"/"slides_full_audio_ALAC_NOT_PUBLISHED.mp4").is_file()
+
+
+def test_explicit_source_audio_decoder_remains_pcm_equal_and_receipted(tmp_path,monkeypatch):
+    source,stage,ff=build_synthetic_legacy(tmp_path)
+    evidence=source/".microgen_legacy_video_evidence.json"
+    report=json.loads(evidence.read_text())
+    report["candidate_seconds"]=1.85
+    evidence.write_text(json.dumps(report))
+    monkeypatch.setattr(r,"check_video",lambda _:{"seconds":1.85})
+    r.recover_legacy_scene_wavs(stage,ffmpeg=ff)
+    result=c.render_audio_tail_candidate(stage,ffmpeg=ff,source_decoder_ffmpeg=ff)
+    assert result["decoded_audio_pcm_sha256_unchanged"] is True
+    assert result["source_decoder_executable_sha256"]==c.digest(ff)
+    assert result["video_renderer_executable_sha256"]==c.digest(ff)
+    assert result["publication_allowed"] is False
+
+
+def test_invalid_source_decoder_fails_before_media_directory(tmp_path,monkeypatch):
+    source,stage,ff=build_synthetic_legacy(tmp_path)
+    evidence=source/".microgen_legacy_video_evidence.json"
+    report=json.loads(evidence.read_text())
+    report["candidate_seconds"]=1.85
+    evidence.write_text(json.dumps(report))
+    monkeypatch.setattr(r,"check_video",lambda _:{"seconds":1.85})
+    r.recover_legacy_scene_wavs(stage,ffmpeg=ff)
+    with pytest.raises(c.LegacyRecoveryError,match="Explicit regular"):
+        c.render_audio_tail_candidate(
+            stage,ffmpeg=ff,source_decoder_ffmpeg=tmp_path/"not_installed.exe")
+    assert not (stage/"technical_candidate_lossless_timed").exists()

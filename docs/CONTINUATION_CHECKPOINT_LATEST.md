@@ -463,3 +463,70 @@ isolated Dell-only work area without writing to the cloned source tree
 or historical G: media. Verify exact origin/source identity before
 running new corrected-stage, fresh offline ASR and cue alignment.
 Do not invent missing receipts, infer academic acceptance, or publish.
+
+## 2026-10-24 evening — real Thomas §2.5 recovery, Dell-only PR #180
+
+Live baseline: draft PR #179 `feature/section25-source-verified-corrected-wav-stage-20261024`,
+head `2e641126808661932e4bb9e275e82c58a787a238`, stacked on #178
+`020ab182b5a841d208927093ac56477f81c340a8`, on #177.
+Prior 4-platform GitHub CI on #179 latest head SUCCESS.
+Only Dell-115 Remote Desktop Commander used for all local work, no HP,
+Yoga6 or Zenbook. New isolated clean checkout at
+`C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261024_dell_pr180_real_source_recovery`;
+isolated real media pilot at
+`C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261024_Section25_REAL_PILOT`.
+GitHub draft PR stack, protected `main`, original and clone G: media
+must not be overwritten.
+
+Real historical production path discovered by comparing the independent
+Oct 19 promotion report with actual Dell files:
+`G:\My Drive\ZCA110_2627_SEM1\MCQ_generation\Thomas_calculus_13ed\2\2.5`.
+Source clone is separate:
+`G:\My Drive\Projects\Thomas_calculus_13ed\2\2.5\source.pdf`.
+All source SHA recorded in `docs/THOMAS_2_5_REAL_RECOVERY_PR180.md`.
+Verified source PDF, historical PDF, MP4 and script; copied only 13
+whitelisted artifacts to an *isolated mirror*, never touched originals.
+
+Real staged acceptance: recovered 17/17 source AAC scene WAVs,
+550.23-s original video and source 1.023375-s decoded audio overhang;
+ALAC master 551.25s with exact source-decoder PCM sample identity;
+four historical corrections reviewed; three authentic SHA-bound
+UNAPPROVED trials selected for slides 5/6/10; new 17-slide corrected
+WAV stage total 551.686s with old ASR cues absent; 552.709s complete
+nonpublishing corrected shadow PCM including original AAC tail.
+No corrected highlighted MP4 has been produced or certified.
+
+Two genuine FFmpeg blockers found, diagnosed and safely worked around:
+the old Dell LAMMPS binary lacks tpad, whereas installed imageio FFmpeg
+7.1 has it; the two AAC decoders have different decoded PCM SHA despite
+identical sample counts. The original PCM identity guard correctly
+refused a decoder-mixed attempt. New code preflights `tpad` and
+allows an explicitly selected older source decoder *only* for verifying
+the original staged PCM; final rendered ALAC PCM MUST still match exactly.
+Both FFmpeg fingerprints stored in candidate technical receipt.
+See incident ledger MG-20261024-004/005 and PR #180 report.
+
+Model state: local Miniconda Python did not have optional Vosk
+(`find_spec("vosk") == None`). No offline ASR model installed/qualified
+on Dell was verified. Do not install Whisper or download fee-bearing
+models; corrected cue timing remains blocked. All source phonetic,
+single-voice and equation/figure academic QA and publication are
+explicitly FALSE/NOT CERTIFIED.
+
+Next safe action: verify PR #180 test coverage and 4-platform CI.
+Then independently identify an authorized local offline acoustic model
+and run fresh SHA-bound corrected 17-slide ASR (PR #178); regenerate
+per-slide absolute clocks, render a nonpublishing candidate with all
+sound tail preserved, and verify spoken word/element/figure semantics.
+If Vosk absent, report BLOCKED rather than forcing old cues; choose
+independent figure/math QA or installer-agnostic ASR adapter later.
+
+Verified Dell-115 local PR #180 regression matrix (isolated Miniconda):
+- `python -m pytest tests/test_microgen_section25_real_recovery.py tests/test_microgen_audio_tail_video_candidate.py -q`: **13 passed, 1 skipped**.
+- `python -m pytest tests -q`: **759 passed, 4 skipped**.
+- `python -m unittest discover -s tests -q`: **593 passed, 3 skipped**.
+- No actual API requests or TTS synthesis were made for the real
+  recovery. Historical correction trials remain unapproved, the
+  552.709-s shadow WAV is nonpublishing, and corrected word-highlight
+  timestamps remain blocked by missing local offline speech recognition.
+Hosted PR #180 CI must be independently checked after push.
