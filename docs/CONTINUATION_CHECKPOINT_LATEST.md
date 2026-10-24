@@ -270,3 +270,7 @@ Consolidates full lecture preparation/render/full-source-PCM remux/66-cue video 
 ## 2026-10-24 — PR #166 standard MP4 technical candidate
 
 Generated source-sha-verified H.264/AAC 192kbps standard delivery-format technical candidate from complete original-audio 17-slide highlighted §2.5 QA video, 551.25 s, SHA e05685c8499b8daf79cf04a220350380e3abdce455e73ffbaabe3f3d5b550e7a. AAC padding difference 0.042625 s, mean stream volume drift 0.0 dB. Original source unmodified. Pronunciation of c./y, voice identity, formula/figure semantics and academic listening QA not independently verified. Publication still forbidden. docs/THOMAS_2_5_STANDARD_MP4_PR166.md
+
+## 2026-10-24 PR #167 Bind original math-pronunciation defects to audio clocks and SHA evidence
+Original 17 slide offline ASR corpus validated on HP with 10 risk observations and three circa recognitions. Source PDF WAV MP4 and script fingerprints verified. Automatic observations never count as phonetic approval.
+No original media/main modification, Whisper, paid AI or publication.
