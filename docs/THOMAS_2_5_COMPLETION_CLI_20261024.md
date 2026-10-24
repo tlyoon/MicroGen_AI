@@ -3,7 +3,7 @@
 PR #165 (original MicroGen_AI, HP only) adds `microgen_section25_completion_cli.py`, an authoritative programmatic entry point for the real pipeline developed in PRs #161–#164.
 
 Invoke with Python:
-- `python microgen_section25_completion_cli.py prepare --manifest <source-bound-17-slide-ASR-cues.json> --stage <new-independent-HP-folder>` 
+- `python microgen_section25_completion_cli.py prepare --manifest <source-bound-17-slide-ASR-cues.json> --stage <new-independent-HP-folder>`
 - `python microgen_section25_completion_cli.py render --stage <folder> --ffmpeg <ffmpeg-executable>`
 - `python microgen_section25_completion_cli.py pcm --stage <folder> --ffmpeg <ffmpeg-executable>`
 - `python microgen_section25_completion_cli.py pixels --stage <folder> --ffmpeg <ffmpeg-executable> --pixel-report <new-report-path>`
