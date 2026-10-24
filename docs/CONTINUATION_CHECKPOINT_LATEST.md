@@ -246,3 +246,7 @@ media, main, Dell/Yoga, paid API, Whisper or publication affected.
 ## 2026-10-23 — PR #160 HP visual cue checks
 
 Added pixel verification for existing SHA-bound §2.5 videos. All 7 cue regions on slides 5, 6 and 10 changed at the locally recognized audio timestamps; mean RGB changes ranged 15.8785 to 25.8651. These observations do not establish mathematical or phonetic accuracy. Original media stayed unchanged. No publication. Details: docs/THOMAS_2_5_PIXEL_TIMING_PR160.md.
+
+## 2026-10-24 — PR #161 HP source-bound full §2.5 cue manifest
+
+Generated 17-slide source-sha-verified offline speech/PDF manifest with 1,179 recognized words and 66 conservative unique source-PDF word highlight candidates; 17/17 provisional legacy WAV checksums verified. No mathematical equation or figure semantic synchronization verified, no phonetic listening QA, no source modification, no publication. See docs/THOMAS_2_5_FULL17_CUE_MANIFEST_20261024.md.
