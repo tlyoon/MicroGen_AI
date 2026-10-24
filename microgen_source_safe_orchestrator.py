@@ -190,8 +190,10 @@ def plan_source_bound_cues(workspace,anchors):
         interval=timeline["slide_intervals"][cue["slide"]-1]
         converted.append({**cue,"local_start":round(cue["start_seconds"]-interval["start_seconds"],6),
                           "local_end":round(cue["end_seconds"]-interval["start_seconds"],6)})
-    atomic_json(root/"cues.json",{"version":1,"elements":converted,
-         "spoken_word_alignment_verified":False,"cue_timestamps_provided_externally":True})
+    from microgen_audio_cue_binding import bind_cues_to_current_audio
+    bound=bind_cues_to_current_audio(root,converted,
+                                   derivation="USER_ANCHORS_UNVERIFIED_ACOUSTIC_WORDS")
+    atomic_json(root/"cues.json",bound)
     return {"cue_count":len(converted),"true_spoken_word_alignment_verified":False}
 
 def render_complete_staged_lesson(workspace,*,ffmpeg=None):
@@ -202,8 +204,8 @@ def render_complete_staged_lesson(workspace,*,ffmpeg=None):
     src=Path(receipt["source_root"])
     timeline=read_json(root/"measured_timeline.json")
     cue_doc=read_json(root/"cues.json")
-    if cue_doc.get("version")!=1 or "elements" not in cue_doc:
-        raise OrchestratorError("Missing bounded cue evidence")
+    from microgen_audio_cue_binding import validate_audio_bound_cues
+    validate_audio_bound_cues(root,cue_doc)
     output=root/"rendered";pages=root/"page_pdf"
     if output.exists() or pages.exists():
         raise OrchestratorError("Candidate render already attempted; no overwrite")
