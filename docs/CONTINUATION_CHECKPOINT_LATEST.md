@@ -278,3 +278,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #168 Stage only source-bound c-dot and y pronunciation trials for safe shadow QA
 Real Section 2.5 selected SHA checked historical trial audio for slides 5 6 and 10 separately from recovered original narration. No speaker or phonetic certification and no production video replacement.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #169 Build 17 slide corrected trial shadow PCM with preserved original AAC tail
+Real isolated shadow WAV duration 552.709 seconds combines source hash verified trials for slides 5 6 10 and untouched legacy clips for the others plus AAC end tail. All old word cues invalidated on changed slides. Voice and phonetics unapproved.
+No original media/main modification, Whisper, paid AI or publication.
