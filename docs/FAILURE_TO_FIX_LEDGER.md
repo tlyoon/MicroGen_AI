@@ -137,3 +137,8 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - Corrected trials (5/6/10) were available, but no integrated source-bound A/B listening packet with current corrected-video technical pixel evidence and original PDF/script.
 - PR #184 builds an isolated HTML+CSV+original/trial WAV comparison, checks exact source/scene/trial SHA and prior 50/50 page audit, refuses forged approvals or changed assets. No automatic review verdict.
 - Real Dell packet has 3 listening slides/6 WAVs and 3 source PDF previews; pronunciation "c" vs "circa", y-value and speaker identity remain explicitly UNREVIEWED. Publication still blocked.
+
+## MG-20261025-011 — individual corrected media reports lack consolidated fail-closed approval gate
+- Prior PRs #181-184 verified real corrected video PCM, PDF slide times, 50 source-frame samples and A/B review artifact, but these do not prove new word-level acoustic alignment or mathematical narration semantics.
+- PR #185 creates a corrected-lecture-specific cross-stage SHA audit rejecting forged pixel/PCM/source/voice review evidence. Always outputs release BLOCKED with precise outstanding issues, including missing Vosk/local model, no fresh corrected word cues and no academic/listening approval.
+- Real Dell audit: 17 slides, corrected 552.709-second PCM, 50/50 pixel samples; 8 independent blockers and `publication_allowed=false`. No historical G: teaching assets or protected main modified.
