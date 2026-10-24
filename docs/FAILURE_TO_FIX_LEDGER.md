@@ -132,3 +132,8 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - QA probe for PR #182 demonstrated 17/17 good interior matches but code did not store systematic bounded after/before boundary checks; sparse VFR predecessor once returned wrong slide at 16/17 samples.
 - PR #183 implemented independent source-PDF rerender + 50-sample actual decoded MP4 comparison, conservative pixel error threshold, explicit best-matching PDF page and source hashes in nonpublishing audit receipt, source mutation/false approval rejection, no production overwrite.
 - Genuine v2 corrected video 50/50 expected PDF pages matched including 16 transitions sampled on both sides and retained audio tail; 0.35s is a probe guard, not a continuous-time guarantee. Word-level mathematical sync and phonetic acceptance remain blocked.
+
+## MG-20261025-010 — no user-ready exact A/B pronunciation review packet
+- Corrected trials (5/6/10) were available, but no integrated source-bound A/B listening packet with current corrected-video technical pixel evidence and original PDF/script.
+- PR #184 builds an isolated HTML+CSV+original/trial WAV comparison, checks exact source/scene/trial SHA and prior 50/50 page audit, refuses forged approvals or changed assets. No automatic review verdict.
+- Real Dell packet has 3 listening slides/6 WAVs and 3 source PDF previews; pronunciation "c" vs "circa", y-value and speaker identity remain explicitly UNREVIEWED. Publication still blocked.
