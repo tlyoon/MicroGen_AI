@@ -262,3 +262,7 @@ An isolated 17-slide §2.5 highlighted MP4 preserving ALL decoded source AAC PCM
 ## 2026-10-24 — PR #164 full-lecture pixel QA
 
 Independently sampled frames from final complete §2.5 551.33-second ALAC technical MP4. All 66 SHA-bound PDF word overlays detected at their audio-recognizer cue times, zero missing pixels. Report under HP AppData: 2_5_full17_all_cue_pixels_PR164.json. Does not establish phonetic or math formula/figure semantic correctness; no publication. docs/THOMAS_2_5_FULL17_PIXEL_QA_20261024.md
+
+## 2026-10-24 — PR #165 source-safe §2.5 production CLI and honest acceptance gate
+
+Consolidates full lecture preparation/render/full-source-PCM remux/66-cue video pixel QA/audit into a reproducible five-command `microgen_section25_completion_cli.py`. Real §2.5 technical acceptance evidence: 17 slides, 551.33s MP4, exact original decoded AAC PCM preserved, 66/66 visual highlight pixels present. CLI `audit` returns exit 2 because pronunciation of c. and y, original voice authentication, equation/figure semantic sync, external math/listening QA, consumer delivery format and stacked draft integration remain unverified. No source or publication changes. docs/THOMAS_2_5_COMPLETION_CLI_20261024.md
