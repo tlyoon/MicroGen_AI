@@ -127,3 +127,8 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 ## MG-20261025-008 — FFconcat sparse-still seeking leaks next slide (HIGH)
 - Reproduced on real corrected candidate: 16/17 interior FFmpeg screenshots (seek within active slide interval) resolved to the next PDF page, despite successful audio and duration checks. Sparse VFR timestamp seek not trustworthy for slide-level inspection and timing.
 - Fix: output regular 8-fps video frames with explicit `fps=8 -fps_mode cfr` before H.264 encoding. Fresh output verified 17/17 correct current PDF page pixels at interior samples with absolute pixel MAE 0.13–0.40 (320x180 samples). No reused old highlights. Permanent full per-slide/boundary audit remains next milestone.
+
+## MG-20261025-009 — slide-level sync lacked persistent independent frame verification
+- QA probe for PR #182 demonstrated 17/17 good interior matches but code did not store systematic bounded after/before boundary checks; sparse VFR predecessor once returned wrong slide at 16/17 samples.
+- PR #183 implemented independent source-PDF rerender + 50-sample actual decoded MP4 comparison, conservative pixel error threshold, explicit best-matching PDF page and source hashes in nonpublishing audit receipt, source mutation/false approval rejection, no production overwrite.
+- Genuine v2 corrected video 50/50 expected PDF pages matched including 16 transitions sampled on both sides and retained audio tail; 0.35s is a probe guard, not a continuous-time guarantee. Word-level mathematical sync and phonetic acceptance remain blocked.
