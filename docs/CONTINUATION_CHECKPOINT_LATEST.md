@@ -266,3 +266,7 @@ Independently sampled frames from final complete §2.5 551.33-second ALAC techni
 ## 2026-10-24 — PR #165 source-safe §2.5 production CLI and honest acceptance gate
 
 Consolidates full lecture preparation/render/full-source-PCM remux/66-cue video pixel QA/audit into a reproducible five-command `microgen_section25_completion_cli.py`. Real §2.5 technical acceptance evidence: 17 slides, 551.33s MP4, exact original decoded AAC PCM preserved, 66/66 visual highlight pixels present. CLI `audit` returns exit 2 because pronunciation of c. and y, original voice authentication, equation/figure semantic sync, external math/listening QA, consumer delivery format and stacked draft integration remain unverified. No source or publication changes. docs/THOMAS_2_5_COMPLETION_CLI_20261024.md
+
+## 2026-10-24 — PR #166 standard MP4 technical candidate
+
+Generated source-sha-verified H.264/AAC 192kbps standard delivery-format technical candidate from complete original-audio 17-slide highlighted §2.5 QA video, 551.25 s, SHA e05685c8499b8daf79cf04a220350380e3abdce455e73ffbaabe3f3d5b550e7a. AAC padding difference 0.042625 s, mean stream volume drift 0.0 dB. Original source unmodified. Pronunciation of c./y, voice identity, formula/figure semantics and academic listening QA not independently verified. Publication still forbidden. docs/THOMAS_2_5_STANDARD_MP4_PR166.md
