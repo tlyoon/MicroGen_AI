@@ -432,3 +432,34 @@ PR #179 candidate verification on Dell-115:
 Local packages provided by the existing Miniconda interpreter; no model or
 paid service was invoked in the new stage tests. Hosted CI on the new PR
 must be verified after push. Source authenticity/academic release not proved.
+
+## October 24, 2026 — verified PR #179 + Dell source availability addendum
+
+Verified live GitHub PR #179 remains OPEN/DRAFT and cleanly stacked on #178,
+head `ab08c7ab7a260ed28f08c34d316057ed62fcb844`, base
+`020ab182b5a841d208927093ac56477f81c340a8`. Github-hosted
+workflow run `40094214732` for the initial PR #179 commit completed
+SUCCESS, 4/4 Linux/Windows Python 3.11/3.12 jobs. Prior #178 run
+`40093512750` likewise SUCCESS 4/4. No main merge or publication.
+
+**New read-only Dell-115 real-source inspection:** The owner's designated
+cloned path `G:\My Drive\Projects\Thomas_calculus_13ed\2\2.5` was
+successfully opened on Dell-115 and contains only `source.pdf`
+(530893 bytes) at one-level listing, NOT the `slides.pdf`,
+`script_tts.json`, source `slides.mp4`, prior verified recovery
+workspace, or `selection_receipt.json` needed for real 17-slide audio
+staging. This is an actual source-proof gap, not evidence that assets
+have been deleted or were never generated elsewhere. In accordance with
+the owner's earlier instruction to use this *cloned source root*, the
+older historical folder was NOT accessed or substituted. HP/Yoga6/Zenbook
+were not queried. The new code's complete 17-slide acceptance remains
+**synthetic fixtures only**; real corrected render and academic/phonetic
+acceptance remain BLOCKED.
+
+Next independently safe task: recover/produce a SHA-bound complete
+slides.pdf + script_tts.json + original MP4 / original legacy recovery
+and selection receipts *from authorized real sources* into a newly
+isolated Dell-only work area without writing to the cloned source tree
+or historical G: media. Verify exact origin/source identity before
+running new corrected-stage, fresh offline ASR and cue alignment.
+Do not invent missing receipts, infer academic acceptance, or publish.
