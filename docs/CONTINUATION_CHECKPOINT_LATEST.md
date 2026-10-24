@@ -298,3 +298,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #173 Propose only unique high confidence acoustic phrases for PDF math line regions
 Original 2.5 speech and 57 PDF math line candidates yielded one conservative textual context anchor. It requires independent mathematics narration semantics before any equation highlighting.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #174 Rasterize all 34 original Section 2.5 figure candidates for QA
+Original 17 slide PDF rendered 34 source SHA checked figure candidate image crops. No region was nearly blank under a limited pixel texture heuristic, but academic content and spoken mapping remain unverified.
+No original media/main modification, Whisper, paid AI or publication.
