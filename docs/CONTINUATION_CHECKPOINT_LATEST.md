@@ -302,3 +302,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #174 Rasterize all 34 original Section 2.5 figure candidates for QA
 Original 17 slide PDF rendered 34 source SHA checked figure candidate image crops. No region was nearly blank under a limited pixel texture heuristic, but academic content and spoken mapping remain unverified.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #175 Build source-bound 17 slide mathematical and listening review packet
+Real HP packet includes all 17 original source page previews 34 figure region references 10 phonetic risk observations original and shadow audio provenance and unresolved math semantic QA. No reviewer approval inferred.
+No original media/main modification, Whisper, paid AI or publication.
