@@ -77,10 +77,10 @@ def create_full17_render_workspace(proposal,stage):
         elapsed+=duration
     if len(cues)!=data["total_cues"]:
         raise FullRenderError("Cue inventory count changed")
-    atomic_json(dest/"cues.json",{"version":1,"elements":cues,
-        "spoken_word_alignment_verified":False,
-        "cue_timestamps_provided_externally":True,
-        "mathematics_semantics_verified":False})
+    from microgen_audio_cue_binding import bind_cues_to_current_audio
+    cue_doc=bind_cues_to_current_audio(
+        dest,cues,derivation="OFFLINE_ASR_UNIQUE_PDF_WORD_CANDIDATES")
+    atomic_json(dest/"cues.json",cue_doc)
     atomic_json(dest/"whole17_provenance.json",{
         "source_mp4_sha256":data["source_mp4_sha256"],
         "provisional_cue_manifest_sha256":digest(proposal),
