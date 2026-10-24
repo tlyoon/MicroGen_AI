@@ -254,3 +254,7 @@ Generated 17-slide source-sha-verified offline speech/PDF manifest with 1,179 re
 ## 2026-10-24 — PR #162 complete 17-slide staged render
 
 Real §2.5 produced one actual MP4, from 17 recovered audio clips, the original PDF, and 66 offline-ASR word highlights, SHA fba8a3b7c423ba7a63a4c1a33661967769947b2f28cb9b84d50551197612fdcb. Isolated HP stage; historical 1.023 s audio overhang NOT included in this first video; corrected TTS and full math/figure highlight unverified. Source unchanged. docs/THOMAS_2_5_FULL17_RENDER_20261024.md
+
+## 2026-10-24 — PR #163 all-source-PCM full lecture QA candidate
+
+An isolated 17-slide §2.5 highlighted MP4 preserving ALL decoded source AAC PCM samples, including 1.023375 s tail, now exists on HP, 551.33 s, SHA 3c720f72772e4b67453173aeea9dbdc330062800ec46185b7d0ae80187bdf2ec. ALAC-only technical QA. Known historical pronunciation faults remain, mathematical figure-to-narration semantic sync unverified, no publication or source changes. docs/THOMAS_2_5_FULL17_PCM_20261024.md
