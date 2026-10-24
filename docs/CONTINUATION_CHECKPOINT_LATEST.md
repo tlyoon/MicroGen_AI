@@ -274,3 +274,7 @@ Generated source-sha-verified H.264/AAC 192kbps standard delivery-format technic
 ## 2026-10-24 PR #167 Bind original math-pronunciation defects to audio clocks and SHA evidence
 Original 17 slide offline ASR corpus validated on HP with 10 risk observations and three circa recognitions. Source PDF WAV MP4 and script fingerprints verified. Automatic observations never count as phonetic approval.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #168 Stage only source-bound c-dot and y pronunciation trials for safe shadow QA
+Real Section 2.5 selected SHA checked historical trial audio for slides 5 6 and 10 separately from recovered original narration. No speaker or phonetic certification and no production video replacement.
+No original media/main modification, Whisper, paid AI or publication.
