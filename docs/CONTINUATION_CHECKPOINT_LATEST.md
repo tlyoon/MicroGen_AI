@@ -286,3 +286,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #170 Flag acoustic discontinuities in corrected shadow narration without certifying voice
 Real 552.709 second shadow narration measured all 16 slide joins with six large loudness changes. Independent speaker identity and phonetic listening remain unresolved. No source changes.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #171 Extract source-PDF math-expression regions without claiming spoken alignment
+On real original Thomas 2.5 17 page PDF extracted 57 geometric math-expression candidate lines. Mixed prose flagged. Mathematical correctness and narration relation intentionally unverified.
+No original media/main modification, Whisper, paid AI or publication.
