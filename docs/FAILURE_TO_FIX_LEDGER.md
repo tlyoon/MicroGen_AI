@@ -29,3 +29,27 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 ## MG-20261024-PROVIDER — transient/billing UI/provider failures (HISTORICAL)
 - Older simulated tests exercise fake Gemini billing/transient errors. No fresh provider outage diagnosed here, no new requests sent.
 - State: Not relevant to this offline PR; general recovery must retain billing circuit breaker, retry/receipt distinctions and no implicit paid calls.
+
+## MG-20261024-002 — no positive recovery after revised narration (HIGH)
+- **Evidence:** PR #177 correctly blocks v1 cues and changed WAVs, but its usual
+  renderer does not regenerate corrected ASR-based clocks. Without a source-
+  grounded regeneration step an owner could be tempted to reuse the 66 old
+  cues or manually patch clock offsets.
+- **Permanent improvement:** PR #178 candidate `microgen_corrected_cue_realign.py`
+  provides optional local Vosk capture on the **actual staged WAV bytes**,
+  rehashes all audio after the full capture, verifies exact PDF/script/WAV SHA
+  and measured duration for each slide, produces conservative PDF-word cues
+  and binds v2 timing before a new `cues.json` is created. Existing output
+  is never overwritten; release remains false.
+- **Regressions:** Nine new pytest cases cover fresh current audio, legitimate
+  replacement timeline re-estimation, stale old reports, old format, forged
+  certification, missing/misordered slides, invalid word-time/confidence,
+  duplicates, collision and mid-ASR alteration of an earlier clip. Dell-115
+  full pytest 738 passed/3 skipped; 593 legacy unittest passed/3 skipped.
+- **Limits:** PR still draft/unmerged; no actual corrected §2.5 audio ASR
+  acceptance measured on Dell; original c./y defects and formula/figure
+  semantics remain unresolved. Synthetic ASR mocks are not independent
+  phonetic acceptance.
+- **Next:** Create isolated corrected 17-WAV workspace with explicitly
+  source-verified historical trials, then run capture/align on its actual
+  audio (provided local Vosk model exists). Independently review and verify.
