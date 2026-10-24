@@ -282,3 +282,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #169 Build 17 slide corrected trial shadow PCM with preserved original AAC tail
 Real isolated shadow WAV duration 552.709 seconds combines source hash verified trials for slides 5 6 10 and untouched legacy clips for the others plus AAC end tail. All old word cues invalidated on changed slides. Voice and phonetics unapproved.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #170 Flag acoustic discontinuities in corrected shadow narration without certifying voice
+Real 552.709 second shadow narration measured all 16 slide joins with six large loudness changes. Independent speaker identity and phonetic listening remain unresolved. No source changes.
+No original media/main modification, Whisper, paid AI or publication.
