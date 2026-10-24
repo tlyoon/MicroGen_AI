@@ -294,3 +294,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #172 Inventory original PDF raster and vector figure regions with source coordinates
 Real Thomas 2.5 scanned all 17 source PDF pages and found 34 geometric figure candidates. Vector decorative ambiguity and lack of caption or spoken referent remain explicit.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #173 Propose only unique high confidence acoustic phrases for PDF math line regions
+Original 2.5 speech and 57 PDF math line candidates yielded one conservative textual context anchor. It requires independent mathematics narration semantics before any equation highlighting.
+No original media/main modification, Whisper, paid AI or publication.
