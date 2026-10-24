@@ -530,3 +530,11 @@ Verified Dell-115 local PR #180 regression matrix (isolated Miniconda):
   552.709-s shadow WAV is nonpublishing, and corrected word-highlight
   timestamps remain blocked by missing local offline speech recognition.
 Hosted PR #180 CI must be independently checked after push.
+
+## 2026-10-25 Dell-only PR #181: genuine corrected shadow video
+
+Start from live PR #180 head `bada9ddd4836da1b65c0d06222242bd44326fbda` (CI 4/4 success). New isolated checkout:
+`C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261025_pr181_corrected_shadow_video`.
+Safe real media pilot (separate Dell AppData workspace): original SHA-bound 17-slide recovery, historical three UNAPPROVED correction trial WAVs and source AAC overhang. `microgen_corrected_shadow_video.py` validates 17 slide/selection/shadow receipts, source PDF/script provenance, source MP4 SHA, actual trial/recovered clip SHA values, full corrected PCM SHA and duration; constructs a new still-frame-extended lossless ALAC corrected shadow video without old/guessed word highlights, verifies decoded video PCM samples are bit-identical to shadow WAV and refuses any old output.
+Actual Dell-115 technical candidate: `corrected_shadow_video/section25_corrected_shadow_NO_HIGHLIGHT_NOT_PUBLISHED.mp4`, measured **552.71 seconds**, corrected shadow WAV ~552.709 seconds, output receipt `corrected_shadow_video_receipt.json` with `publication_allowed=false`, `highlight_cues_present=false`, voice/math/phonetic/figure approval flags false. Original MP4/G Drive teaching assets, main, and historical PCM unmodified; no paid provider/Whisper/YouTube/Moodle. New 10 adversarial tests passing locally.
+**Next:** Independent decoder/video QA (PR #182) and speech/text review without assuming any missing Vosk model; no release.

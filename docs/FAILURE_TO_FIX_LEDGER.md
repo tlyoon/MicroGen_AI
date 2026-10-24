@@ -113,3 +113,8 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - Remaining hard blocker: Dell lacks installed optional Vosk, so real
   corrected word cue re-alignment cannot be certified. Original source
   restoration is not the same as publication-quality lecture completion.
+
+## MG-20261025-006 — corrected 17-slide WAV/PCM lacked inspectable video
+- Repro: Real PR #180 produced corrected shadow WAV but not corrected visual candidate, so no media-level PCM verification or reviewer-friendly visual playback.
+- Fix: New SHA/source/clip/selection-verified `microgen_corrected_shadow_video.py` renders original PDF-derived lecture picture plus full corrected shadow PCM into an isolated **non-highlighting**, **nonpublishing** ALAC MP4. Demands exact decoded PCM equality, strictly <600 seconds, refuses output overwrite and clears only newly-owned output after failure.
+- Dell real case: 552.71-s candidate, all 17 scenes retained with unapproved changed clips 5/6/10, original AAC tail retained. All earlier word cues intentionally excluded. No mathematical/phonetic/listening approval inferred.
