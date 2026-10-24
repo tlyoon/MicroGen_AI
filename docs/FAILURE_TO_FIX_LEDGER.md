@@ -80,3 +80,36 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
   blocked. Do not infer real corrected video or publication from unit tests.
 - **Next:** actual stage from real historical §2.5 selections, offline Vosk
   recognition to all current WAVs (PR #178), v2 cues, pixel/audio/semantic QA.
+
+## MG-20261024-004 — different FFmpeg AAC decoders produce nonidentical PCM (HIGH)
+- Real Dell-115 source MP4 had 8,820,054 decoded samples on both older
+  LAMMPS FFmpeg and imageio 7.1; PCM hashes differed
+  (old `21cc4747ef1f748134edee2696ba06cd10ac56fce6e713adbb450068ca79fe7d`
+   vs new `f753bfd1dd8573cc3782b5069895b690c5b16d319e41225675e3177a982e8afe`).
+  Old decoder had made source-bound recovered scene WAVs.
+- v7.1 `tpad` supports final-frame extension; old LAMMPS FFmpeg does NOT.
+  First unsupported-filter attempt and subsequent cross-decoder exact-PCM
+  integrity gate were correctly blocked, never counted as acceptance.
+- PR #180 optional explicit `source_decoder_ffmpeg`: verify untouched
+  historical MP4 decodes **sample-equal to the already recovered 17 WAVs
+  with the original decoder**; render with a tpad-capable local binary,
+  verify the resulting lossless ALAC media independently re-decodes to
+  that same exact master PCM. Receipt fingerprints both FFmpeg binaries.
+  Preflight tpad before any output. No PCM equality relaxation.
+- Real final original-audio technical ALAC 551.25 s with exact samples,
+  candidate SHA `ab7fe4120b4f4854471eb83fccc9ab2bc53c4cdd0affa150cdbe9446e39c8943`.
+  Pronunciation and release remain UNVERIFIED.
+
+## MG-20261024-005 — cloned 2.5 folder lacks generated files (RESOLVED source discovery)
+- A read-only historical production audit found a different protected
+  lecture path and validated PDF and MP4 SHA against independent
+  October 19 owner promotion evidence.
+- PR #180 new fail-closed isolated source snapshot verified 13 exact
+  files, recovered 17 scene WAVs and 1.023375-s AAC tail, reviewed four
+  historical correction candidates, staged 3 selected trial replacements,
+  then generated actual corrected 17-WAV timeline 551.686 s and full
+  corrected-shadow PCM 552.709 s. Nothing written to historical G: or
+  the source clone. Voice, word alignment and figure semantics unapproved.
+- Remaining hard blocker: Dell lacks installed optional Vosk, so real
+  corrected word cue re-alignment cannot be certified. Original source
+  restoration is not the same as publication-quality lecture completion.
