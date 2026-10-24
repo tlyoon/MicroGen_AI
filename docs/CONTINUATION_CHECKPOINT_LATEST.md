@@ -250,3 +250,7 @@ Added pixel verification for existing SHA-bound §2.5 videos. All 7 cue regions 
 ## 2026-10-24 — PR #161 HP source-bound full §2.5 cue manifest
 
 Generated 17-slide source-sha-verified offline speech/PDF manifest with 1,179 recognized words and 66 conservative unique source-PDF word highlight candidates; 17/17 provisional legacy WAV checksums verified. No mathematical equation or figure semantic synchronization verified, no phonetic listening QA, no source modification, no publication. See docs/THOMAS_2_5_FULL17_CUE_MANIFEST_20261024.md.
+
+## 2026-10-24 — PR #162 complete 17-slide staged render
+
+Real §2.5 produced one actual MP4, from 17 recovered audio clips, the original PDF, and 66 offline-ASR word highlights, SHA fba8a3b7c423ba7a63a4c1a33661967769947b2f28cb9b84d50551197612fdcb. Isolated HP stage; historical 1.023 s audio overhang NOT included in this first video; corrected TTS and full math/figure highlight unverified. Source unchanged. docs/THOMAS_2_5_FULL17_RENDER_20261024.md
