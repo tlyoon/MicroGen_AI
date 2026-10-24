@@ -29,3 +29,9 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 ## MG-20261024-PROVIDER — transient/billing UI/provider failures (HISTORICAL)
 - Older simulated tests exercise fake Gemini billing/transient errors. No fresh provider outage diagnosed here, no new requests sent.
 - State: Not relevant to this offline PR; general recovery must retain billing circuit breaker, retry/receipt distinctions and no implicit paid calls.
+
+## MG-20261024-002 — renamed corrected trial loses ASR filename link (MEDIUM)
+- **Actual pilot symptom:** First §2.5 corrected audio re-timing attempt failed closed with `No corrected-clip ASR observations` because PR #168 renamed selected WAVs to `*_UNAPPROVED.wav` while PR #158's existing SHA-bound ASR receipts still used `*_UNREVIEWED.wav`. No original media was touched and no output JSON was created.
+- **Root cause:** Brittle filename comparison across two separately sourced QA stages, not a provider outage or a missing speech transcript.
+- **Permanent generalizable fix:** PR #178 locates **exactly one** saved ASR observation by immutable SHA-256 WAV bytes, not basename. It still validates every ASR report against the source-bound original review manifest, and refuses missing/ambiguous SHA matches. The real subsequent HP attempt succeeded with corrected recordings for slides 5, 6, 10 and 66 total word-cue candidates.
+- **Status:** IMPLEMENTED AND REAL-CASE VERIFIED IN DRAFT; independent phonetic/voice QA remains blocked; CI/merge to be checked. Do not substitute weak filename fallbacks.

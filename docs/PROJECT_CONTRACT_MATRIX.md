@@ -14,7 +14,7 @@
 | Pronouncing letter c | FAIL/UNVERIFIED | Original slide 6 offline recognizer heard 'circa' 3 times; corrected historical WAV trial unapproved | Independently listen/verify corrected slide and phoneme |
 | Pronouncing letter y | PENDING | Two corrected-trial 'why' ASR recognitions on slide 10 | Independent listening/phonetic QA |
 | Single consistent speaker | PENDING | Provider voice-name claims; 6/16 shadow join loudness flags are **not** proof of different speaker | Authenticated voice and subjective QA |
-| All-slide corrected lesson | FAIL/PENDING | Shadow corrected WAV 552.709 s staged; not synchronized into a corrected video | Re-recognize corrected audio and recompute all video cues |
+| All-slide corrected lesson | PARTIAL | 552.7095 s corrected shadow PCM exists; PR #178 recomputed 66 source-bound conservative word cues using the actual changed WAVs on slides 5/6/10 | Still render corrected 17-slide video and independently verify audio, cue pixels, math semantics and speaker voice |
 | Offline, low-cost development | PASS this batch | HP local tests/FFmpeg/Vosk; no paid AI, Whisper or provider submission | No new paid services without explicit consent |
 | Protected asset/main safety | PASS this batch | Isolated HP AppData clone, original G: teaching inputs and `main` untouched | Continue no overwrite, no cross-owner process interference |
 | Review/production release | BLOCKED | Drafts through PR #176; no human academic/listening QA, no publish | No merge/publish until real acceptance, authorization and verification |
