@@ -118,3 +118,12 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - Repro: Real PR #180 produced corrected shadow WAV but not corrected visual candidate, so no media-level PCM verification or reviewer-friendly visual playback.
 - Fix: New SHA/source/clip/selection-verified `microgen_corrected_shadow_video.py` renders original PDF-derived lecture picture plus full corrected shadow PCM into an isolated **non-highlighting**, **nonpublishing** ALAC MP4. Demands exact decoded PCM equality, strictly <600 seconds, refuses output overwrite and clears only newly-owned output after failure.
 - Dell real case: 552.71-s candidate, all 17 scenes retained with unapproved changed clips 5/6/10, original AAC tail retained. All earlier word cues intentionally excluded. No mathematical/phonetic/listening approval inferred.
+
+## MG-20261025-007 — corrected full shadow video reused old slide boundaries
+- Corrected trial segments modify 5/6/10 durations; simply replacing original soundtrack under the 550.23s historical video (PR #181) retained outdated visual slide boundaries.
+- PR #182 uses original SHA-bound PDF pages, corrected 17 current WAV measured timeline and AAC tail receipt to render independent full visual sequence with explicit page durations. Real 552.71-s 17-page ALAC candidate, exact PCM equal. It intentionally includes **zero** stale word-level highlights.
+- Still unverified: real frame-to-slide pixel mapping and tolerance at 17 boundaries. Must validate independently before accepting corrected slide-level sync.
+
+## MG-20261025-008 — FFconcat sparse-still seeking leaks next slide (HIGH)
+- Reproduced on real corrected candidate: 16/17 interior FFmpeg screenshots (seek within active slide interval) resolved to the next PDF page, despite successful audio and duration checks. Sparse VFR timestamp seek not trustworthy for slide-level inspection and timing.
+- Fix: output regular 8-fps video frames with explicit `fps=8 -fps_mode cfr` before H.264 encoding. Fresh output verified 17/17 correct current PDF page pixels at interior samples with absolute pixel MAE 0.13–0.40 (320x180 samples). No reused old highlights. Permanent full per-slide/boundary audit remains next milestone.
