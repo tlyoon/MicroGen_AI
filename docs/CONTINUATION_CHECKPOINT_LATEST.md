@@ -258,3 +258,7 @@ Real §2.5 produced one actual MP4, from 17 recovered audio clips, the original 
 ## 2026-10-24 — PR #163 all-source-PCM full lecture QA candidate
 
 An isolated 17-slide §2.5 highlighted MP4 preserving ALL decoded source AAC PCM samples, including 1.023375 s tail, now exists on HP, 551.33 s, SHA 3c720f72772e4b67453173aeea9dbdc330062800ec46185b7d0ae80187bdf2ec. ALAC-only technical QA. Known historical pronunciation faults remain, mathematical figure-to-narration semantic sync unverified, no publication or source changes. docs/THOMAS_2_5_FULL17_PCM_20261024.md
+
+## 2026-10-24 — PR #164 full-lecture pixel QA
+
+Independently sampled frames from final complete §2.5 551.33-second ALAC technical MP4. All 66 SHA-bound PDF word overlays detected at their audio-recognizer cue times, zero missing pixels. Report under HP AppData: 2_5_full17_all_cue_pixels_PR164.json. Does not establish phonetic or math formula/figure semantic correctness; no publication. docs/THOMAS_2_5_FULL17_PIXEL_QA_20261024.md
