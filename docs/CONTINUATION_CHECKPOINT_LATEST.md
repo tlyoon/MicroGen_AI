@@ -328,3 +328,55 @@ No original media/main modification, Whisper, paid AI or publication.
 **Next single safe action:** Run broad offline focused plus legacy regression, source-only diff review and GitHub 4-platform CI for the new v2 normal-renderer cue binding, record exact PR/base/head and results. **Then** independently regenerate a fresh corrected-slide audio-bound cue manifest using only separately verified historical trial WAVs and an installed offline ASR model; never reuse original slide-5/6/10 timestamps, and stop if source or voice/semantic evidence is inadequate. Alternate independent task: strengthen fail-closed independent figure/math semantic acceptance on original 17-slide review packet.
 
 **Recovery:** On new invocation first query live PR stack, GitHub review/CI, `git status` on isolated checkout, all owned processes and saved version-bound receipts. This entry is a snapshot; later live evidence supersedes it. Publication remains `false`.
+
+## 2026-10-24 — Dell-115-only continuation, corrected-AAC cue regeneration PR #178 candidate
+
+Selected project: original `tlyoon/MicroGen_AI`, not MicroGen_AI_Web.
+Owner's explicit original-package hardware preference excludes HP and Yoga 6;
+this invocation queried/ran only Dell-115. The historical HP-only notes above
+record earlier work, not authorization for this continuation. Zenbook untouched.
+Repository evidence at start: most recent open DRAFT PR #177
+`feature/verify-slide-audio-bound-highlight-cues-20261024`,
+head `f1ed07453c7ef05edf04a02356a6e4e2cbbcd2b1`, stacked on PR #176
+head `e98cc3bec242a4841e81463f9a53dc5b056db1d9`; 4/4 hosted CI
+jobs passed for PR #177 (run 40085918469). No other original-package
+Python/FFmpeg/git process matching MicroGen_AI (excluding _Web) was seen on
+Dell at preflight. Existing long-lived Dell terminal shells were left alone.
+New isolated Dell checkout at
+`C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261024_dell_pr178_audio_realign`,
+created from exact #177 head, originally clean; protected main and historical
+G: WAV/PDF/MP4 were not touched.
+
+Implemented `microgen_corrected_cue_realign.py`: optional user-supplied,
+already installed local Vosk capture; reverify WAV/PDF/script hashes after
+capture; reject previous-slide and mismatched audio ASR observations; produce
+v2 SHA-clock-bound conservative text cues with no word/figure/phonetic
+approval and no source overwrites. Adds nine regression tests, CI workflow
+static compile and pytest coverage, source-safe instructions
+`docs/THOMAS_2_5_CORRECTED_CUE_REALIGN_PR178.md` and ledger MG-20261024-002.
+All original word highlights stay invalid after audio replacement until
+re-recognized against actual replacement WAVs.
+
+Dell local verification:
+- `python -m pytest tests -q` => 738 passed, 3 skipped.
+- `python -m unittest discover -s tests -q` => 593 passed, 3 skipped.
+- `python -m pytest tests/test_microgen_corrected_cue_realign.py tests/test_microgen_audio_cue_binding.py -q` => 14 passed.
+- Code currently verified only on synthetic fixture sound; no local
+  full-real corrected 17-slide Vosk model run or academic listening QA.
+- Existing technical original-audio candidate: 17/17 slides, 66/66 cue
+  pixels, strict <600 seconds; no new corrected publishable MP4 produced.
+
+Release remains `publication_allowed=False`; no TTS/Gemini/GCS API calls,
+Whisper, Moodle/YouTube uploads, historical asset mutation, or main merge.
+Phonetic c. and y, narrator consistency, equation/figure semantic sync,
+complete corrected audio/video, all-slide math/figure review and stacked
+draft integration remain incomplete.
+
+Next single safe action: independently reconstruct a **new corrected 17-WAV
+workspace** from source-verified historical slide 5,6,10 trials plus recovered
+source clips, without reusing their old ASR timings; then capture/align with
+an installed offline Vosk model, verify 17 source hashes and correct updated
+cue clock, render a new technical candidate and inspect before release.
+If missing real source assets or Vosk on Dell, do not fake real-case evidence;
+continue independent math/figure acceptance. Verify live PR head, CI, owner
+processes and checkpoint before the next write.
