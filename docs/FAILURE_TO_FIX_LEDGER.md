@@ -53,3 +53,30 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - **Next:** Create isolated corrected 17-WAV workspace with explicitly
   source-verified historical trials, then run capture/align on its actual
   audio (provided local Vosk model exists). Independently review and verify.
+
+## MG-20261024-003 — no source-safe full corrected WAV staging (HIGH)
+- **Historical gap:** The recovered legacy source yields 17 provisional scene WAVs,
+  and three source-receipt-verified corrected trials exist separately, but there
+  was no complete source-verified and reusable corrected 17-WAV workspace with
+  a newly measured global timeline. Reusing the 17 original cues risks
+  misalignment, and promoting source historical WAVs directly would be unsafe.
+- **Permanent implementation in PR #179 draft:** New
+  `microgen_corrected_audio_stage.py` requires exactly 17 source verified
+  recovered clips and three explicitly selected UNAPPROVED trials (5/6/10).
+  Preflights actual hashes, selected paths, risk classes, original source MP4,
+  source PDF/script and measured mono PCM16 durations. Creates ONLY a new
+  external isolated stage with 17 WAVs, inventory, measured timeline and
+  `fresh_offline_recognition_required=true`. Never copies any prior ASR
+  cues or modifies originals. All source files and receipt hashes are
+  checked again after staged copying; errors remove only the owned new stage.
+- **Adversarial regression:** new synthetic 17-slide real WAV fixtures,
+  correction duration shifts, tampered trial/recovered audio, duplicated or
+  missing trials, forged approved/source status, source video drift, unsafe
+  lecture duration, overwrite/protected destination, race during WAV copy
+  and selection receipt mutation. Real actual Thomas section 2.5 still
+  requires a separate source-verifiable pilot on Dell.
+- **Status:** implemented in isolated Dell-115 draft branch, source media and
+  protected main untouched; phonetic and full multimedia acceptance remain
+  blocked. Do not infer real corrected video or publication from unit tests.
+- **Next:** actual stage from real historical §2.5 selections, offline Vosk
+  recognition to all current WAVs (PR #178), v2 cues, pixel/audio/semantic QA.

@@ -380,3 +380,55 @@ cue clock, render a new technical candidate and inspect before release.
 If missing real source assets or Vosk on Dell, do not fake real-case evidence;
 continue independent math/figure acceptance. Verify live PR head, CI, owner
 processes and checkpoint before the next write.
+
+## 2026-10-24 — Dell-115-only continuation after PR #178 CI: corrected 17-slide WAV staging
+
+At start PR #178 `feature/section25-current-audio-cue-realignment-20261024`
+was stacked DRAFT on #177, head
+`020ab182b5a841d208927093ac56477f81c340a8`.
+Live GitHub-hosted four-job Windows/Linux CI run 40093512750 is **successful**.
+No merge of #178 or protected main. A second isolated checkout was created at
+`C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261024_dell_pr179_corrected_stage`
+from this exact #178 head. This invocation uses Dell-115 ONLY. HP,
+Yoga6 and Zenbook were not accessed; previous HP-only campaign policy
+notes above are historical and superseded for this continuation.
+
+New `microgen_corrected_audio_stage.py` preflights the real-source
+provenance *contract*, copies 14 recovered source clips and precisely 3
+source-selected historical UNAPPROVED correction clips (slide 5,6,10) into
+a brand-new 17-slide isolated workspace, produces measured WAV timeline,
+rejects stale or duplicated selections, refuses protected/old destinations,
+rejects altered source WAV/MP4/receipts even during copy, checks the strict
+<600 seconds condition, and NEVER copies old ASR cues. It explicitly
+does not preserve the separate decoded original AAC audio-overhang in the
+per-slide WAV stage; that remains a later mastering step. All phonetic,
+speaker, math and figure claims stay unapproved.
+
+The new module is paired with
+`docs/THOMAS_2_5_CORRECTED_STAGE_PR179.md`, updated failure ledger
+MG-20261024-003, adversarial tests and offline CI workflow inclusion.
+Targeted Dell fixture tests: 26 passed (PR #177/178 neighboring tests plus
+new correction-stage cases). The tests are **synthetic 17-slide source/audio
+fixtures**, NOT real 17-slide §2.5 production acceptance. No real corrected
+17-slide Vosk capture, output MP4, listening review or academic approval
+was performed in this invocation. Original G: WAV/PDF/MP4 and public
+release destinations were not touched. No paid provider, model downloads,
+Whisper, or cloud lease.
+
+Next single executable action when real source-bound §2.5 recovery and trial
+selection evidence is accessible on Dell: run
+`prepare_section25_corrected_wavs` into a separate unused stage,
+`microgen_corrected_cue_realign.py capture` with an explicit installed
+offline Vosk model, and `align`. Before any video render, verify actual
+17 WAV hashes and corrected timestamp integrity and reacquire
+independent pronunciation, math-figure and voice QA. If source/model not
+available, mark real acceptance BLOCKED; choose a separate source-safe QA
+task instead. Never claim published or mathematically certified output.
+
+PR #179 candidate verification on Dell-115:
+`python -m pytest tests/test_microgen_corrected_audio_stage.py tests/test_microgen_corrected_cue_realign.py tests/test_microgen_audio_cue_binding.py -q`: 26 passed.
+`python -m pytest tests -q`: **750 passed, 3 skipped**.
+`python -m unittest discover -s tests -q`: **593 passed, 3 skipped**.
+Local packages provided by the existing Miniconda interpreter; no model or
+paid service was invoked in the new stage tests. Hosted CI on the new PR
+must be verified after push. Source authenticity/academic release not proved.
