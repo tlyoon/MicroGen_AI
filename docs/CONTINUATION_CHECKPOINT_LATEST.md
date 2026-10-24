@@ -290,3 +290,7 @@ No original media/main modification, Whisper, paid AI or publication.
 ## 2026-10-24 PR #171 Extract source-PDF math-expression regions without claiming spoken alignment
 On real original Thomas 2.5 17 page PDF extracted 57 geometric math-expression candidate lines. Mixed prose flagged. Mathematical correctness and narration relation intentionally unverified.
 No original media/main modification, Whisper, paid AI or publication.
+
+## 2026-10-24 PR #172 Inventory original PDF raster and vector figure regions with source coordinates
+Real Thomas 2.5 scanned all 17 source PDF pages and found 34 geometric figure candidates. Vector decorative ambiguity and lack of caption or spoken referent remain explicit.
+No original media/main modification, Whisper, paid AI or publication.
