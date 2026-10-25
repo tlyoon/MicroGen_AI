@@ -142,3 +142,9 @@ Source of truth: `docs/CONTINUATION_CHECKPOINT_LATEST.md` on newest **live draft
 - Prior PRs #181-184 verified real corrected video PCM, PDF slide times, 50 source-frame samples and A/B review artifact, but these do not prove new word-level acoustic alignment or mathematical narration semantics.
 - PR #185 creates a corrected-lecture-specific cross-stage SHA audit rejecting forged pixel/PCM/source/voice review evidence. Always outputs release BLOCKED with precise outstanding issues, including missing Vosk/local model, no fresh corrected word cues and no academic/listening approval.
 - Real Dell audit: 17 slides, corrected 552.709-second PCM, 50/50 pixel samples; 8 independent blockers and `publication_allowed=false`. No historical G: teaching assets or protected main modified.
+
+## MG-20261025-012 — offline corrected-word ASR blocked by missing model and nonresumable capture (HIGH)
+- Initial Dell audit of base Miniconda and three named Conda envs found no Vosk/PocketSphinx, no preverified local model; PR #178's monolithic 17-slide capture would lose successful late-stage work on a transient failure.
+- PR #186 introduces an isolated, version-pinned offline Vosk setup with verified public SHA-256 ZIP and **no changes** to protected teaching files, plus per-slide exact source WAV/PDF/script/model hash checkpointing and bounded 1–17 slide resume. If the machine/model/receipt mutates, fail closed; no mismatched old ASR clocks or overwrites.
+- Real Dell-115 run: initial three slides then resume remaining fourteen, 17/17 authentic observations, 1,178 words, 1,043 high-confidence words, 66 *new* conservative PDF-word candidate cues SHA `bf5c41dfd2480e1220d03f0f6ddb02640ea1a18b65fd0d532d64108be275832f`.
+- Remaining acceptance: these are **model observations**, not phonetic or semantic proof. They have not been rendered as highlighted video or independently pixel/linguistically QA'd. Release blocked.
