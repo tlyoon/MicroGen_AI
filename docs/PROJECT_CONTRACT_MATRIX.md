@@ -42,3 +42,8 @@ The older matrix above describes original-sound candidate and HP-local earlier t
 - Source, corrected 552.75s PCM video, 50/50 source slide samples, 66/66 active corrected word pixel samples, 64/64 feasible post-word controls, and all 130 reviewer files: **PASS, technical source-bound only**. See new `corrected_release_status_v2` report SHA `36f03062c3e71e48400c03c7d376b7ecd7a9eae87169a1fd04bc865c5c973c65` on Dell.
 - Equation/audio correspondence: **PENDING 57/57**; figure/audio correspondence: **PENDING 34/34**. One contextual math ASR hint not independent semantics.
 - Phonetic c/y listening, single narrator identity, full academic listening QA and release approval: **PENDING / BLOCKED**. No publication, no protected main merge. Historical old v1 release gate's missing-ASR and missing-pixel blockers are superseded, not proof of phonetic or scientific acceptance.
+
+## 25 Oct 2026 exception-first reviewer queue — original MicroGen_AI §2.5
+- Source SHA-pinned corrected acoustic/script/math/figure screening: **PASS as triage only**: 17 slides, 91 regions kept, 52 prioritized early, 39 deferred UNREVIEWED. Source pronunciation/voice/academic approval remain **BLOCKED**, and no source figure semantic claim follows from text overlap.
+- Audio-format continuity: replacement slides 5/6/10 are mono 24k PCM16 vs 14 original mono 16k PCM16; not a defect by itself; screen for voice continuity separately. The full technical corrected MP4 PCM still passed #187–190.
+- Release remains blocked; no Moodle/YouTube, protected main or G: source edits.
