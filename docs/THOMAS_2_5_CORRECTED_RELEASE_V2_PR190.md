@@ -1,0 +1,19 @@
+# PR #190 — truthful corrected Thomas §2.5 cross-stage release reconciliation
+
+**Selected project:** original `tlyoon/MicroGen_AI`, not the Web variant.
+**Parent:** stacked DRAFT PR #189 head `14539389c3cfa32179838fca408fc53b4831dc93` on #188; 4/4 GitHub Actions CI success, Dell local 857 pytest pass / 4 skipped, legacy unittest pass.
+**Device:** Dell-115 exclusively. Owner policy excludes HP, Yoga6 and Zenbook. New isolated checkout `C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261025_pr190_acceptance_reconcile`. No edits to protected main, source textbook PDF/MP4/WAV, no paid AI/Whisper, Moodle/YouTube publishing.
+
+## Root cause addressed
+
+Legacy gate `microgen_corrected_release_gate.py` (PR #185) was source-safe for **earlier** 50-page pixel and corrected PCM evidence, but carried hard-coded blockers saying Vosk model, fresh corrected word cues, and word overlay pixel QA were missing **after** PRs #186–188 had generated and independently verified these real artifacts. It would mislead users about what was still needed. Its original report was historical, not a current acceptance report.
+
+New `microgen_corrected_release_gate_v2.py` first re-evaluates the legacy original/uncorrected-source receipt chain, then independently validates the actual current SHA-bound 17 corrected WAV source and corrected 552.75-s word-highlighted video, exact full corrected PCM receipt, all 17 Vosk-derived WAV-bound ASR observations, current 66 v2 PDF word cues, and the real 66/66 + 64/64 independent decoded overlay pixel audit. It additionally requires the **externally pinned** full SHA-256 of the new semantic packet receipt, and verifies **all 130 generated packet files** (including HTML/CSV, math/figure crops and copied WAVs) against the receipt, with all reviewer judgments explicitly UNREVIEWED. It calls the legacy gate into an isolated new folder and retains its source proof, but does not re-import its obsolete hardcoded blocker strings.
+
+**Real Dell-115 result:** `C:\Users\tlyoon\AppData\Local\MicroGen_AI_Checkpoints\20261024_Section25_REAL_PILOT\corrected_release_status_v2\corrected_release_status_v2.json`, SHA-256 `36f03062c3e71e48400c03c7d376b7ecd7a9eae87169a1fd04bc865c5c973c65`. `SOURCE_BOUND_CORRECTED_TECHNICAL_PASS_DOMAIN_RELEASE_BLOCKED` with 17/17 source slides/WAV, 552.75-second actual output, 50 original PDF slide pixels, 66/66 corrected word cue positives, 64/64 feasible after-cue controls, 130 reviewer files hashed, 57 math regions + 34 figure regions **all 91 still UNREVIEWED**, **seven** explicit substantive blockers. Current phonetic c/y, same narrator, spoken mathematical/figure semantics, independent listening QA and protected draft merge/release permission remain **false**. `publication_allowed=false`.
+
+## Regression and safe next step
+
+- New adverse test class: real structural positive while keeping all domain approvals FALSE, forged publication fields, corrupted source cue/WAV/video/pixel evidence, tampered mathematical/audio packet assets or its externally pinned receipt SHA, missing original gate proof, existing/protected output path. Focused suite **9 tests passing** plus actual real pilot (without test mocks).
+- This v2 report MUST never be used to publish. It is a truthful *technical acceptance* checklist/handoff. Human reviewer interpretation of 91 math and figure candidates and listening/voice correctness is genuinely pending; ASR "see/sea" and "why" observations do not establish phonetic correctness by themselves.
+- Smallest next action: independently listen to the three previously staged A/B clip pairs and assess mathematical/figure associations using the now SHA-pinned semantic reviewer HTML and CSV. Do not mark approval simply from automated text overlap; maintain code-level blocker until genuinely reviewed. Optionally improve automated risk triage only with precise source-verified evidence and false-positive regression tests.

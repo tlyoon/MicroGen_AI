@@ -37,3 +37,8 @@ The older matrix above describes original-sound candidate and HP-local earlier t
 | Single narrator voice consistency | **PENDING** | Existing WAVs technically preserved; no independently verified voice identity |
 | Independent academic/listening approval | **PENDING** | New offline reviewer packet, no completed approvals |
 | Draft PR stack integration, publication | **BLOCKED** | Protected main unmodified; no upload to YouTube/Moodle |
+
+### 25 Oct 2026 — current corrected acceptance gate v2
+- Source, corrected 552.75s PCM video, 50/50 source slide samples, 66/66 active corrected word pixel samples, 64/64 feasible post-word controls, and all 130 reviewer files: **PASS, technical source-bound only**. See new `corrected_release_status_v2` report SHA `36f03062c3e71e48400c03c7d376b7ecd7a9eae87169a1fd04bc865c5c973c65` on Dell.
+- Equation/audio correspondence: **PENDING 57/57**; figure/audio correspondence: **PENDING 34/34**. One contextual math ASR hint not independent semantics.
+- Phonetic c/y listening, single narrator identity, full academic listening QA and release approval: **PENDING / BLOCKED**. No publication, no protected main merge. Historical old v1 release gate's missing-ASR and missing-pixel blockers are superseded, not proof of phonetic or scientific acceptance.
