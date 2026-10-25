@@ -51,6 +51,7 @@ print(f"⚙️  Minimum image size threshold: {ikB:.2f} kB")
 pdf_pages = convert_from_path(str(input_doc_path), dpi=200)
 reader = PdfReader(str(input_doc_path))
 
+failed_docling_pages = []
 for i, (page_image, pdf_page) in enumerate(zip(pdf_pages, reader.pages), start=1):
     page_dir = pages_root / f"page_{i}"
     page_dir.mkdir(exist_ok=True)
@@ -99,8 +100,13 @@ for i, (page_image, pdf_page) in enumerate(zip(pdf_pages, reader.pages), start=1
 
     except Exception as e:
         print(f"❌ Error extracting figures from {pdf_path.name}: {e}")
+        failed_docling_pages.append(i)
         continue
 
+if failed_docling_pages:
+    raise RuntimeError("Docling failed on source page(s) "
+                       + ", ".join(map(str, failed_docling_pages))
+                       + "; partial extraction cannot be accepted")
 print("\n✅ Figure extraction completed successfully.")
 
 
@@ -127,3 +133,44 @@ for page_folder in sorted(pages_dir.glob("page_*")):
         shutil.copy2(png, dst)
         print(f"Copied: {png} -> {dst}")
 
+
+
+# Only a completely successful Docling pass can certify this offline stage.
+# A partial pages/ tree is NOT sufficient evidence of figure extraction.
+import hashlib
+import json
+
+
+def _sha256(file):
+    return hashlib.sha256(Path(file).read_bytes()).hexdigest()
+
+
+source_receipt = []
+for page_index in range(1, len(pdf_pages) + 1):
+    folder = pages_root / f"page_{page_index}"
+    p = folder / f"page_{page_index}.pdf"
+    png = folder / f"page_{page_index}.png"
+    images = sorted(folder.glob("fig_*.png"))
+    if not p.is_file() or not png.is_file() or any(not f.is_file() for f in images):
+        raise RuntimeError(f"Missing page artifacts for source page {page_index}")
+    source_receipt.append({
+        "page": page_index,
+        "pdf_sha256": _sha256(p),
+        "png_sha256": _sha256(png),
+        "figures": [{"name": f.name, "sha256": _sha256(f)} for f in images],
+    })
+
+receipt = {
+    "status": "OFFLINE_SOURCE_FIGURE_EXTRACTION_COMPLETE",
+    "source_sha256": _sha256(input_doc_path),
+    "page_count": len(pdf_pages),
+    "pages": source_receipt,
+    "gemini_invoked": False,
+    "tts_invoked": False,
+    "publication_allowed": False,
+}
+marker = Path("figure_extraction_receipt.json")
+if marker.exists() or marker.is_symlink():
+    raise RuntimeError("Existing figure extraction receipt cannot be overwritten")
+marker.write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf8")
+print(f"Complete source-bound offline figure receipt: {marker}")

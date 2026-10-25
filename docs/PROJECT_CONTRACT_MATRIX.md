@@ -70,3 +70,18 @@ Earlier Dell-only additions in this file are *historical*, overridden by owner f
 | Publication and main integration | **BLOCKED** | Gate 7 substantive review/release blockers, user-owner publishing restrictions, stacked draft PRs not integrated |
 
 The next milestone must close the **fresh-from-source** gap and independently adjudicate high-risk math/figure/pronunciation quality; do not substitute more technical audit layers or automatically approve remaining review items.
+
+### 26 October 2026 — verified HP offline fresh textbook-source stage (#194 candidate)
+
+Original MicroGen_AI **HP exclusively** (Dell-115 reserved for MicroGen_AI_Web). Completion-first strategy from #193 remains governing.
+
+| M1 new-source criterion | Verified outcome | Limitation |
+|---|---|---|
+| HP local Docling environment | **PASS** | Already installed `miniconda3/envs/docling_win`, no paid provider invoked |
+| Source textbook `source.pdf` to per-page PNG/PDF | **PASS real HP** | 11/11 real original source pages, complete source SHA-bound receipt |
+| Actual figure extraction | **PASS technical candidate** | 20 source Docling crops across 11 pages; source/crop hashes verified, but academic figure/caption correctness not verified |
+| Incomplete Docling/run failure | **FAIL CLOSED** | Missing source page, marker, figure or altered hashes block checkpoint; per-page extraction errors now fail, not skip |
+| Safe stop before billed stages | **PASS** | `--figure-extraction-only`, report no Gemini/TTS/publication, checkpoint preserves extraction only |
+| Full new slide generation and source-grounded narration | **PENDING** | Figure mapping and new Gemini slide/narration production not run |
+| Fresh TTS from new narration | **PENDING** | No billable TTS call; historical A/B corrected WAV trial remains unapproved |
+| Full first original PDF→published video | **NOT COMPLETE** | HP historical downstream video reproduced in #193, new upstream figure extraction now achieved; missing middle AI/TTS stages + scholarly review |
