@@ -181,3 +181,10 @@ MG-20261025-015 follow-up: reviewer packet v1 asset tampering vulnerability cont
 - Safeguard: title slide excluded from long-script ASR mismatch flag, mono PCM16 format verified at original rate, source packet SHA-pinned all 130 files. Tampered audio/HTML/receipt, occupied source/output, empty or weird words fail closed. No semantic release, no source mutation.
 
 MG-20261025-017 final hardening: QA triage v3 fingerprints both generated HTML and CSV with a no-extra-files, no-review-approval validator; optional out-of-band pinned complete receipt SHA 47171aadd1f7c4275e81a8adb0d42cb417683f18a5f1ca84716f9b7efbefcb09. V1/V2 old reports preserved; no auto publication.
+
+## MG-20261025-018 — corrected 24k WAV/audio seam transitions not independently screened (MEDIUM)
+- Audio QC previously identified 24k corrected trials 5/6/10 among 16k original clips, but could not quantify 16 adjacent boundaries; lack of quantified seam anomalies risked silently requiring broad human review or incorrectly assuming a speaker mismatch.
+- PR #192 reusable independent SHA-bound PCM boundary screener measures original-rate samples/RMS/edge jumps and emits unreviewed 16-row CSV and receipt. Real original textbook corrected §2.5: 5 adjacent joins flagged for trial/format screening; one join 9→10 additionally possible no-fade issue, sample amplitude delta 0.07312. Zero large >0.12 edges; max median voiced level difference 3.5dB (<7.5 threshold). **Not a confirmed audible click, narrator change or pronunciation defect**.
+- Prevention: no auto corrective fade on unconfirmed signal; next exact full corrected master PCM seam checking can justify a targeted isolated repair. Source artifacts untouched, full technical MP4 still PCM-verified, publication=false. Unit tests cover false approvals and source SHA/mutation.
+
+MG-20261025-018 additional real-shadow PCM read-only probe: nominal 9→10 boundary 280.350667s; 10ms max sample jump 2396/32768=.07312, 1.25x nearby waveform p99 but below p99.9 of 2896. No automatic fade or voice diagnosis; strongest next evidence is independent listening or source-bound acoustic transient test. No protected media changes.
