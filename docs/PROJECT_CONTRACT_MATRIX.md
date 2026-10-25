@@ -47,3 +47,7 @@ The older matrix above describes original-sound candidate and HP-local earlier t
 - Source SHA-pinned corrected acoustic/script/math/figure screening: **PASS as triage only**: 17 slides, 91 regions kept, 52 prioritized early, 39 deferred UNREVIEWED. Source pronunciation/voice/academic approval remain **BLOCKED**, and no source figure semantic claim follows from text overlap.
 - Audio-format continuity: replacement slides 5/6/10 are mono 24k PCM16 vs 14 original mono 16k PCM16; not a defect by itself; screen for voice continuity separately. The full technical corrected MP4 PCM still passed #187–190.
 - Release remains blocked; no Moodle/YouTube, protected main or G: source edits.
+
+### 25 Oct 2026 — source-bound corrected PCM boundary screening
+- 17 corrected §2.5 WAVs, 16 neighboring joins: **numerically screened**, 5 junctions flagged for exception QA including 9→10 potential no-fade seam (normalized amplitude jump 0.07312). This does not certify speaker, phonetic quality or actual audibility. All 16 joins remain UNREVIEWED for final listening and 91 mathematical/figure decisions remain unreviewed.
+- Technical corrected source/media/PCM, 66 active cue pixels and 130 source-review file hashes still passed previously. No publication or protected main merge allowed solely from screening.
