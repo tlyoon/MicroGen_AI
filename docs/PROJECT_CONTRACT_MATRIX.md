@@ -20,3 +20,20 @@
 | Review/production release | BLOCKED | Drafts through PR #176; no human academic/listening QA, no publish | No merge/publish until real acceptance, authorization and verification |
 
 The original §2.5 technical MP4 is **not** an academically approved lecture. Passing a SHA, PCM, codec or pixel test never grants publication.
+
+## Addendum — 25 Oct 2026 corrected lesson §2.5 (PRs #181–189; historical table above is stale)
+
+The older matrix above describes original-sound candidate and HP-local earlier test segments. **Current owner amendment: Dell-115 ONLY for all original MicroGen_AI local coding, media testing and process checks. HP/Yoga6/Zenbook excluded.** The unmerged PR stack is not release.
+| Contract criterion | Current status | Actual evidence and limitation |
+|---|---|---|
+| Exact 17 source slide PDF/script + unmodified protected assets | **PASS** | Source SHA-bound all stages, no edits to original G: media |
+| Corrected lesson below 600s + actual full corrected audio | **PASS (technical)** | 552.75s H264/ALAC, decoded PCM exactly identical to full corrected WAV |
+| Corrected slide-level PDF page timing | **PASS (sampled technical)** | 50/50 actual decoded PDF page pixel samples; limited guard interval |
+| New corrected word overlays | **PASS (sampled technical)** | Fresh 17/17 Vosk ASR observations; 66 source SHA-bound PDF word cues, all 66 visible pixels and 64/64 available delayed non-highlight controls, 2 end-window controls not feasible |
+| Offline speech/model recovery | **PASS (technical)** | Pinned source model ZIP SHA and per-slide model/WAV/PDF/source-bound resumable checkpoints; Vosk hypotheses only |
+| Math spoken equation semantic correspondence | **PENDING** | 57 PDF math-looking candidates, only 1 contextual two-word hint, 57 decisions UNREVIEWED; heuristic not proof |
+| Figure correctness and spoken figure linkage | **PENDING** | 34 geometry/crop candidates, all 34 decisions UNREVIEWED |
+| Pronouncing c and y correctly | **PENDING** | Vosk output sees 'see/sea' or 'why'; not verified listening/phonetic correctness |
+| Single narrator voice consistency | **PENDING** | Existing WAVs technically preserved; no independently verified voice identity |
+| Independent academic/listening approval | **PENDING** | New offline reviewer packet, no completed approvals |
+| Draft PR stack integration, publication | **BLOCKED** | Protected main unmodified; no upload to YouTube/Moodle |
