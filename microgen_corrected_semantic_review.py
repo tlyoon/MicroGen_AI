@@ -303,7 +303,18 @@ def build_corrected_semantic_review_packet(
                   "pronunciation_approved":False,
                   "speaker_identity_approved":False,
                   "publication_allowed":False}
+        files=[]
+        for f in sorted(dest.rglob("*")):
+            if f.is_symlink():
+                raise SemanticPacketError("Review packet may not contain symlinks")
+            if f.is_file():
+                files.append({"relative_path":f.relative_to(dest).as_posix(),
+                              "sha256":digest(f),"bytes":f.stat().st_size})
+        if not 20<=len(files)<=500:
+            raise SemanticPacketError("Incomplete or unbounded reviewer files")
+        metadata["packet_files"]=files
         atomic_json(dest/"semantic_review_receipt.json",metadata)
+        verify_semantic_packet_file_integrity(dest)
         return {"slides":17,"math_candidates":math_count,
                 "figure_candidates":fig_doc["figure_candidates"],
                 "contextual_math_hints":heuristic,"unreviewed":len(qa),
@@ -312,3 +323,73 @@ def build_corrected_semantic_review_packet(
     except Exception:
         shutil.rmtree(dest)
         raise
+
+
+def verify_semantic_packet_file_integrity(directory, *, expected_receipt_sha256=None):
+    """Reject missing/tampered review audio, math/figure crops and HTML/CSV.
+
+    A receiver may pass an out-of-band trusted receipt SHA-256 to pin the
+    manifest itself. Without that optional fingerprint, this validates
+    internal consistency but does not authenticate who made the receipt.
+    It NEVER approves the mathematical correctness or voice.
+    """
+    root=Path(directory).resolve(strict=True)
+    receipt=root/"semantic_review_receipt.json"
+    if receipt.is_symlink() or not receipt.is_file():
+        raise SemanticPacketError("Missing regular semantic review receipt")
+    if expected_receipt_sha256 is not None and digest(receipt)!=expected_receipt_sha256:
+        raise SemanticPacketError("External trusted review receipt SHA changed")
+    meta=read_json(receipt)
+    if (meta.get("status")!="CORRECTED_MATH_FIGURE_SOURCE_BOUND_REVIEW_UNAPPROVED"
+            or meta.get("publication_allowed") is not False
+            or meta.get("all_mathematical_semantics_verified") is not False
+            or meta.get("all_figure_spoken_correspondence_verified") is not False
+            or meta.get("pronunciation_approved") is not False
+            or meta.get("speaker_identity_approved") is not False
+            or meta.get("slide_count")!=17
+            or meta.get("corrected_audio_slides")!=17
+            or meta.get("unreviewed_region_decisions")!=
+               meta.get("math_region_candidates",0)+meta.get("figure_region_candidates",0)):
+        raise SemanticPacketError("Unreviewed scientific/phonetic status or counts invalid")
+    files=meta.get("packet_files")
+    if not isinstance(files,list) or not 20<=len(files)<=500:
+        raise SemanticPacketError("Incomplete review packet file inventory")
+    seen=set()
+    for row in files:
+        if not isinstance(row,dict) or set(row)!={"relative_path","sha256","bytes"}:
+            raise SemanticPacketError("Malformed file fingerprint record")
+        name=row["relative_path"]
+        if (not isinstance(name,str) or not name
+                or len(name)>180 or "\\" in name or name.startswith("/")
+                or any(part in (".","..","") for part in name.split("/"))):
+            raise SemanticPacketError("Unsafe review file path")
+        if name in seen or name=="semantic_review_receipt.json":
+            raise SemanticPacketError("Duplicate or self-referencing fingerprint")
+        seen.add(name)
+        file=root.joinpath(*name.split("/"))
+        if (file.is_symlink() or not file.is_file()
+                or type(row["bytes"]) is not int or row["bytes"]<0
+                or row["bytes"]>100_000_000
+                or file.stat().st_size!=row["bytes"]
+                or not isinstance(row["sha256"],str)
+                or len(row["sha256"])!=64 or digest(file)!=row["sha256"]):
+            raise SemanticPacketError("Review file missing or changed: "+name)
+    present=set()
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise SemanticPacketError("Review packet symlink inserted")
+        if path.is_file():
+            present.add(path.relative_to(root).as_posix())
+    if present!=seen|{"semantic_review_receipt.json"}:
+        raise SemanticPacketError("Untracked review file inserted or missing")
+    with (root/"manual_semantic_review.csv").open(encoding="utf8",newline="") as fp:
+        decisions=list(csv.DictReader(fp))
+    if (len(decisions)!=meta["unreviewed_region_decisions"]
+            or any(x.get("spoken_correspondence")!="UNREVIEWED"
+                   or x.get("academic_correctness")!="UNREVIEWED"
+                   or x.get("reviewer_note")!=""
+                   for x in decisions)):
+        raise SemanticPacketError("Reviewer CSV no longer a clean handoff")
+    return {"files_checked":len(files),
+            "unreviewed":len(decisions),
+            "publication_allowed":False}

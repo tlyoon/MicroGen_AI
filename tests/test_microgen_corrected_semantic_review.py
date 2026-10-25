@@ -129,3 +129,42 @@ def test_context_only_heuristic_does_not_certify_spoken_equation():
     x=qa._context_only_anchors("Derivative integral = 0",good)
     assert len(x)==1
     assert x[0]["NOT_semantic_alignment"] is True
+
+
+@pytest.mark.parametrize("tamper",["html","slide_image","corrected_audio","csv","untracked"])
+def test_full_review_packet_digest_detects_post_generation_tampering(tmp_path,monkeypatch,tamper):
+    src,stage,sel,shadow,asr,film,pixel=_setup(tmp_path,monkeypatch)
+    out=tmp_path/"immutable_review"
+    qa.build_corrected_semantic_review_packet(stage,sel,shadow,asr,film,pixel,out)
+    original_receipt=digest(out/"semantic_review_receipt.json")
+    assert qa.verify_semantic_packet_file_integrity(
+        out,expected_receipt_sha256=original_receipt)["publication_allowed"] is False
+    if tamper=="html":
+        with (out/"index.html").open("a",encoding="utf8") as f:
+            f.write("silently changed math statement")
+    elif tamper=="slide_image":
+        (out/"slides"/"slide05.png").write_bytes(b"changed")
+    elif tamper=="corrected_audio":
+        (out/"audio"/"slide06_CORRECTED_UNREVIEWED.wav").write_bytes(b"changed")
+    elif tamper=="csv":
+        with (out/"manual_semantic_review.csv").open("a",encoding="utf8") as f:
+            f.write("F-00-00,0,figure,APPROVED,APPROVED,false")
+    else:
+        (out/"untracked_source.pdf").write_bytes(b"fake source")
+    with pytest.raises(qa.SemanticPacketError):
+        qa.verify_semantic_packet_file_integrity(
+            out,expected_receipt_sha256=original_receipt)
+
+
+def test_external_review_receipt_hash_pin_rejects_forged_manifest(tmp_path,monkeypatch):
+    src,stage,sel,shadow,asr,film,pixel=_setup(tmp_path,monkeypatch)
+    out=tmp_path/"review"
+    qa.build_corrected_semantic_review_packet(stage,sel,shadow,asr,film,pixel,out)
+    sha=digest(out/"semantic_review_receipt.json")
+    meta=json.loads((out/"semantic_review_receipt.json").read_text())
+    meta["publication_allowed"]=True
+    atomic_json(out/"semantic_review_receipt.json",meta)
+    with pytest.raises(qa.SemanticPacketError,match="trusted review receipt SHA"):
+        qa.verify_semantic_packet_file_integrity(out,expected_receipt_sha256=sha)
+    with pytest.raises(qa.SemanticPacketError,match="status or counts"):
+        qa.verify_semantic_packet_file_integrity(out)
