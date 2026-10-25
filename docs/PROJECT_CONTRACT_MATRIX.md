@@ -51,3 +51,22 @@ The older matrix above describes original-sound candidate and HP-local earlier t
 ### 25 Oct 2026 — source-bound corrected PCM boundary screening
 - 17 corrected §2.5 WAVs, 16 neighboring joins: **numerically screened**, 5 junctions flagged for exception QA including 9→10 potential no-fade seam (normalized amplitude jump 0.07312). This does not certify speaker, phonetic quality or actual audibility. All 16 joins remain UNREVIEWED for final listening and 91 mathematical/figure decisions remain unreviewed.
 - Technical corrected source/media/PCM, 66 active cue pixels and 130 source-review file hashes still passed previously. No publication or protected main merge allowed solely from screening.
+
+## OWNER HP-only amendment and completion-first Milestone 1, 25 Oct 2026
+
+Earlier Dell-only additions in this file are *historical*, overridden by owner for **original MicroGen_AI = HP only**; Dell-115 reserved for MicroGen_AI_Web. GitHub CI allowed. Original historical G: media and `main` protected. **Priority: one complete accepted HP lecture → 2–3 different section trials → stabilize/release, not PR count.**
+
+| Current HP acceptance gate | Status | Grounded actual proof and remaining requirement |
+|---|---|---|
+| Historical 17-slide source, script and media mirror | **PASS technical on HP** | 13 SHA-tracked original assets, unchanged G: hashes; historical inputs were used |
+| Current corrected audio and 10-minute limit | **PASS technical on HP** | 552.709s corrected WAV; new 552.75s corrected video has identical decoded PCM |
+| Current text word highlight sampled pixels | **PASS technical on HP** | 17/17 true current offline Vosk ASR, 66/66 active overlays and 64/64 post-cue controls |
+| Current slide-level source PDF visual mapping | **PASS sampled technical on HP** | 50/50 independent actual frame samples |
+| Source math/figure/audio semantics | **PENDING** | 57 math +34 figure candidates, all 91 unreviewed; 130/130 review-file SHA pass |
+| Correct c/y phonemes and single speaker | **PENDING** | A/B source/trial listening packet; no independent pronunciation or speaker approval |
+| PCM adjacent boundaries | **SCREENED ONLY** | 5/16 review-trigger joins, no definite audible click/speaker change |
+| Regression evidence | **PASS on second HP run** | 891 pytest pass /4 skip; legacy 593 unittest pass /3 skip; initial 50ms replication fixture failed once under parallel load, subsequently 3/3 rerun pass |
+| Fresh textbook source.pdf through figure→slides→new narration→TTS | **NOT RUN / M1 GAP** | Historical slides, script and WAV candidates reused for source-bound reconstruction; figure dependencies Docling/pdf2image not in isolated venv; no chargeable provider calls |
+| Publication and main integration | **BLOCKED** | Gate 7 substantive review/release blockers, user-owner publishing restrictions, stacked draft PRs not integrated |
+
+The next milestone must close the **fresh-from-source** gap and independently adjudicate high-risk math/figure/pronunciation quality; do not substitute more technical audit layers or automatically approve remaining review items.
