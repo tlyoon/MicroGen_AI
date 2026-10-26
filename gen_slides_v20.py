@@ -4,6 +4,7 @@ import re
 import fix_latex
 from microgen_quality import QualityError, check_graphics, check_slide_pdf, check_latex_overflow, try_local_latex_repair
 from microgen_slide_reflow import repair_layout
+from microgen_missing_source_figure_candidates import check_graphics_with_source_candidates
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
@@ -387,7 +388,7 @@ with open(out_base + '.tex','w',encoding='utf-8') as f:
 
 ## begin compiling latex after exiting the LLM phase ##
 tex_file = out_base + '.tex'
-check_graphics(Path(tex_file))  # missing figures must not disappear silently
+check_graphics_with_source_candidates(Path(tex_file))  # preserve source candidate proof; never invent imagery
 clean_pause_in_place(tex_file)
 compile_ok = False
 last_compile_output = ""
@@ -398,7 +399,7 @@ for attempt in range(1, 5):
     _tex_raw = _tex_path.read_text(encoding="utf-8-sig")
     _tex_lines = [line.rstrip() for line in _tex_raw.splitlines() if line.strip()]
     _tex_path.write_text("\n".join(_tex_lines) + "\n", encoding="utf-8")
-    check_graphics(Path(tex_file))
+    check_graphics_with_source_candidates(Path(tex_file))
     clean_pause_in_place(tex_file)
     result = subprocess.run(
         ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', '-file-line-error', tex_file],
