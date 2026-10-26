@@ -6,7 +6,8 @@ import pymupdf
 import pytest
 from microgen_missing_source_figure_candidates import (
     SourceFigureRecoveryError,missing_slide_figures,_label,
-    propose_missing_figures,check_graphics_with_source_candidates)
+    propose_missing_figures,check_graphics_with_source_candidates,
+    _diagnostic_destination)
 
 
 def synthetic_source(tmp_path):
@@ -36,13 +37,15 @@ def test_real_missing_reference_generates_unapproved_source_regions(tmp_path):
     assert not (base/"Figure 2.38.png").exists()
 
 
-def test_graphics_fail_still_preserves_candidates_without_auto_repair(tmp_path):
+def test_graphics_fail_still_preserves_candidates_without_auto_repair(tmp_path,monkeypatch):
     base=synthetic_source(tmp_path)
+    monkeypatch.setenv("LOCALAPPDATA",str(tmp_path.parent/"isolated_local_appdata"))
     with pytest.raises((ValueError,FileNotFoundError,QualityError)):
         check_graphics_with_source_candidates(base/"slides.tex")
-    assert (base/".microgen_missing_source_figures_review"/
-            "recovery_candidates_receipt.json").is_file()
+    dest=_diagnostic_destination(base)
+    assert (dest/"recovery_candidates_receipt.json").is_file()
     assert not (base/"Figure 2.38.png").exists()
+    assert not (base/".microgen_missing_source_figures_review").exists()
 
 
 @pytest.mark.parametrize("n,expected",[

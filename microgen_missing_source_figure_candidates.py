@@ -7,8 +7,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 import pymupdf
 from microgen_source_safe_orchestrator import atomic_json,digest
@@ -139,6 +141,16 @@ def propose_missing_figures(stage,output,*,pilot_recheck=None):
         raise
 
 
+def _diagnostic_destination(stage):
+    """OS-local, source-independent review location: never inside G: course files."""
+    s=Path(stage).resolve(strict=True)
+    root=Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir())
+    digest_key=hashlib.sha256(
+        (str(s)+digest(s/"source.pdf")+digest(s/"slides.tex")).encode("utf8")
+    ).hexdigest()[:24]
+    return root/"MicroGen_AI_Checkpoints"/"Missing_Figure_Candidates"/digest_key
+
+
 def diagnose_before_graphics_gate(stage):
     """Invoked only for an actual missing TeX figure; never makes a fake repair."""
     s=Path(stage)
@@ -148,11 +160,12 @@ def diagnose_before_graphics_gate(stage):
         return None
     if not missing or not (s/"source.pdf").is_file():
         return None
-    # New unique local review path. Existing artifact is never overwritten.
-    prefix=s/".microgen_missing_source_figures_review"
-    if prefix.exists():
-        return str(prefix)
+    # New unique OS-local review path OUTSIDE source folders, even protected G:.
     try:
+        prefix=_diagnostic_destination(s)
+        if prefix.exists():
+            return str(prefix)  # never overwrite or silently accept old evidence
+        prefix.parent.mkdir(parents=True,exist_ok=True)
         return propose_missing_figures(s,prefix)
     except (OSError,ValueError,SourceFigureRecoveryError):
         return None
