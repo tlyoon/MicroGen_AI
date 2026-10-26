@@ -796,7 +796,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     log_path = args.work_root / f"{subchapter}.log"
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
-    verified = quality.published_manifest_valid(dest)
+    bounded = getattr(args, "stop_after", None) is not None
+    verified = False if bounded else quality.published_manifest_valid(dest)
     published_mode_ready = not args.multipart
     if verified and args.multipart:
         final_receipt = json.loads(
@@ -808,7 +809,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         report.append({"subchapter": subchapter, "status": "success",
                        "resumed": True, "verified": True})
         return
-    if nonempty(dest / "slides.mp4") and not verified and not args.rebuild_unverified:
+    if (not bounded and nonempty(dest / "slides.mp4") and
+            not verified and not args.rebuild_unverified):
         raise RuntimeError(
             "An existing MP4 has no current verified completion receipt. "
             "Preserved unchanged. Review it or run with --rebuild-unverified "
@@ -833,6 +835,16 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     }
 
     for stage_name in STAGES:
+        if bounded and STAGES.index(stage_name) > STAGES.index(args.stop_after):
+            if not stage_valid(stage, args.stop_after, dest):
+                raise RuntimeError("Bounded campaign ended without verified target stage")
+            report.append({"subchapter": subchapter,
+                           "status": "bounded_stage_complete",
+                           "stop_after": args.stop_after,
+                           "checkpoint": str(checkpoint_path),
+                           "published": False})
+            print(f"[{subchapter}] BOUNDED_{args.stop_after.upper()}_COMPLETE; protected publication NOT run",flush=True)
+            return
         if args.figure_extraction_only and stage_name != "figure_extraction":
             if not source_page_extraction_valid(stage):
                 raise RuntimeError("Offline extraction incomplete; do not continue")
@@ -937,6 +949,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
     ap.add_argument("--figure-extraction-only", action="store_true",
                     help="Run only local PDF page/figure extraction, then STOP before any Gemini/TTS or publication. Resume later from this checkpoint.")
+    ap.add_argument("--stop-after", choices=STAGES[:-1],
+                    help="Stage-bounded isolated campaign: stop after this verified stage, NEVER publish to source-root.")
+    ap.add_argument("--authorize-provider-usage", action="store_true",
+                    help="Explicitly allow Gemini/Cloud TTS requests in a bounded --stop-after campaign.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
@@ -977,6 +993,11 @@ def main() -> int:
         raise SystemExit("--check-assignments requires --multi-pc")
     if args.figure_extraction_only and args.multi_pc:
         raise SystemExit("--figure-extraction-only is a single-host offline pilot; multi-PC is not supported")
+    if args.stop_after is not None:
+        if args.figure_extraction_only or args.multi_pc:
+            raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
+        if STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and not args.authorize_provider_usage:
+            raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
         raise SystemExit(
@@ -1050,8 +1071,8 @@ def main() -> int:
                 return 1
         write_report(report_path, report)
     print(f"[batch] report={report_path}", flush=True)
-    return 0 if all(x.get("status") in ("success", "offline_figure_extraction_complete")
-                    for x in report) else 2
+    acceptable = ("success", "offline_figure_extraction_complete", "bounded_stage_complete")
+    return 0 if all(x.get("status") in acceptable for x in report) else 2
 
 
 if __name__ == "__main__":

@@ -187,3 +187,28 @@ class GeminiKeyPoolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_opt_in_preferred_key_survives_previous_504_failures():
+    """Provider recovery may start with the known-good configured key."""
+    import os
+    from unittest.mock import patch
+    env={"GEMINI_API_KEY_1":"slow","GEMINI_API_KEY_2":"healthy",
+         "MICROGEN_GEMINI_PREFERRED_KEY_INDEX":"2"}
+    seen=[]
+    with patch.dict(os.environ,env,clear=True):
+        result=gemini_keys.call_with_key_failover(
+            lambda key: (seen.append(key),"completed")[1])
+    assert result=="completed"
+    assert seen==["healthy"]
+
+
+def test_invalid_preferred_key_does_not_call_provider():
+    import os
+    from unittest.mock import patch
+    env={"GEMINI_API_KEY_1":"one","GEMINI_API_KEY_2":"two",
+         "MICROGEN_GEMINI_PREFERRED_KEY_INDEX":"3"}
+    with patch.dict(os.environ,env,clear=True):
+        with unittest.TestCase().assertRaises(ValueError):
+            gemini_keys.call_with_key_failover(
+                lambda key: (_ for _ in ()).throw(RuntimeError("should not invoke")))
