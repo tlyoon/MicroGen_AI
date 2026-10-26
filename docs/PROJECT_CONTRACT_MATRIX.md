@@ -85,3 +85,7 @@ Original MicroGen_AI **HP exclusively** (Dell-115 reserved for MicroGen_AI_Web).
 | Full new slide generation and source-grounded narration | **PENDING** | Figure mapping and new Gemini slide/narration production not run |
 | Fresh TTS from new narration | **PENDING** | No billable TTS call; historical A/B corrected WAV trial remains unapproved |
 | Full first original PDF→published video | **NOT COMPLETE** | HP historical downstream video reproduced in #193, new upstream figure extraction now achieved; missing middle AI/TTS stages + scholarly review |
+
+### 26 Oct 2026 — HP genuine 23-slide fresh source, two under-ten-minute candidate videos
+- **Technical PASS:** original textbook 11-page PDF→source figure mapping/crop→23 Beamer pages→23 fresh TTS (one Chirp3 voice)→two nonpublished source-bound videos; durations 464.67s/445.88s; each MP4 decoded audio PCM bit-identical to current WAVs. 168 offline ASR literal text-highlight candidates; independent **23/23 positive+23/23 negative** actual encoded pixel QA.
+- **Academic/listening RELEASE BLOCKED:** semantic correctness, diagram/element correspondence, figure coverage, 69 pronunciation risk candidates, unresolved concept split review and voice listening still require evidence. Never conflate automated word pixel tests with narrated figure sync. No public distribution. Device rule: **HP only** for original MicroGen_AI.
