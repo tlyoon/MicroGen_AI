@@ -1,0 +1,102 @@
+import hashlib,json,pytest
+import microgen_tts_pronunciation_groundtruth as g
+
+def event():
+    return {"event_id":"event_1","cue_id":"cue1","expected_phrase":"c.","heard_phrase":"c dot",
+      "verdict":"CORRECT","start_seconds":1.0,"window_seconds":.2,
+      "pcm_sha256":"a"*64,"reviewer_id":"R1"}
+
+def manifest():
+    return {"schema_version":1,"video_sha256":"d"*64,"cues":[{"cue_id":"cue1",
+      "slide_number":1,"element_id":"math1","narration_id":"narration1",
+      "start_seconds":1.0,"end_seconds":2.0,"box":[0,0,2,2],
+      "slide_image_sha256":"b"*64}]}
+
+def test_pcm_witness_fingerprint_guard(tmp_path,monkeypatch):
+    p=tmp_path/"clip.mp4";p.write_bytes(b"media")
+    sha=hashlib.sha256(p.read_bytes()).hexdigest()
+    monkeypatch.setattr(g,"extract_pcm_window",lambda *args,**kwargs:b"\0"*6400)
+    w=g.witness_pcm(p,sha,1.0,.2,duration_seconds=4)
+    assert w["sample_count"]==3200 and not w["pronunciation_verified"]
+    p.write_bytes(b"mutated")
+    with pytest.raises(g.AnnotationError):g.witness_pcm(p,sha,1.0,.2,duration_seconds=4)
+
+def test_review_event_rejects_unbounded_and_untrusted_fields():
+    e=event()
+    assert not g.validate_event(e)["independent_acoustic_truth_verified"]
+    for k,v in [("window_seconds",12),("start_seconds",float("nan")),
+      ("verdict","APPROVED"),("expected_phrase",""),("reviewer_id","x!*"),
+      ("pcm_sha256","wrong"),("heard_phrase","circa\nx")]:
+        bad={**e,k:v}
+        with pytest.raises(g.AnnotationError):g.validate_event(bad)
+    with pytest.raises(g.AnnotationError):g.validate_event({**e,"reviewer_authenticated":True})
+
+def test_review_clip_refuses_forged_hash(tmp_path,monkeypatch):
+    p=tmp_path/"test.mp4";p.write_bytes(b"movie")
+    vid=hashlib.sha256(p.read_bytes()).hexdigest()
+    e=event()
+    monkeypatch.setattr(g,"witness_pcm",lambda *args,**kw:{"pcm_sha256":"b"*64})
+    with pytest.raises(g.AnnotationError):g.verify_label_clip(p,vid,e,duration_seconds=5)
+    monkeypatch.setattr(g,"witness_pcm",lambda *args,**kw:{"pcm_sha256":e["pcm_sha256"]})
+    assert not g.verify_label_clip(p,vid,e,duration_seconds=5)["phonetic_label_verified"]
+
+def test_packet_requires_same_clip_and_unique_observers():
+    e=event();copy={**e,"reviewer_id":"R2","verdict":"DEFECT","heard_phrase":"circa"}
+    packet={"schema_version":1,"video_sha256":"d"*64,"observations":[e,copy]}
+    assert g.validate_review_packet(packet)["event_count"]==1
+    with pytest.raises(g.AnnotationError):
+        g.validate_review_packet({**packet,"observations":[e,e]})
+    with pytest.raises(g.AnnotationError):
+        g.validate_review_packet({**packet,"observations":[e,{**copy,"start_seconds":1.1}]})
+
+def test_two_claimed_reviewers_are_not_authentication():
+    e=event()
+    packet={"schema_version":1,"video_sha256":"d"*64,
+       "observations":[e,{**e,"reviewer_id":"R2"}]}
+    result=g.group_claimed_reviews(packet)
+    assert result["event_1"]["minimum_claims_met"]
+    assert result["event_1"]["identity_independence_authenticated"] is False
+    assert not g.group_claimed_reviews({**packet,"observations":[e]})["event_1"]["minimum_claims_met"]
+
+def test_consensus_reports_disagreement_and_defects_without_signoff():
+    e=event()
+    packet={"schema_version":1,"video_sha256":"d"*64,"observations":[e,{**e,"reviewer_id":"R2"}]}
+    s=g.summarize_review_agreement(packet)["event_1"]
+    assert s["status"]=="REVIEWERS_REPORT_CORRECT_UNVERIFIED" and not s["phonetic_truth_verified"]
+    packet["observations"][1]={**e,"reviewer_id":"R2","verdict":"DEFECT","heard_phrase":"circa"}
+    assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWER_DISAGREEMENT"
+    packet["observations"][0]={**e,"verdict":"DEFECT","heard_phrase":"circa"}
+    assert g.summarize_review_agreement(packet)["event_1"]["status"]=="REVIEWERS_REPORT_DEFECT"
+
+def test_review_observation_must_fit_cue():
+    m=manifest()
+    e=event()
+    p={"schema_version":1,"video_sha256":m["video_sha256"],"observations":[e]}
+    assert not g.verify_review_cue_bounds(p,m,duration_seconds=5)["real_spoken_words_aligned_to_element"]
+    e["start_seconds"]=1.9
+    with pytest.raises(g.AnnotationError):g.verify_review_cue_bounds(p,m,duration_seconds=5)
+    e["start_seconds"]=1.
+    p["video_sha256"]="e"*64
+    with pytest.raises(g.AnnotationError):g.verify_review_cue_bounds(p,m,duration_seconds=5)
+
+def test_readonly_packet_audit_refuses_claims_as_certification(monkeypatch):
+    m=manifest();e=event()
+    packet={"schema_version":1,"video_sha256":m["video_sha256"],
+            "observations":[e,{**e,"reviewer_id":"R2"}]}
+    monkeypatch.setattr(g,"inspect_real_av_video",lambda path:{"video_sha256":m["video_sha256"],"duration_seconds":5})
+    monkeypatch.setattr(g,"verify_label_clip",lambda *a,**kw:{"waveform_source_verified":True})
+    r=g.audit_pronunciation_packet(packet,m,"example.mp4")
+    assert r["source_bound_pcm_clip_count"]==1
+    assert r["status"]=="UNAUTHENTICATED_REVIEWER_CORRECTNESS_CLAIMS"
+    assert not r["ready_for_publication"]
+    packet["observations"][1]={**e,"reviewer_id":"R2","verdict":"DEFECT"}
+    assert g.audit_pronunciation_packet(packet,m,"example.mp4")["status"]=="ANNOTATIONS_INCOMPLETE_OR_DISPUTED"
+
+def test_review_cli_safely_abstains_without_external_labels(monkeypatch,tmp_path,capsys):
+    p=tmp_path/"test.mp4";p.write_bytes(b"mp4")
+    monkeypatch.setattr(g,"inspect_real_av_video",lambda path:{"duration_seconds":5})
+    assert g.main(["--video",str(p)])==2
+    r=json.loads(capsys.readouterr().out)
+    assert r["status"]=="REVIEW_PACKET_ABSENT" and not r["ready_for_publication"]
+    assert g.main(["--video",str(p),"--review-packet",str(tmp_path/"missing.json")])==2
+    assert json.loads(capsys.readouterr().out)["status"]=="REVIEW_AUDIT_BLOCKED"

@@ -1,0 +1,1 @@
+PR #85 — Read-only draft-stack integration audit: verify clean isolated checkout, exact ancestor relationship, bounded first-parent linear commits, and no merge commits. Does not merge, write or publish. Not a substitute for GitHub PR-base live checks or CI. Tested with a genuine temporary Git repository (including dirty/reversed/budget adversaries).

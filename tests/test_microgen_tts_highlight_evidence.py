@@ -1,0 +1,125 @@
+import hashlib,io,json
+import pytest
+import microgen_tts_highlight_evidence as h
+
+def test_missing_png_iend_is_cross_platform_blocker():
+    valid=png_of((0,0,0))
+    with pytest.raises(h.HighlightEvidenceError):
+        h.measure_frame_change(valid,valid[:-12],[0,0,2,2])
+
+def example_manifest():
+    return {"schema_version": 1, "video_sha256": "a"*64, "cues": [
+        {"cue_id":"cue1","slide_number":1,"element_id":"eq1","narration_id":"sentence1",
+         "start_seconds":1.0,"end_seconds":2.0,"box":[0,0,2,2],"slide_image_sha256":"b"*64}]}
+
+def test_manifest_contract_and_false_publication_flag():
+    m = example_manifest()
+    assert h.validate_manifest(m)["cue_count"] == 1
+    assert h.validate_manifest(m)["ready_for_publication"] is False
+    for key, invalid in [("video_sha256","abc"),("schema_version",True),("cues",[])]:
+        bad = dict(m, **{key:invalid})
+        with pytest.raises(h.HighlightEvidenceError):
+            h.validate_manifest(bad)
+
+def test_manifest_duplicate_and_bad_geometry():
+    m=example_manifest();m["cues"].append(dict(m["cues"][0]))
+    with pytest.raises(h.HighlightEvidenceError): h.validate_manifest(m)
+    m["cues"]=m["cues"][:1];m["cues"][0]["box"]=[0,0,0,2]
+    with pytest.raises(h.HighlightEvidenceError):h.validate_manifest(m)
+
+def test_video_timeline_bounds_overlap_and_ordering():
+    m=example_manifest()
+    assert h.verify_cue_timing(m,599.9)["temporal_contract_pass"]
+    for sec in (600, 623, float("nan"), 0):
+        with pytest.raises(h.HighlightEvidenceError):h.verify_cue_timing(m,sec)
+    m["cues"].append(dict(m["cues"][0], cue_id="cue2", start_seconds=1.5, end_seconds=2.5))
+    with pytest.raises(h.HighlightEvidenceError):h.verify_cue_timing(m,599)
+    m["cues"][1]["start_seconds"]=2.0
+    assert h.verify_cue_timing(m,599)["temporal_contract_pass"]
+
+def test_claimed_narration_mapping_is_not_acoustic_proof():
+    m=example_manifest()
+    seg=[{"narration_id":"sentence1","start_seconds":0.8,"end_seconds":2.2}]
+    assert h.verify_narration_claims(m,seg)["actual_spoken_words_or_onsets_verified"] is False
+    for altered in ([dict(seg[0],narration_id="other")],
+                    [dict(seg[0],start_seconds=1.5)],
+                    seg+[dict(seg[0], narration_id="unused",start_seconds=2.2,end_seconds=2.5)]):
+        with pytest.raises(h.HighlightEvidenceError):h.verify_narration_claims(m,altered)
+
+def test_source_sha256_and_missing_file_fail_closed(tmp_path):
+    p=tmp_path/"slide.png";p.write_bytes(b"slide bytes")
+    m=example_manifest(); fp=hashlib.sha256(p.read_bytes()).hexdigest()
+    m["cues"][0]["slide_image_sha256"]=fp
+    assert h.verify_slide_sources(m,{fp:str(p)})["slide_sources_sha256_verified"]
+    p.write_bytes(b"changed")
+    with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{fp:str(p)})
+    with pytest.raises(h.HighlightEvidenceError):h.verify_slide_sources(m,{})
+
+def test_ffmpeg_capture_is_read_only_and_bounded(tmp_path,monkeypatch):
+    p=tmp_path/"video.mp4";p.write_bytes(b"fixture")
+    class Result: returncode=0;stdout=b"PNGDATA";stderr=b""
+    calls=[]
+    def mocked(cmd,**kwargs):calls.append((cmd,kwargs));return Result()
+    monkeypatch.setattr(h.subprocess,"run",mocked)
+    assert h.capture_frame(p,1.25)==b"PNGDATA"
+    assert "-nostdin" in calls[0][0] and calls[0][1]["timeout"]==25
+    for time in (-1,600,float("inf")):
+        with pytest.raises(h.HighlightEvidenceError):h.capture_frame(p,time)
+
+def png_of(color,mark=False):
+    from PIL import Image
+    buf=io.BytesIO();im=Image.new("RGB",(4,4),color)
+    if mark:
+        for y in range(2):
+            for x in range(2):im.putpixel((x,y),(240,240,240))
+    im.save(buf,format="PNG");return buf.getvalue()
+
+def test_target_pixel_delta_and_full_screen_rejection():
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    result=h.measure_frame_change(a,b,[0,0,2,2])
+    assert result["target_mean_rgb_delta"]==240
+    assert result["outside_mean_rgb_delta"]==0
+    with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,b,[0,0,4,4])
+    with pytest.raises(h.HighlightEvidenceError):h.measure_frame_change(a,png_of((255,0,0))[:-20],[0,0,2,2])
+
+def test_visual_highlight_rejects_whole_slide_transition():
+    a=png_of((0,0,0)); localized=png_of((0,0,0),True);other=png_of((200,200,200))
+    assert h.judge_localized_highlight(h.measure_frame_change(a,localized,[0,0,2,2]))["localized_visual_change_pass"]
+    assert not h.judge_localized_highlight(h.measure_frame_change(a,other,[0,0,2,2]))["localized_visual_change_pass"]
+
+def test_video_source_hash_binding_and_visual_witness(tmp_path,monkeypatch):
+    p=tmp_path/"lecture.mp4";p.write_bytes(b"mp4 bytes")
+    m=example_manifest();m["video_sha256"]=hashlib.sha256(p.read_bytes()).hexdigest()
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    sampled=[]
+    def capture(path,t,**kwargs):sampled.append(t);return a if len(sampled)==1 else b
+    monkeypatch.setattr(h,"capture_frame",capture)
+    r=h.verify_cue_visual_witness(m,m["cues"][0],p,599.9)
+    assert r["localized_visual_change_pass"] and sampled==pytest.approx([0.92,1.08])
+    assert r["actual_narration_sync_certified"] is False
+    p.write_bytes(b"tampered")
+    with pytest.raises(h.HighlightEvidenceError):h.verify_cue_visual_witness(m,m["cues"][0],p,599.9)
+
+def test_combined_audit_never_approves_publication(tmp_path,monkeypatch):
+    p=tmp_path/"lecture.mp4";p.write_bytes(b"vid")
+    slide=tmp_path/"slide.png";slide.write_bytes(b"slide")
+    m=example_manifest()
+    m["video_sha256"]=hashlib.sha256(p.read_bytes()).hexdigest()
+    fp=hashlib.sha256(slide.read_bytes()).hexdigest();m["cues"][0]["slide_image_sha256"]=fp
+    monkeypatch.setattr("microgen_quality.check_video", lambda p:{"seconds":3.0})
+    a=png_of((0,0,0));b=png_of((0,0,0),True)
+    monkeypatch.setattr(h,"capture_frame",lambda p,t:a if t<1 else b)
+    seg=[{"narration_id":"sentence1","start_seconds":0.8,"end_seconds":2.1}]
+    result=h.audit_highlight_evidence(m,seg,{fp:str(slide)},p)
+    assert result["all_cues_visual_evidence_pass"] is True
+    assert result["ready_for_publication"] is False
+    assert result["actual_narration_element_time_sync_certified"] is False
+
+def test_readonly_cli_errors_fail_closed(tmp_path,capsys):
+    absent=tmp_path/"absent.json"
+    exit_code=h.main(["--manifest",str(absent),"--narration-segments",str(absent),
+                      "--slide-source-index",str(absent),"--video",str(tmp_path/"absent.mp4")])
+    assert exit_code == 2
+    output=json.loads(capsys.readouterr().out)
+    assert output["status"]=="HIGHLIGHT_AUDIT_BLOCKED"
+    assert output["ready_for_publication"] is False

@@ -1,0 +1,5 @@
+# PR #29 Reviewed scientific pronunciation lexicon
+
+`docs/tts_pronunciation_lexicon_v1.json` is a versioned, conservative math speech rulebook with positive/negative examples, source-context matching, and explicit review-only terms. The initial verified rules cover Y/X coordinate compounds and mathematical sentence-final `c.` known from real Thomas Calculus 2.5 lecture defects. The JSON is **not** a blanket find/replace dictionary. The validator fails if a rule broadens into an ordinary English example, or if generated speech stops honoring the approved transformation.
+
+`microgen_tts_lexicon.verify_spoken_rules(raw,spoken)` returns a review list; the TTS pipeline checks all slides before synthesis. Function arguments, trig abbreviations, subscripts, operator notation and context-ambiguous Greek glyphs remain review-only. Expanding these into new automatic rules requires verified real-world evidence and regression tests, not semantic guessing. The original mathematical narration/figures are untouched.

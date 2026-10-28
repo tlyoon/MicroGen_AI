@@ -237,10 +237,67 @@ def nonempty(path: Path) -> bool:
     return path.is_file() and path.stat().st_size > 0
 
 
+def source_page_extraction_valid(stage: Path) -> bool:
+    """Verify all source pages, not merely a partially created pages/ folder."""
+    source = stage / "source.pdf"
+    pages = stage / "pages"
+    if (source.is_symlink() or not source.is_file() or
+            pages.is_symlink() or not pages.is_dir()):
+        return False
+    try:
+        import hashlib
+        import pymupdf
+        marker = stage / "figure_extraction_receipt.json"
+        if marker.is_symlink() or not marker.is_file():
+            return False
+        evidence = json.loads(marker.read_text(encoding="utf8"))
+        with pymupdf.open(source) as pdf:
+            count = len(pdf)
+        if (not 1 <= count <= 1000 or
+                evidence.get("status") != "OFFLINE_SOURCE_FIGURE_EXTRACTION_COMPLETE" or
+                evidence.get("page_count") != count or
+                evidence.get("publication_allowed") is not False or
+                evidence.get("gemini_invoked") is not False or
+                evidence.get("tts_invoked") is not False or
+                len(evidence.get("pages", [])) != count):
+            return False
+
+        def sha(file):
+            return hashlib.sha256(file.read_bytes()).hexdigest()
+
+        if sha(source) != evidence.get("source_sha256"):
+            return False
+        for index, record in enumerate(evidence["pages"], 1):
+            folder = pages / f"page_{index}"
+            image = folder / f"page_{index}.png"
+            single = folder / f"page_{index}.pdf"
+            if (record.get("page") != index or folder.is_symlink() or
+                    not folder.is_dir() or
+                    any(f.is_symlink() or not f.is_file() or f.stat().st_size == 0
+                        for f in (image, single)) or
+                    record.get("pdf_sha256") != sha(single) or
+                    record.get("png_sha256") != sha(image)):
+                return False
+            with pymupdf.open(single) as one_page:
+                if len(one_page) != 1:
+                    return False
+            found = sorted(folder.glob("fig_*.png"))
+            listed = record.get("figures")
+            if not isinstance(listed, list) or len(found) != len(listed):
+                return False
+            if any(f.is_symlink() or not f.is_file() or
+                   row.get("name") != f.name or row.get("sha256") != sha(f)
+                   for f, row in zip(found, listed)):
+                return False
+        return True
+    except (OSError, ValueError, RuntimeError, ImportError, TypeError, KeyError,
+            json.JSONDecodeError):
+        return False
+
+
 def stage_valid(stage: Path, name: str, dest: Path) -> bool:
     if name == "figure_extraction":
-        pages = stage / "pages"
-        return pages.is_dir() and any(pages.glob("page_*"))
+        return source_page_extraction_valid(stage)
     if name in {"figure_mapping", "figure_merge"}:
         # Even zero-figure pages receive a final structured provenance receipt.
         try:
@@ -617,12 +674,20 @@ def cleanup_intermediates(stage: Path) -> None:
         shutil.rmtree(stage / dirname, ignore_errors=True)
 
 
-def preflight(main_py: str, docling_py: str) -> None:
+def preflight(main_py: str, docling_py: str, *, figure_extraction_only: bool = False) -> None:
     print(f"[batch] main Python: {main_py}", flush=True)
     print(f"[batch] Docling Python: {docling_py}", flush=True)
-    for exe in ("pdflatex",):
-        if not shutil.which(exe):
-            raise RuntimeError(f"Required executable not found on PATH: {exe}")
+    if figure_extraction_only:
+        probe = subprocess.run([main_py, "-c",
+                                "import pymupdf; print('Offline PDF reader OK')"],
+                               capture_output=True, text=True, timeout=60)
+        if probe.returncode:
+            raise RuntimeError("Missing local PDF reader: " + probe.stderr[-300:])
+        print(probe.stdout.strip(), flush=True)
+    else:
+        for exe in ("pdflatex",):
+            if not shutil.which(exe):
+                raise RuntimeError(f"Required executable not found on PATH: {exe}")
     # Validate the primary runtime before hours of work are queued.
     code = (
         "import importlib.metadata as m; "
@@ -631,10 +696,11 @@ def preflight(main_py: str, docling_py: str) -> None:
         "print('google-genai='+m.version('google-genai')); "
         "print('ThinkingConfig='+','.join(getattr(types.ThinkingConfig,'model_fields',{}).keys()))"
     )
-    proc = subprocess.run([main_py, "-c", code], capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Primary Python environment failed preflight: {proc.stderr}")
-    print(proc.stdout.strip(), flush=True)
+    if not figure_extraction_only:
+        proc = subprocess.run([main_py, "-c", code], capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"Primary Python environment failed preflight: {proc.stderr}")
+        print(proc.stdout.strip(), flush=True)
 
     docling_code = "import docling, pdf2image, PIL; print('Docling environment OK')"
     proc2 = subprocess.run([docling_py, "-c", docling_code], capture_output=True, text=True)
@@ -730,7 +796,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     log_path = args.work_root / f"{subchapter}.log"
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
-    verified = quality.published_manifest_valid(dest)
+    bounded = getattr(args, "stop_after", None) is not None
+    verified = False if bounded else quality.published_manifest_valid(dest)
     published_mode_ready = not args.multipart
     if verified and args.multipart:
         final_receipt = json.loads(
@@ -742,7 +809,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         report.append({"subchapter": subchapter, "status": "success",
                        "resumed": True, "verified": True})
         return
-    if nonempty(dest / "slides.mp4") and not verified and not args.rebuild_unverified:
+    if (not bounded and nonempty(dest / "slides.mp4") and
+            not verified and not args.rebuild_unverified):
         raise RuntimeError(
             "An existing MP4 has no current verified completion receipt. "
             "Preserved unchanged. Review it or run with --rebuild-unverified "
@@ -767,6 +835,27 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     }
 
     for stage_name in STAGES:
+        if bounded and STAGES.index(stage_name) > STAGES.index(args.stop_after):
+            if not stage_valid(stage, args.stop_after, dest):
+                raise RuntimeError("Bounded campaign ended without verified target stage")
+            report.append({"subchapter": subchapter,
+                           "status": "bounded_stage_complete",
+                           "stop_after": args.stop_after,
+                           "checkpoint": str(checkpoint_path),
+                           "published": False})
+            print(f"[{subchapter}] BOUNDED_{args.stop_after.upper()}_COMPLETE; protected publication NOT run",flush=True)
+            return
+        if args.figure_extraction_only and stage_name != "figure_extraction":
+            if not source_page_extraction_valid(stage):
+                raise RuntimeError("Offline extraction incomplete; do not continue")
+            report.append({"subchapter": subchapter,
+                           "status": "offline_figure_extraction_complete",
+                           "source_pages_complete": True,
+                           "checkpoint": str(checkpoint_path),
+                           "gemini_or_tts_invoked": False,
+                           "published": False})
+            print(f"[{subchapter}] OFFLINE_FIGURE_EXTRACTION_COMPLETE; paid stages NOT run", flush=True)
+            return
         if lease is not None:
             lease.assert_held()
         if args.multipart and stage_name == "narration":
@@ -858,6 +947,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("MICROGEN_SOURCE_WAIT_SECONDS", "600")),
     )
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
+    ap.add_argument("--figure-extraction-only", action="store_true",
+                    help="Run only local PDF page/figure extraction, then STOP before any Gemini/TTS or publication. Resume later from this checkpoint.")
+    ap.add_argument("--stop-after", choices=STAGES[:-1],
+                    help="Stage-bounded isolated campaign: stop after this verified stage, NEVER publish to source-root.")
+    ap.add_argument("--authorize-provider-usage", action="store_true",
+                    help="Explicitly allow Gemini/Cloud TTS requests in a bounded --stop-after campaign.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
@@ -896,6 +991,13 @@ def main() -> int:
         raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
     if args.check_assignments and not args.multi_pc:
         raise SystemExit("--check-assignments requires --multi-pc")
+    if args.figure_extraction_only and args.multi_pc:
+        raise SystemExit("--figure-extraction-only is a single-host offline pilot; multi-PC is not supported")
+    if args.stop_after is not None:
+        if args.figure_extraction_only or args.multi_pc:
+            raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
+        if STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and not args.authorize_provider_usage:
+            raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
         raise SystemExit(
@@ -945,7 +1047,8 @@ def main() -> int:
         os.environ.pop("MICROGEN_MULTIPART", None)
     args.docling_py = resolve_docling_python(args.docling_py,
                                                    main_python=args.main_py)
-    preflight(args.main_py, args.docling_py)
+    preflight(args.main_py, args.docling_py,
+              figure_extraction_only=args.figure_extraction_only)
     report: list[dict] = []
     report_path = args.work_root / "batch_report.json"
     print(f"[batch] targets={targets}", flush=True)
@@ -968,7 +1071,8 @@ def main() -> int:
                 return 1
         write_report(report_path, report)
     print(f"[batch] report={report_path}", flush=True)
-    return 0 if all(x.get("status") == "success" for x in report) else 2
+    acceptable = ("success", "offline_figure_extraction_complete", "bounded_stage_complete")
+    return 0 if all(x.get("status") in acceptable for x in report) else 2
 
 
 if __name__ == "__main__":
