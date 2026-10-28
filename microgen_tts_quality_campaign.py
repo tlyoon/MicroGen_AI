@@ -32,7 +32,9 @@ def _store(path:Path,payload:dict):
         stream.write(json.dumps(payload,indent=2,ensure_ascii=False)+"\n")
 
 def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
-                    acoustic_report:dict|None=None)->dict:
+                    acoustic_report:dict|None=None,
+                    multipart_receipt:Path|None=None,
+                    independent_av_receipt:Path|None=None)->dict:
     stage=Path(stage).resolve()
     new_output=Path(new_output).resolve()
     if new_output.exists() or new_output.is_symlink():
@@ -53,7 +55,9 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
     for i in range(1,len(slides)+1):
         metrics=analyze_pcm(stage/f"slide{i}.wav")
         pcm.append({"slide":i,"wav_sha256":wav_hashes[i-1],**metrics})
-    release=audit_stage(stage,acoustic_report=acoustic_report)
+    release=audit_stage(stage,acoustic_report=acoustic_report,
+                        multipart_receipt=multipart_receipt,
+                        independent_av_receipt=independent_av_receipt)
     if _snap(stage,len(slides))!=snapshot:
         raise QACampaignError("Source SHA changed during preparation")
     # Only after all read-only validations succeed do we create the new folder.
@@ -88,6 +92,7 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
         "all_slide_review_count":queue["slide_count"],
         "structurally_bad_slides":[r["slide"] for r in pcm if r["blocking_defects"]],
         "video_seconds":release["video_duration_seconds"],
+        "multipart_delivery_evidence":release["multipart_delivery_evidence"],
         "qa_policy":release["policy"],
         "release_blockers":release["blockers"],
         "release_ready":release["ready_for_separate_promotion"],
@@ -120,10 +125,16 @@ def main(argv=None)->int:
     p.add_argument("new_output_dir",type=Path)
     p.add_argument("--acoustic-report",type=Path,
                    help="Existing independent acoustic evidence JSON; read only")
+    p.add_argument("--multipart-receipt",type=Path,
+                   help="Existing source-bound multipart delivery receipt")
+    p.add_argument("--multipart-independent-av",type=Path,
+                   help="Existing independently decoded MP4 audio/pixel receipt")
     a=p.parse_args(argv)
     acoustic=(json.loads(a.acoustic_report.read_text(encoding="utf8"))
               if a.acoustic_report else None)
-    result=run_qa_campaign(a.stage,a.new_output_dir,acoustic_report=acoustic)
+    result=run_qa_campaign(a.stage,a.new_output_dir,acoustic_report=acoustic,
+        multipart_receipt=a.multipart_receipt,
+        independent_av_receipt=a.multipart_independent_av)
     print(json.dumps({"slides":result["slide_count"],
                       "risk_flags":result["risk_count"],
                       "listening_clips":result["review_clips"],

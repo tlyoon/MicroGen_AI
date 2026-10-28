@@ -60,6 +60,7 @@ def audit_stage(
     acoustic_report:dict|None=None, listening_receipt:dict|None=None,
     academic_receipt:dict|None=None, figure_receipt:dict|None=None,
     highlight_receipt:dict|None=None, reviewer_trust:dict|None=None,
+    multipart_receipt:Path|None=None, independent_av_receipt:Path|None=None,
     qa_policy:str=AUTONOMOUS,
 ) -> dict:
     """No writes; returns fail-closed check matrix and isolated follow-up."""
@@ -112,6 +113,16 @@ def audit_stage(
             video_ok=0<video_seconds<600
         except (OSError,ValueError,RuntimeError):
             video_ok=False
+    multipart_evidence=None
+    if multipart_receipt is not None or independent_av_receipt is not None:
+        if multipart_receipt is None or independent_av_receipt is None:
+            raise ValueError("Both independent multipart receipts required")
+        if video.is_file():
+            raise ValueError("Ambiguous single and multipart delivery evidence")
+        from microgen_multipart_delivery_evidence import verify_multipart_delivery
+        multipart_evidence=verify_multipart_delivery(
+            folder,multipart_receipt,independent_av_receipt)
+        video_ok=multipart_evidence["technical_multipart_av_pass"]
     academic_ok=_approval(academic_receipt,video_hash,"academic",reviewer_trust) if video_ok else False
     figures_ok=_approval(figure_receipt,video_hash,"figures",reviewer_trust) if video_ok else False
     highlights_ok=_approval(highlight_receipt,video_hash,"highlights",reviewer_trust) if video_ok else False
@@ -140,6 +151,7 @@ def audit_stage(
         "slide_count":len(slides),
         "video_sha256":video_hash or None,
         "video_duration_seconds":video_seconds,
+        "multipart_delivery_evidence":multipart_evidence,
         "total_wav_seconds":round(sum(seconds),4),
         "wav_sha256":audio_hash,
         "source_risks":risks["risk_count"],
