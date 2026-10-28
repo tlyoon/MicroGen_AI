@@ -28,14 +28,17 @@ class AutonomousCampaignError(ValueError):
 
 def preflight_before_paid_recognition(stage:Path,new_output:Path,*,
                                      max_audio_seconds:float=1200.,
-                                     max_requests:int=120)->dict:
+                                     max_requests:int=120,
+                                     multipart_receipt:Path|None=None,
+                                     independent_av_receipt:Path|None=None)->dict:
     """Require every non-ASR technical gate BEFORE transcribing any WAV."""
     stage=Path(stage).resolve(strict=True)
     new_output=Path(new_output).resolve(strict=False)
     if (new_output==stage or stage in new_output.parents or
         new_output in stage.parents or new_output.exists() or new_output.is_symlink()):
         raise AutonomousCampaignError("Fresh external output folder required")
-    report=audit_stage(stage)
+    report=audit_stage(stage, multipart_receipt=multipart_receipt,
+                       independent_av_receipt=independent_av_receipt)
     blockers=[name for name in report["technical_blockers"]
               if name!="independent_acoustic_screen"]
     if blockers:
@@ -55,6 +58,56 @@ def preflight_before_paid_recognition(stage:Path,new_output:Path,*,
     }
 
 
+def continue_media_without_paid_recognition(
+    stage:Path, new_output:Path, *,
+    multipart_receipt:Path|None=None,
+    independent_av_receipt:Path|None=None,
+)->dict:
+    """Perform a real, read-only source/WAV/video QA continuation without ASR.
+
+    The workflow can resume editing/rendering with advisories, but this is
+    NEVER independent phonetic evidence or a publication approval.
+    """
+    source=Path(stage).resolve(strict=True)
+    dest=Path(new_output).resolve(strict=False)
+    if (dest.exists() or dest.is_symlink() or dest==source or
+            source in dest.parents or dest in source.parents):
+        raise AutonomousCampaignError("Fresh independent QA destination required")
+    if (multipart_receipt is None) != (independent_av_receipt is None):
+        raise AutonomousCampaignError("Both independent multipart receipts required")
+    preview=audit_stage(source,multipart_receipt=multipart_receipt,
+                        independent_av_receipt=independent_av_receipt)
+    decision=preview["audio_generation_progression"]
+    if not decision["can_continue_media_generation"]:
+        raise AutonomousCampaignError("Critical WAV, source or voice defect; no continued media generation")
+    result=run_qa_campaign(
+        source,dest,multipart_receipt=multipart_receipt,
+        independent_av_receipt=independent_av_receipt)
+    progression=result["audio_generation_progression"]
+    if not progression["can_continue_media_generation"]:
+        raise AutonomousCampaignError("Source changed during QA; reject progression")
+    return {
+        "schema_version":1, "execution_mode":"OFFLINE_NO_ASR_NO_TTS_BILLING",
+        "audio_generation_progression":progression,
+        "slide_count":result["slide_count"],
+        "source_risks":result["risk_count"],
+        "listening_clips":result["review_clips"],
+        "video_technical_av":(
+            result["multipart_delivery_evidence"]["technical_multipart_av_pass"]
+            if result["multipart_delivery_evidence"] else
+            preview["checks"]["video_duration_and_av_integrity"]),
+        "strict_release_blockers":result["release_blockers"],
+        "qa_directory":str(dest),
+        "independent_phonetics_verified":False,
+        "academic_content_verified":False,
+        "element_level_highlights_verified":False,
+        "ready_for_separate_promotion":False,
+        "publication_allowed":False, "published":False,
+        "original_assets_modified":False,
+        "next_action":"CONTINUE_MEDIA_WORK_WITH_RECORDED_ADVISORIES",
+    }
+
+
 def run_autonomous_campaign(
     stage:Path, new_output:Path,
     primary:Callable[[Path],str],
@@ -66,6 +119,8 @@ def run_autonomous_campaign(
     phonetic_reference:tuple[dict,Path]|None=None,
     phonetic_judges:tuple[Callable,Callable]|None=None,
     require_calibrated_phoneme:bool=False,
+    multipart_receipt:Path|None=None,
+    independent_av_receipt:Path|None=None,
 )->dict:
     """Complete independent acoustic screen and immutable review packet.
 
@@ -79,7 +134,8 @@ def run_autonomous_campaign(
         raise AutonomousCampaignError("Fresh external output folder required")
     preflight=preflight_before_paid_recognition(
         stage,new_output,max_audio_seconds=max_audio_seconds,
-        max_requests=max_requests)
+        max_requests=max_requests,multipart_receipt=multipart_receipt,
+        independent_av_receipt=independent_av_receipt)
     if require_calibration and calibration_bundle is None:
         raise AutonomousCampaignError("Strict model calibration required before paid recognition")
     calibration_status="MODEL_CALIBRATION_NOT_PROVIDED"
@@ -111,7 +167,9 @@ def run_autonomous_campaign(
     acoustic=audit_with_recognizer(
         stage,source,primary,normalize_scientific_speech,
         independent_recognizer=secondary,recognition_models=models)
-    campaign=run_qa_campaign(stage,new_output,acoustic_report=acoustic)
+    campaign=run_qa_campaign(stage,new_output,acoustic_report=acoustic,
+        multipart_receipt=multipart_receipt,
+        independent_av_receipt=independent_av_receipt)
     if phonetic_report is not None:
         with (new_output/"calibrated_phonetic_evidence.json").open("x",encoding="utf8") as output:
             output.write(json.dumps(phonetic_report,ensure_ascii=False,indent=2)+"\n")
@@ -157,6 +215,12 @@ def main(argv=None):
     parser.add_argument("--phoneme-audio-dir",type=Path)
     parser.add_argument("--offline",action="store_true",
                         help="No network; produces blocked UNKNOWN diagnostics, not fake passes")
+    parser.add_argument("--continue-without-asr",action="store_true",
+                        help="Resume media workflow without recognition, billing or release approval")
+    parser.add_argument("--multipart-receipt",type=Path,
+                        help="Original external multipart AV delivery receipt")
+    parser.add_argument("--multipart-independent-av",type=Path,
+                        help="External independently decoded multipart AV receipt")
     args=parser.parse_args(argv)
     if args.primary_model==args.secondary_model:
         parser.error("Two distinct independent recognizers required")
@@ -165,9 +229,21 @@ def main(argv=None):
     if (output==stage or stage in output.parents or output in stage.parents
         or output.exists() or output.is_symlink()):
         parser.error("Output must be a new directory outside the lecture source")
+    if args.continue_without_asr:
+        if (args.require_calibration or args.require_calibrated_phoneme or
+                args.calibration_manifest or args.calibration_report or
+                args.calibration_audio or args.phoneme_manifest or args.phoneme_audio_dir):
+            parser.error("No recognizer/calibration option can certify offline continuation")
+        result=continue_media_without_paid_recognition(
+            stage,output,multipart_receipt=args.multipart_receipt,
+            independent_av_receipt=args.multipart_independent_av)
+        print(json.dumps(result,indent=2,ensure_ascii=False))
+        return 0
     preflight_before_paid_recognition(stage,output,
         max_audio_seconds=args.max_input_audio_seconds,
-        max_requests=args.max_recognition_requests)
+        max_requests=args.max_recognition_requests,
+        multipart_receipt=args.multipart_receipt,
+        independent_av_receipt=args.multipart_independent_av)
     calibration_args=(args.calibration_manifest,args.calibration_report,args.calibration_audio)
     if any(x is not None for x in calibration_args) and not all(x is not None for x in calibration_args):
         parser.error("Calibration manifest, report, and audio folder must be supplied together")
@@ -210,7 +286,9 @@ def main(argv=None):
               require_calibration=args.require_calibration,
               phonetic_reference=phoneme_reference,
               phonetic_judges=phonetic_judges,
-              require_calibrated_phoneme=args.require_calibrated_phoneme)
+              require_calibrated_phoneme=args.require_calibrated_phoneme,
+              multipart_receipt=args.multipart_receipt,
+              independent_av_receipt=args.multipart_independent_av)
     print(json.dumps(result,indent=2,ensure_ascii=False))
     return 0 if result["ready_for_separate_promotion"] else 2
 
