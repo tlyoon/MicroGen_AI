@@ -1,0 +1,11 @@
+# HP original MicroGen_AI — PR #200 real figure/caption source review
+
+Owner device policy **HP ONLY** for original MicroGen_AI. Dell-115 reserved for Web; no Yoga6/Zenbook. Stacked on draft #199 and #198, no protected source-tree overwrite, public publication, academic automatic approval or paid inference.
+
+`microgen_source_figure_coverage.py` verifies actual original §2.5 `source.pdf` hash against the Docling source extraction, validates the existing SHA-pinned composite mapped figure inventory, and resolves every generated Beamer `\\includegraphics` target to an actual mapped image with exact SHA. It verifies corresponding `Figure X.Y` label presence **in the specific original textbook page** and full 11-page source inventory. It inventories unused original Docling crops separately, and reports other original source-page figure references not mapped. A clean HTML review packet places the actual 15 mapped images **next to the original rendered source pages** for visual inspection, in addition to CSV and immutable SHA-bound receipt. References alone are NOT proof of source graphical semantics or correct narrated highlights.
+
+**Real HP pilot (no provider request):** `C:\Users\tlyoo\AppData\Local\MicroGen_AI_Checkpoints\20261026_HP_M1_FIGURE_SEMANTIC_REVIEW\index.html`, 15 mapped/source-caption SHA-grounded figure assets and 11 rendered original textbook page images, 15 TeX references validated, **six original Docling crops unused**, **seven unique source-text Figure X.Y labels without mapped assets** (may be citations/references rather than actual missing graphics; do not count as confirmed defects). The source-composition receipt SHA `23bda92c5c1f94b9d26f65b7160924d89f3a1fb8a57f57edf9222fc38a6f886b`. PDF source and previously generated lecture videos remain unchanged.
+
+Review/mathematical/figure-spoken correspondence **not yet approved**. This figure check plus the PR #199 69-risk pronunciation packet is necessary evidence to prioritize **actual** exceptions. It does not justify release or new source generations until a real academic/listening decision or reliable automated semantic test is available.
+
+All code is a reusable source-audit, not a one-off crop hack. Eight focused validation tests passed. Full pytest and hosted Windows/Ubuntu CI must be verified on its exact new head.

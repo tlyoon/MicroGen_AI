@@ -1,0 +1,3 @@
+# PR #63 — Candidate speech-region segmentation
+
+Uses only streaming short-time WAV amplitude from PR #58. Detects contiguous energetic regions with a conservative threshold, bridges short gaps and discards short clicks. Time intervals are explicitly CANDIDATE_SPEECH_REGION_NOT_VERIFIED, **not phonemes, word alignment, or ground-truth pronunciation labels**. Silence/empty output never means good narration. Source SHA provenance remains attached and original WAVs remain read-only. No Whisper, API credits, NumPy or human gate. This supports later time-localized evidence extraction; it does not replace the missing real labeled corpus.

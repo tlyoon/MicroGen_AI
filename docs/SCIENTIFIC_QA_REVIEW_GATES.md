@@ -45,8 +45,11 @@ values and radical domains require source/math checks.
   is mathematically corrected. Reuse unchanged WAVs only with verified
   input-bound TTS cache and a consistent provider/voice.
 - Use backup-and-rollback publication and verify the manifest after any edit.
-- Human listening and lecturer approval remain independent requirements;
-  a successful automated test does not grant them.
+- **2026-10-20 autonomous QA update:** human listening and lecturer review are
+  optional audits, **not mandatory development or technical progression gates**.
+  A successful automatic test does not imply human certification or full
+  academic/figure/highlighting correctness. See
+  `AUTONOMOUS_QA_DEVELOPMENT_CONTRACT_20261020.md` (authoritative).
 
 The optional advisory cannot cover all mathematical mistakes, text-only
 diagrams or visual issues, so users should not treat it as an academic

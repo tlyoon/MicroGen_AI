@@ -1,0 +1,1 @@
+PR #77 — Bound decoded PCM fingerprints by file bytes and audio duration before streaming. Stops unbounded work on oversized or malicious WAV headers while preserving existing real lecture source fingerprints. Configurable safe max: 18 MB input, 600 seconds duration. Recording is never modified; invalid limits and malformed WAVs fail without phonetic-quality claims.

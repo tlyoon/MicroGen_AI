@@ -1,5 +1,12 @@
 # MicroGen_AI
 
+**Current QA/development contract (2026-10-20):** unattended technical
+progression requires no manual listening or academic/figure/highlighting
+sign-offs. Technical failures and unavailable acoustic evidence remain blockers;
+optional human review must not be forged or represented as completed.
+See [`docs/AUTONOMOUS_QA_DEVELOPMENT_CONTRACT_20261020.md`](docs/AUTONOMOUS_QA_DEVELOPMENT_CONTRACT_20261020.md).
+
+
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
 The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, Google Cloud text-to-speech audio, per-slide PDF/WAV assets, and a final narrated MP4 video.

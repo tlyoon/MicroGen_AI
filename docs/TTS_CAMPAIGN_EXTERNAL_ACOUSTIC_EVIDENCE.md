@@ -1,0 +1,5 @@
+# PR #45 — QA campaign consumes external independent acoustic reports
+
+`python microgen_tts_quality_campaign.py STAGED_LESSON NEW_QA_FOLDER --acoustic-report EXTERNAL_ACOUSTIC.json` imports existing independent model evidence through the strict `audit_stage` verifier. No audio model calls are made by this command; `acoustic_recognition_run` remains false for this invocation, and the packet separately records whether evidence was provided **and validated**. Passing genuine acoustic evidence plus all other machine checks yields `release_readiness_TECHNICAL_READY.json`; failures yield `release_readiness_BLOCKED.json`. Human sign-offs are optional under the autonomous contract and never forged. The successful report is an eligibility packet, not a publisher.
+
+The report is copied only to a NEW external QA folder and never edited inside the source lecture. The content of the evidence is rechecked against the source's WAV, narration and voice hashes. Use PR #42's `--new-report` to generate a genuine recognition report first. No Whisper or automatic Moodle action.

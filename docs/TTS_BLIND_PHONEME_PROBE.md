@@ -1,0 +1,3 @@
+# PR #52 — Blind contrastive pronunciation judge
+
+Script-blind multimodal audio judges receive the WAV and a pronunciation-class question (the sound before "value" rhymes with "sigh" or "day"). They **do not receive** correct narration or a reference answer. The judge emits strictly WHY/YAY/UNKNOWN. Malformed answers and outages become UNKNOWN, not a pass. WAV SHA-256 is checked before and after each call; outputs are deliberately marked **uncalibrated and not certified**. Neither agreement nor a convincing-looking response by itself proves the phoneme was correctly spoken. All testing in the PR is injectable/offline; live calibration with known bad/good audio is a separate next stage. No Whisper, source modification or human approval gate.

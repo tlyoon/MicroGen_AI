@@ -1,0 +1,87 @@
+# MicroGen_AI — verified contract matrix (2026-10-24, Asia/Kuala_Lumpur)
+
+**Project:** original `tlyoon/MicroGen_AI` (not MicroGen_AI_Web). Reference vertical slice: Thomas Calculus 13th edition, §2.5. This matrix is evidence-scoped to the exact historical §2.5 source and the unmerged draft stack.
+
+| Criterion | State | Actual proof | Remaining obligation |
+|---|---|---|---|
+| Exact source PDF/narration lineage | PASS | 17 original PDF slides, source and script hashes verified by staged receipts; no originals changed | Recheck hashes before every new execution |
+| Full historical decoded soundtrack | PASS (original only) | PR #163 sample-equal decoded PCM; original tail 1.023375 s preserved | Do not confuse with corrected trial |
+| Sub-600-second lecture | PASS (original candidate) | 551.33 s ALAC and 551.25 s H.264/AAC, independent FFmpeg duration | Revalidate **corrected** candidate after generation |
+| Word-level visible overlays | PASS 66/66 (original audio's selected words only) | Frame-before/during pixel checks on source-PDF bounding boxes, PR #164 | Not equivalent to full math/figure semantics |
+| Avoid reusing old cue clock on changed WAV | FIX IN REVIEW (PR #177) | v2 cue manifest binds each WAV SHA, measured time, original PDF/script; negative tests reject v1 and replacement WAV | Hosted CI and merge verification; regenerate corrected cues |
+| Mathematical equations in narration | PENDING | 57 PDF line candidates, only 1 conservative acoustic textual anchor | Independent context/semantic mapping and academic validation |
+| Figures/graphs synchronized with narration | PENDING | 34 figure-crop pixel candidates, none near-blank in limited scan | Verify true figure panel, labels, transcript/audio alignment |
+| Pronouncing letter c | FAIL/UNVERIFIED | Original slide 6 offline recognizer heard 'circa' 3 times; corrected historical WAV trial unapproved | Independently listen/verify corrected slide and phoneme |
+| Pronouncing letter y | PENDING | Two corrected-trial 'why' ASR recognitions on slide 10 | Independent listening/phonetic QA |
+| Single consistent speaker | PENDING | Provider voice-name claims; 6/16 shadow join loudness flags are **not** proof of different speaker | Authenticated voice and subjective QA |
+| All-slide corrected lesson | FAIL/PENDING | Shadow corrected WAV 552.709 s staged; not synchronized into a corrected video | Re-recognize corrected audio and recompute all video cues |
+| Offline, low-cost development | PASS this batch | HP local tests/FFmpeg/Vosk; no paid AI, Whisper or provider submission | No new paid services without explicit consent |
+| Protected asset/main safety | PASS this batch | Isolated HP AppData clone, original G: teaching inputs and `main` untouched | Continue no overwrite, no cross-owner process interference |
+| Review/production release | BLOCKED | Drafts through PR #176; no human academic/listening QA, no publish | No merge/publish until real acceptance, authorization and verification |
+
+The original §2.5 technical MP4 is **not** an academically approved lecture. Passing a SHA, PCM, codec or pixel test never grants publication.
+
+## Addendum — 25 Oct 2026 corrected lesson §2.5 (PRs #181–189; historical table above is stale)
+
+The older matrix above describes original-sound candidate and HP-local earlier test segments. **Current owner amendment: Dell-115 ONLY for all original MicroGen_AI local coding, media testing and process checks. HP/Yoga6/Zenbook excluded.** The unmerged PR stack is not release.
+| Contract criterion | Current status | Actual evidence and limitation |
+|---|---|---|
+| Exact 17 source slide PDF/script + unmodified protected assets | **PASS** | Source SHA-bound all stages, no edits to original G: media |
+| Corrected lesson below 600s + actual full corrected audio | **PASS (technical)** | 552.75s H264/ALAC, decoded PCM exactly identical to full corrected WAV |
+| Corrected slide-level PDF page timing | **PASS (sampled technical)** | 50/50 actual decoded PDF page pixel samples; limited guard interval |
+| New corrected word overlays | **PASS (sampled technical)** | Fresh 17/17 Vosk ASR observations; 66 source SHA-bound PDF word cues, all 66 visible pixels and 64/64 available delayed non-highlight controls, 2 end-window controls not feasible |
+| Offline speech/model recovery | **PASS (technical)** | Pinned source model ZIP SHA and per-slide model/WAV/PDF/source-bound resumable checkpoints; Vosk hypotheses only |
+| Math spoken equation semantic correspondence | **PENDING** | 57 PDF math-looking candidates, only 1 contextual two-word hint, 57 decisions UNREVIEWED; heuristic not proof |
+| Figure correctness and spoken figure linkage | **PENDING** | 34 geometry/crop candidates, all 34 decisions UNREVIEWED |
+| Pronouncing c and y correctly | **PENDING** | Vosk output sees 'see/sea' or 'why'; not verified listening/phonetic correctness |
+| Single narrator voice consistency | **PENDING** | Existing WAVs technically preserved; no independently verified voice identity |
+| Independent academic/listening approval | **PENDING** | New offline reviewer packet, no completed approvals |
+| Draft PR stack integration, publication | **BLOCKED** | Protected main unmodified; no upload to YouTube/Moodle |
+
+### 25 Oct 2026 — current corrected acceptance gate v2
+- Source, corrected 552.75s PCM video, 50/50 source slide samples, 66/66 active corrected word pixel samples, 64/64 feasible post-word controls, and all 130 reviewer files: **PASS, technical source-bound only**. See new `corrected_release_status_v2` report SHA `36f03062c3e71e48400c03c7d376b7ecd7a9eae87169a1fd04bc865c5c973c65` on Dell.
+- Equation/audio correspondence: **PENDING 57/57**; figure/audio correspondence: **PENDING 34/34**. One contextual math ASR hint not independent semantics.
+- Phonetic c/y listening, single narrator identity, full academic listening QA and release approval: **PENDING / BLOCKED**. No publication, no protected main merge. Historical old v1 release gate's missing-ASR and missing-pixel blockers are superseded, not proof of phonetic or scientific acceptance.
+
+## 25 Oct 2026 exception-first reviewer queue — original MicroGen_AI §2.5
+- Source SHA-pinned corrected acoustic/script/math/figure screening: **PASS as triage only**: 17 slides, 91 regions kept, 52 prioritized early, 39 deferred UNREVIEWED. Source pronunciation/voice/academic approval remain **BLOCKED**, and no source figure semantic claim follows from text overlap.
+- Audio-format continuity: replacement slides 5/6/10 are mono 24k PCM16 vs 14 original mono 16k PCM16; not a defect by itself; screen for voice continuity separately. The full technical corrected MP4 PCM still passed #187–190.
+- Release remains blocked; no Moodle/YouTube, protected main or G: source edits.
+
+### 25 Oct 2026 — source-bound corrected PCM boundary screening
+- 17 corrected §2.5 WAVs, 16 neighboring joins: **numerically screened**, 5 junctions flagged for exception QA including 9→10 potential no-fade seam (normalized amplitude jump 0.07312). This does not certify speaker, phonetic quality or actual audibility. All 16 joins remain UNREVIEWED for final listening and 91 mathematical/figure decisions remain unreviewed.
+- Technical corrected source/media/PCM, 66 active cue pixels and 130 source-review file hashes still passed previously. No publication or protected main merge allowed solely from screening.
+
+## OWNER HP-only amendment and completion-first Milestone 1, 25 Oct 2026
+
+Earlier Dell-only additions in this file are *historical*, overridden by owner for **original MicroGen_AI = HP only**; Dell-115 reserved for MicroGen_AI_Web. GitHub CI allowed. Original historical G: media and `main` protected. **Priority: one complete accepted HP lecture → 2–3 different section trials → stabilize/release, not PR count.**
+
+| Current HP acceptance gate | Status | Grounded actual proof and remaining requirement |
+|---|---|---|
+| Historical 17-slide source, script and media mirror | **PASS technical on HP** | 13 SHA-tracked original assets, unchanged G: hashes; historical inputs were used |
+| Current corrected audio and 10-minute limit | **PASS technical on HP** | 552.709s corrected WAV; new 552.75s corrected video has identical decoded PCM |
+| Current text word highlight sampled pixels | **PASS technical on HP** | 17/17 true current offline Vosk ASR, 66/66 active overlays and 64/64 post-cue controls |
+| Current slide-level source PDF visual mapping | **PASS sampled technical on HP** | 50/50 independent actual frame samples |
+| Source math/figure/audio semantics | **PENDING** | 57 math +34 figure candidates, all 91 unreviewed; 130/130 review-file SHA pass |
+| Correct c/y phonemes and single speaker | **PENDING** | A/B source/trial listening packet; no independent pronunciation or speaker approval |
+| PCM adjacent boundaries | **SCREENED ONLY** | 5/16 review-trigger joins, no definite audible click/speaker change |
+| Regression evidence | **PASS on second HP run** | 891 pytest pass /4 skip; legacy 593 unittest pass /3 skip; initial 50ms replication fixture failed once under parallel load, subsequently 3/3 rerun pass |
+| Fresh textbook source.pdf through figure→slides→new narration→TTS | **NOT RUN / M1 GAP** | Historical slides, script and WAV candidates reused for source-bound reconstruction; figure dependencies Docling/pdf2image not in isolated venv; no chargeable provider calls |
+| Publication and main integration | **BLOCKED** | Gate 7 substantive review/release blockers, user-owner publishing restrictions, stacked draft PRs not integrated |
+
+The next milestone must close the **fresh-from-source** gap and independently adjudicate high-risk math/figure/pronunciation quality; do not substitute more technical audit layers or automatically approve remaining review items.
+
+### 26 October 2026 — verified HP offline fresh textbook-source stage (#194 candidate)
+
+Original MicroGen_AI **HP exclusively** (Dell-115 reserved for MicroGen_AI_Web). Completion-first strategy from #193 remains governing.
+
+| M1 new-source criterion | Verified outcome | Limitation |
+|---|---|---|
+| HP local Docling environment | **PASS** | Already installed `miniconda3/envs/docling_win`, no paid provider invoked |
+| Source textbook `source.pdf` to per-page PNG/PDF | **PASS real HP** | 11/11 real original source pages, complete source SHA-bound receipt |
+| Actual figure extraction | **PASS technical candidate** | 20 source Docling crops across 11 pages; source/crop hashes verified, but academic figure/caption correctness not verified |
+| Incomplete Docling/run failure | **FAIL CLOSED** | Missing source page, marker, figure or altered hashes block checkpoint; per-page extraction errors now fail, not skip |
+| Safe stop before billed stages | **PASS** | `--figure-extraction-only`, report no Gemini/TTS/publication, checkpoint preserves extraction only |
+| Full new slide generation and source-grounded narration | **PENDING** | Figure mapping and new Gemini slide/narration production not run |
+| Fresh TTS from new narration | **PENDING** | No billable TTS call; historical A/B corrected WAV trial remains unapproved |
+| Full first original PDF→published video | **NOT COMPLETE** | HP historical downstream video reproduced in #193, new upstream figure extraction now achieved; missing middle AI/TTS stages + scholarly review |

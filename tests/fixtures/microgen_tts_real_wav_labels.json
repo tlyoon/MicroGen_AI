@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "Real human-labeled WAV references; no audio copied into repository.",
+  "samples": [
+    {
+      "id": "thomas25-slide10-before-y-fix",
+      "filename": "slide10.before-y-pronunciation.wav",
+      "sha256": "74dd31f9c681eaf39ed31807f319c065350bbf9753a438829a6a47f5e8d70377",
+      "label": "defect",
+      "phrase": "y-value",
+      "issue": "letter Y pronounced yay",
+      "label_origin": "lecturer"
+    },
+    {
+      "id": "thomas25-slide10-after-y-fix",
+      "filename": "slide10.wav",
+      "sha256": "fefad11722659354750580bbf73f578281bab96c7803de0328599a3d2f5af5c8",
+      "label": "correct",
+      "phrase": "y-value",
+      "issue": "letter Y pronounced why",
+      "label_origin": "lecturer listened and confirmed"
+    }
+  ]
+}

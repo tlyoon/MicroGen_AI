@@ -78,6 +78,31 @@ def normalize_scientific_speech(text: str) -> str:
     out = str(text or "")
     for source, target in replacements:
         out = out.replace(source, target)
+    # Stable symbol names are safe to normalize without guessing their role.
+    # Ambiguous expression structure is handled by the offline preflight.
+    math_symbols = (
+        ("α", " alpha "), ("β", " beta "), ("γ", " gamma "),
+        ("θ", " theta "), ("λ", " lambda "), ("μ", " mu "),
+        ("ρ", " rho "), ("φ", " phi "), ("ω", " omega "),
+        ("∞", " infinity "), ("≤", " less than or equal to "),
+        ("≥", " greater than or equal to "), ("≠", " not equal to "),
+    )
+    for symbol, spoken_name in math_symbols:
+        out = out.replace(symbol, spoken_name)
+    # Text TTS frequently interprets "y-value" as "yay value" rather than
+    # the name of the mathematical letter Y ("why"). Expand letter names
+    # only in well-defined coordinate/math compounds, never globally.
+    math_letter_compounds = (
+        "value", "values", "axis", "axes", "intercept", "intercepts",
+        "coordinate", "coordinates", "component", "components",
+    )
+    out = re.sub(
+        r"(?<![A-Za-z])(?P<letter>[xy])\s*[-\u2010-\u2015]\s*"
+        r"(?P<noun>" + "|".join(math_letter_compounds) + r")\b",
+        lambda match: ("why" if match["letter"].lower() == "y" else "ex")
+        + " " + match["noun"],
+        out, flags=re.I,
+    )
     unit_patterns = (
         (r"\bkg\s*/\s*m(?:\^?3|³)\b", " kilograms per cubic metre "),
         (r"\bkg\s+m(?:\^\s*-?3|⁻³)\b", " kilograms per cubic metre "),
@@ -99,6 +124,18 @@ def normalize_scientific_speech(text: str) -> str:
     out = re.sub(r"([A-Za-z0-9)]+)\s*\^\s*3\b", r"\1 cubed", out)
     out = out.replace("²", " squared ").replace("³", " cubed ")
     out = re.sub(r"\s+([,.;:!?])", r"\1", out)
+    # A mathematical point such as "at c. Next..." must be spoken as the
+    # letter C, not expanded by a TTS abbreviation model to "circa".
+    # Keep the punctuation and the original narration unchanged: this
+    # conversion is for synthesis and its content-addressed cache key only.
+    # Require a mathematical cue and a sentence boundary to preserve
+    # historical dates ("c. 1900") and initials ("C. Smith").
+    out = re.sub(
+        r"(?P<prefix>\b(?i:at|point|approaches|of|equals|variable|constant|coefficient)\s+)"
+        r"c\.(?=\s+[A-Z]|$)",
+        lambda match: match["prefix"] + "see.",
+        out,
+    )
     return re.sub(r"\s+", " ", out).strip()
 
 
@@ -161,7 +198,9 @@ def _sapi_synthesize(text: str, output: Path) -> str:
 
 
 def synthesize(text: str, output: Path) -> str:
+    from microgen_pronunciation import require_safe_speech
     spoken = normalize_scientific_speech(text)
+    require_safe_speech(text, spoken)
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         return _google_synthesize(spoken, output)
@@ -214,41 +253,78 @@ def main() -> None:
     items = _speech_items()
     if not items:
         raise RuntimeError("No slide narration found.")
+    from microgen_pronunciation import audit_slide_items, PronunciationPreflightError
+    issues = audit_slide_items(items, normalize_scientific_speech)
+    if issues:
+        raise PronunciationPreflightError(
+            f"Refusing to synthesize: {len(issues)} unreviewed mathematical "
+            f"pronunciation issue(s): {issues[:5]}"
+        )
 
+    from microgen_tts_lexicon import check_lexicon_slides
+    rule_drift = check_lexicon_slides(
+        [{"slide": n, "tts_text": str(item["tts_text"] or item["narration"])}
+         for n, item in enumerate(items, 1)], normalize_scientific_speech,
+    )
+    if rule_drift:
+        raise PronunciationPreflightError(
+            f"Reviewed pronunciation lexicon mismatch: {rule_drift[:5]}"
+        )
     from microgen_quality import sha256, check_wavs
+    from microgen_tts_provenance import (
+        TTSProvenanceError, make_record, verify_record,
+        write_manifest, verify_manifest,
+    )
     cache = Path(".microgen_tts_cache")
     cache.mkdir(exist_ok=True)
     providers = []
+    records = []
+    normalized_inputs = []
     for idx, item in enumerate(items, start=1):
         text = item["tts_text"] or item["narration"]
         if not text:
             raise RuntimeError(f"Slide {idx} has no narration/tts_text.")
+        spoken = normalize_scientific_speech(text)
+        normalized_inputs.append(spoken)
         output = Path(f"slide{idx}.wav")
         meta = cache / f"slide{idx}.json"
         key = hashlib.sha256(json.dumps(
-            [normalize_scientific_speech(text), VOICE_NAME, LANGUAGE_CODE,
-             SPEAKING_RATE, LOCATION, "microgen-tts-v2"],
+            [spoken, VOICE_NAME, LANGUAGE_CODE,
+             SPEAKING_RATE, LOCATION, "microgen-tts-v3-provenance"],
             ensure_ascii=False, sort_keys=True,
         ).encode("utf-8")).hexdigest()
         provider = None
+        record = None
         if output.is_file() and meta.is_file():
             try:
                 saved = json.loads(meta.read_text(encoding="utf-8"))
-                if saved.get("key") == key and sha256(output) == saved.get("sha256"):
-                    with wave.open(str(output), "rb") as audio:
-                        if audio.getnframes() > 0 and audio.getframerate() > 0:
-                            provider = saved.get("provider")
-            except (OSError, ValueError, wave.Error):
+                verify_record(
+                    saved, output, slide=idx, text=spoken, key=key,
+                    voice_name=VOICE_NAME, language_code=LANGUAGE_CODE,
+                    speaking_rate=SPEAKING_RATE, location=LOCATION,
+                )
+                record = saved
+                provider = saved["provider"]
+            except (OSError, ValueError, KeyError, TTSProvenanceError):
                 provider = None
         if provider:
-            print(f"[TTS] verified WAV reused: slide {idx}", flush=True)
+            print(f"[TTS] provenance-verified WAV reused: slide {idx}", flush=True)
         else:
             candidate = cache / f"slide{idx}.candidate.wav"
             candidate.unlink(missing_ok=True)
             provider = synthesize(text, candidate)
-            with wave.open(str(candidate), "rb") as audio:
-                if audio.getnframes() <= 0 or audio.getframerate() <= 0:
-                    raise RuntimeError(f"TTS emitted empty WAV at slide {idx}")
+            # The provider must match the first slide BEFORE touching
+            # any previously recorded production WAV for this slide.
+            if providers and provider != providers[0]:
+                candidate.unlink(missing_ok=True)
+                raise TTSProvenanceError(
+                    f"Mixed TTS providers on slide {idx}; existing WAV preserved"
+                )
+            record = make_record(
+                slide=idx, path=candidate, text=spoken, provider=provider, key=key,
+                voice_name=VOICE_NAME, language_code=LANGUAGE_CODE,
+                speaking_rate=SPEAKING_RATE, location=LOCATION,
+            )
             if output.is_file():
                 backup = cache / (f"slide{idx}.before-{sha256(output)[:12]}.wav")
                 if not backup.exists():
@@ -256,19 +332,30 @@ def main() -> None:
                     shutil.copy2(output, backup)
             candidate.replace(output)
             tmp = meta.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps({
-                "key": key, "sha256": sha256(output), "provider": provider,
-            }), encoding="utf-8")
+            tmp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
             tmp.replace(meta)
         providers.append(provider)
+        records.append(record)
         if len(set(providers)) != 1:
-            raise RuntimeError(
-                "Voice inconsistency: mixed TTS providers detected. "
-                "Re-synthesize the entire lecture with one provider."
+            raise TTSProvenanceError(
+                "Mixed TTS providers found; completion manifest withheld."
             )
         print(f'Audio content checked: "{output}" using {provider}')
-    check_wavs(Path.cwd(), len(items))
-    print(f"Success: verified {len(items)} audio files in one consistent voice.")
+    wav_evidence = check_wavs(Path.cwd(), len(items))
+    manifest = write_manifest(Path.cwd(), records, normalized_inputs)
+    verify_manifest(Path.cwd(), normalized_inputs)
+    from microgen_tts_risk_register import build_risk_register, save_immutable_risk_report
+    risk = build_risk_register(
+        [{"slide": i, "tts_text": str(item["tts_text"] or item["narration"])}
+         for i, item in enumerate(items, 1)],
+        normalize_scientific_speech, wav_evidence["seconds"],
+        wav_sha256=wav_evidence["sha256"],
+    )
+    report_path = save_immutable_risk_report(cache, risk)
+    print(f"[TTS] Source-derived pronunciation risk report: {report_path} "
+          f"({risk['risk_count']} risks, {len(risk['risk_review_slides'])} slides).")
+    print(f"Success: technically verified {len(items)} audio files with voice-bound {manifest}.")
+    print("[QA] Acoustic transcript screening and independent listening remain REQUIRED before publication.")
 
 
 if __name__ == "__main__":

@@ -163,6 +163,14 @@ def call_with_key_failover(
             "GEMINI_API_KEY_2, GEMINI_API_KEY_3, or the legacy GEMINI_API_KEY."
         )
 
+    preferred = _env_int("MICROGEN_GEMINI_PREFERRED_KEY_INDEX", 1)
+    if not 1 <= preferred <= len(keys):
+        raise ValueError("MICROGEN_GEMINI_PREFERRED_KEY_INDEX must refer to a configured key")
+    if preferred != 1:
+        keys = keys[preferred - 1:] + keys[:preferred - 1]
+        print(f"[Gemini keys] preferred configured key slot #{preferred} first "
+              "(temporary recovery override)", flush=True)
+
     retries = _env_int("MICROGEN_GEMINI_MAX_RETRIES", 6) if max_retries is None else max_retries
     base = _env_float("MICROGEN_GEMINI_BACKOFF_BASE_SECONDS", 15.0)
     cap = _env_float("MICROGEN_GEMINI_BACKOFF_MAX_SECONDS", 180.0)
