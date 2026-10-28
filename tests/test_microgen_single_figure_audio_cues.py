@@ -2,8 +2,9 @@
 import unittest
 import pymupdf as fitz
 from microgen_single_figure_audio_cues import (
-    image_anchor_cues, SingleFigureCueError,
+    image_anchor_cues, exact_stage_figure_asset, SingleFigureCueError,
 )
+from PIL import Image
 
 PAGE = fitz.Rect(0, 0, 400, 240)
 BOX = [120, 60, 260, 160]
@@ -14,6 +15,19 @@ class SingleFigureAudioCueTests(unittest.TestCase):
         data={"word":"curve","start":4.2,"end":4.7,"conf":.99}
         data.update(changes)
         return data
+
+    def test_exact_source_image_pixels_and_sha_required(self):
+        embedded=Image.new("RGB",(40,35),(22,75,130))
+        clone=embedded.copy()
+        match=exact_stage_figure_asset(embedded,[("Figure 2.34.png","abc",clone)])
+        self.assertEqual(match,("Figure 2.34.png","abc"))
+        wrong=Image.new("RGB",(40,35),(23,75,130))
+        self.assertIsNone(exact_stage_figure_asset(embedded,[("wrong.png","def",wrong)]))
+
+    def test_two_identical_source_images_are_ambiguous(self):
+        embedded=Image.new("RGB",(40,35),(22,75,130))
+        aliases=[("a.png","shaA",embedded.copy()),("b.png","shaB",embedded.copy())]
+        self.assertIsNone(exact_stage_figure_asset(embedded,aliases))
 
     def test_exact_word_and_unique_image_produce_timed_box(self):
         cues=image_anchor_cues([self.word()], "Observe the curve now.",

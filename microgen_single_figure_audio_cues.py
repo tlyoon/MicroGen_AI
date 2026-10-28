@@ -7,6 +7,7 @@ No academic figure semantics, full element sync or pronunciation approval.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 import re
@@ -14,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pymupdf as fitz
+from PIL import Image
 
 from microgen_source_safe_orchestrator import atomic_json, digest, read_json
 from microgen_fresh_source_cues import source_inventory
@@ -25,6 +27,14 @@ class SingleFigureCueError(ValueError):
 
 
 ANCHOR_WORDS = frozenset(("curve", "graph"))
+
+
+def exact_stage_figure_asset(embedded: Image.Image, candidates):
+    """Require one pixel-identical source-stage figure asset, not a random image."""
+    pixel = embedded.convert("RGB")
+    matches = [(name, sha) for name, sha, source in candidates
+               if source.size == pixel.size and source.tobytes() == pixel.tobytes()]
+    return matches[0] if len(matches) == 1 else None
 
 
 def image_anchor_cues(words, narration, boxes, *, wav_seconds, page_rect):
@@ -87,6 +97,15 @@ def build_figure_cues(stage, original_word_report, asr_folder, new_folder):
     candidate_rows = []
     reports = json.loads(json.dumps(prior))
     asr_hashes = {}
+    asset_hashes = {}
+    stage_figure_assets = []
+    for asset in sorted(base.glob("*.png")):
+        if not re.fullmatch(r"(?i)figure\s*\d+\.\d+[a-z]?\.png", asset.name):
+            continue
+        if asset.is_symlink() or asset.stat().st_size > 20 * 1024 * 1024:
+            raise SingleFigureCueError("Unsafe source figure asset")
+        with Image.open(asset) as pic:
+            stage_figure_assets.append((asset.name, digest(asset), pic.convert("RGB")))
     source_script = read_json(base / "script_tts.json")["slides"]
     if len(source_script) != source["slide_count"]:
         raise SingleFigureCueError("Original narration inventory changed")
@@ -110,19 +129,29 @@ def build_figure_cues(stage, original_word_report, asr_folder, new_folder):
                     recognition.get("semantic_word_alignment_certified") is not False):
                 raise SingleFigureCueError("Untrusted phonetic/semantic claims")
             boxes = []
-            for image in page.get_images(full=True):
+            images = page.get_images(full=True)
+            for image in images:
                 for box in page.get_image_rects(image[0]):
                     region = [round(v, 3) for v in box]
                     if region not in boxes:
                         boxes.append(region)
+            verified_asset = None
+            if len(images) == 1 and len(boxes) == 1:
+                with Image.open(io.BytesIO(book.extract_image(images[0][0])["image"])) as embedded:
+                    verified_asset = exact_stage_figure_asset(embedded, stage_figure_assets)
             cues = image_anchor_cues(
                 recognition.get("words"), source_script[idx-1]["tts_text"],
-                boxes, wav_seconds=source["wav_inventory"][idx-1]["duration_seconds"],
+                boxes if verified_asset else [],
+                wav_seconds=source["wav_inventory"][idx-1]["duration_seconds"],
                 page_rect=page.rect)
             slide["cues"].extend(cues)
             slide["cues"].sort(key=lambda c: c["start"])
             if cues:
+                asset_hashes[verified_asset[0]] = verified_asset[1]
                 candidate_rows.append({"slide": idx, "cues": cues,
+                    "exact_embedded_source_asset": verified_asset[0],
+                    "exact_embedded_source_asset_sha256": verified_asset[1],
+                    "source_stage_asset_pixels_identical": True,
                     "original_wav_sha256":expected_sha,
                     "original_asr_file_sha256":digest(asr_file),
                     "semantic_approval":False})
@@ -131,6 +160,7 @@ def build_figure_cues(stage, original_word_report, asr_folder, new_folder):
     if (digest(base / "slides.pdf") != pdf_sha or
             digest(base / "script_tts.json") != narration_sha or
             digest(src_report) != prior_sha or source_inventory(base)[1] != source or
+            any(digest(base / name) != sha for name, sha in asset_hashes.items()) or
             any(digest(asr / name) != sha for name, sha in asr_hashes.items())):
         raise SingleFigureCueError("Source, cues or ASR changed during inspection")
     dest.mkdir(parents=True, exist_ok=False)
@@ -144,6 +174,8 @@ def build_figure_cues(stage, original_word_report, asr_folder, new_folder):
             "source":source,"base_cue_report_sha256":prior_sha,
             "augmented_cue_report_sha256":digest(augmented),
             "source_pdf_sha256":pdf_sha,"asr_file_sha256":asr_hashes,
+            "figure_asset_sha256":asset_hashes,
+            "source_stage_figure_pixels_identical":bool(candidate_rows),
             "candidate_slide_count":len(candidate_rows),
             "figure_anchor_cue_count":sum(len(row["cues"]) for row in candidate_rows),
             "candidate_slides":candidate_rows,

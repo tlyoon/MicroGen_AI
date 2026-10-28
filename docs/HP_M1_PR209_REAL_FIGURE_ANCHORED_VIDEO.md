@@ -22,3 +22,18 @@ PR #198 had real 23-slide WAV-bound word-box highlighting but **zero verified fi
 Five localized image highlight events provide **genuine technical temporal correspondence** between observed words and a displayed image box. They do NOT prove that the image depicts the correctly narrated mathematical concept or that all equation/figure elements are highlighted for the whole lesson. Audio recognition supplies candidate word times, not proven phoneme correctness. `publication_allowed=false`, `full_element_synchronization_verified=false`, and `figure_semantics_verified=false` remain mandatory.
 
 This proof must not be used to bypass the independent acoustic QA or the mathematical-figure semantics acceptance gate. Further generalization should prioritize candidate review and math-element association from actual source evidence over arbitrary timing interpolation. The two older word-only MP4s and all current original WAVs remain untouched.
+
+
+## Exact source-figure identity hardening (post-initial PR draft)
+
+Independent HP source-image inspection proved byte-for-byte **RGB pixel equality** between the raster image embedded in each highlighted PDF slide and the matching extracted stage image:
+
+| Slide | Pixel-identical source-stage asset | RGB image dimensions |
+|---|---|---|
+| 3 | `FIGURE 2.34.png` | 238 × 185 |
+| 4 | `Figure 2.35.png` | 206 × 137 |
+| 15 | `FIGURE 2.44.png` | 220 × 171 |
+
+The tool now **requires an exactly one-to-one pixel-identical original extracted figure asset** before creating any figure reference cue, and saves exact asset SHA-256 in its source-bound cue receipt. A missing asset, two identical assets, any pixel mismatch or ASR/source/WAV/figure mutation suppresses candidates or fails closed. This does not prove that spoken mathematical meaning agrees with the pictured figure.
+
+Updated source-bound pilot `20261028_HP_M1_ACTUAL_SINGLE_FIGURE_CUE_PROOF_V3`: still 3 slides / 5 cues, all matching exact figure assets; `figure_augmented_word_cues.json` SHA-256 exactly matches V2 and the previously encoded two-part candidate MP4s, so expensive media re-render was unnecessary. Updated independent old-versus-new video differential evidence `20261028_HP_M1_FIGURE_FRAME_DIFFERENTIAL_QA_V4` again passed **5/5 actual cue-timed samples** with full audio/MP4 SHA agreement. All original WAVs, PDFs and previous MP4s remain untouched. Final academic/phonetic approval and publication remain false.
