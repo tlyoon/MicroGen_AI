@@ -129,6 +129,12 @@ def audit_stage(
         "element_level_highlights_approved":highlights_ok,
     }
     decision=decide_release(checks,qa_policy)
+    # A pragmatic *progression* gate must not be confused with independent
+    # acoustic acceptance or the final release gate above.
+    from microgen_pragmatic_audio_qa import decide_media_progression
+    progression=decide_media_progression(
+        preflight=preflight, lexicon=lexicon, provenance=audio_ok,
+        pcm=pcm_ok, acoustic_report=acoustic_report)
     return {
         "schema_version":1,
         "slide_count":len(slides),
@@ -140,6 +146,7 @@ def audit_stage(
         "risk_review_slides":risks["risk_review_slides"],
         "checks":checks,
         "pcm_integrity":integrity_rows,
+        "audio_generation_progression":progression,
         **decision,
         "note":("Read-only QA. Autonomous technical progression does NOT "
                 "certify phonetic, scholarly or element-level visual quality. "

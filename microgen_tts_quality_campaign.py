@@ -67,6 +67,8 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
                     if release["ready_for_separate_promotion"]
                     else "release_readiness_BLOCKED.json")
     _store(new_output/readiness_name,release)
+    _store(new_output/"TTS_MEDIA_GENERATION_PROGRESSION.json",
+           release["audio_generation_progression"])
     if acoustic_report is not None:
         _store(new_output/"input_acoustic_evidence.json",acoustic_report)
     excerpts=render_excerpts(stage,slides,register,
@@ -89,6 +91,7 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
         "qa_policy":release["policy"],
         "release_blockers":release["blockers"],
         "release_ready":release["ready_for_separate_promotion"],
+        "audio_generation_progression":release["audio_generation_progression"],
         "automated_technical_qa_passed":release["automated_technical_qa_passed"],
         "human_reviews_pending":release["human_reviews_pending"],
         "manual_approval_is_gate":release["manual_approval_is_gate"],
@@ -101,7 +104,7 @@ def run_qa_campaign(stage:Path,new_output:Path,*,max_review_clips:int=80,
         "no_original_files_modified":True,
         "report_files":[
             "source_risks.json","pcm_audio_integrity.json",
-            readiness_name,
+            readiness_name,"TTS_MEDIA_GENERATION_PROGRESSION.json",
             "listening_clips/review_clip_manifest.json",
             "all_slide_listening_queue.json",
             *(["input_acoustic_evidence.json"] if acoustic_report is not None else []),
