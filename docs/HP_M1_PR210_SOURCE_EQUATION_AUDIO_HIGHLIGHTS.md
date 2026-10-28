@@ -1,0 +1,22 @@
+# PR #210 — First original-WAV/PDF equation-line highlight candidate evidence
+
+Project: original `tlyoon/MicroGen_AI` (not Web); **HP-only** local worktree based on merged main `81ab18042be24ad291c8a582a7d7072765ef80e8`. No external paid LLM or recognizer, Whisper, textbook-source edits, non-HP device access or public publication.
+
+## Previously proven media and exact new capability
+
+The prior lecture has source-grounded word and selected single-figure overlays but lacks equation-level highlighting. This change adds `microgen_source_equation_audio_cues.py`: a **conservative rule-based source-safe** first step requiring agreement across (1) an exact mathematical phrase in the current source narration, (2) exactly one matching **actual PDF equation line**, (3) time-adjacent high-confidence (`≥0.90`) independently observed words in the existing real WAV, (4) current 23 slide-WAV SHA-256 identities and bound base cue PDF, and (5) original PDF line geometry and positive in-bounds audio times. It refuses repeated equations, repeated qualified anchors, missing words, low confidence, stale source data, missing audio, and invalid PDF lines rather than guessing. Its present rules are **narrow**: cubic `f(x)=x³−x−1` anchored at the observed spoken `cubed`, and `√(2x+5)=4−x²` anchored at the observed spoken `root`. They are not a general math-to-speech semantic recognizer.
+
+### Genuine Thomas Calculus 13e Section 2.5 HP artifacts
+
+- Stage: `C:\Users\tlyoo\AppData\Local\MicroGen_AI_Checkpoints\20261026_HP_M1_SOURCE_ONLY\2.5` (23 actual source-bound WAVs and slide PDF).
+- New `20261028_HP_M1_PR210_ACTUAL_EQUATION_CUE_PROOF\equation_audio_cue_receipt.json` and `equation_augmented_cues.json`, based on the previously validated **151** word/figure cues. Adds **2 equation-line candidates**, slides **16 and 17**, total **153** source/WAV-bound cues.
+- Original WAV local timing for highlighted math phrase: slide 16 `cubed`, cue interval **24.72–26.20 s**; slide 17 `root`, **4.68–5.89 s**.
+- Two newly rendered **actual MP4 candidates** in `20261028_HP_M1_EQUATION_FIGURE_TWO_PARTS`, 464.67 s and 445.88 s (strictly under 10 min), **7,285 frames**, 153 source-bound overlay cues. No original lecture media or protected G: files overwritten.
+- Independent full decoded A/V check `20261028_HP_M1_EQUATION_FIGURE_INDEPENDENT_AV_QA\independent_pixel_pcm_receipt.json`: **23 positive frame samples**, **4 clean controls**, `audio_lossless=true` with PCM tied to exact current original WAVs.
+- New `microgen_source_equation_video_qa.py`: independently compares old figure-only video MP4s against the new actual equation-augmented MP4s, protects both independently decoded PCM receipts and all SHA-256 source/audio/video identities, and confirms the incremental **equation-region** highlight is genuinely present at the spoken anchor time. Real QA `20261028_HP_M1_EQUATION_VIDEO_DIFFERENTIAL_QA\equation_video_diff_receipt.json`: **2/2 equation overlay samples visible**. Slide 16 at part-2 timestamp 115.571 s has equation box MAE **50.897** versus full-frame MAE 1.538; slide 17 at 144.351 s has equation box MAE **47.214** versus whole-frame MAE 2.300. Prior five figure-overlays remain from the previous 151-cue manifest.
+
+## What this does not establish
+
+This is a **first real, bounded equation-level highlight demonstration**, not full narration-to-all-equations coverage; the cues only mark short audible-token windows and do not span the full spoken equation. Source PDF text, narration phrase and audio word tokens are evidence of correspondence, **not academic proof of equation correctness, mathematical equivalence, figure semantics, or correct acoustic pronunciation**. In particular, a text-extracted radical or superscript may be ambiguous; actual academic evaluation remains pending. All generated artifacts set `publication_allowed=false`; do not upload to YouTube/Moodle or mark lecture videos as ready for release.
+
+Original Thomas Section 2.5 mathematical spot checks independently confirmed seven numeric/analytical claims, but are not comprehensive. A second original-source Serway 1.1/1.2 PDF intake passed but a second completed source-to-video campaign has not been proven. Flexible TTS production policy remains: unconfirmed word risks create advisories without stalls; verified incorrect letter pronunciations such as `c.`→`circa` remain serious defects, and independent actual audio phonetic release is still outstanding.
