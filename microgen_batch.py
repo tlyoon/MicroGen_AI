@@ -825,7 +825,9 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
 
     commands = {
         "figure_extraction": (args.docling_py, "crop_figs_v3.py", "figure extraction"),
-        "figure_mapping": (args.main_py, "map_and_rename_v5.py", "figure mapping"),
+        "figure_mapping": (args.main_py,
+                           "microgen_offline_pdf_figure_map.py" if args.offline_figure_mapping else "map_and_rename_v5.py",
+                           "offline figure mapping" if args.offline_figure_mapping else "figure mapping"),
         "figure_merge": (args.main_py, "merge_lettered_figs_v2.py", "lettered figure merge"),
         "slides": (args.main_py, "gen_slides_v20.py", "slide generation"),
         "narration": (args.main_py, "gen_script_v13.py", "narration"),
@@ -890,7 +892,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     stage,
                     log_path,
                     label,
-                    gemini_stage=stage_name in GEMINI_STAGES,
+                    gemini_stage=(stage_name in GEMINI_STAGES and not
+                                  (args.offline_figure_mapping and stage_name == "figure_mapping")),
                     retries=args.stage_retries,
                     lease=lease,
                 )
@@ -947,6 +950,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("MICROGEN_SOURCE_WAIT_SECONDS", "600")),
     )
     ap.add_argument("--fail-fast", action="store_true", help="Stop after the first subchapter failure.")
+    ap.add_argument("--offline-figure-mapping", action="store_true",
+                    help="Local source-PDF figure mapping only. Requires --stop-after figure_mapping or figure_merge; never calls Gemini/TTS.")
     ap.add_argument("--figure-extraction-only", action="store_true",
                     help="Run only local PDF page/figure extraction, then STOP before any Gemini/TTS or publication. Resume later from this checkpoint.")
     ap.add_argument("--stop-after", choices=STAGES[:-1],
@@ -993,10 +998,18 @@ def main() -> int:
         raise SystemExit("--check-assignments requires --multi-pc")
     if args.figure_extraction_only and args.multi_pc:
         raise SystemExit("--figure-extraction-only is a single-host offline pilot; multi-PC is not supported")
+    if args.offline_figure_mapping:
+        if (args.figure_extraction_only or args.multi_pc or
+                args.stop_after not in {"figure_mapping", "figure_merge"} or
+                args.authorize_provider_usage or args.multipart):
+            raise SystemExit("Offline figure mapping requires bounded figure_mapping/figure_merge only, without provider authorization or multi-PC/multipart")
     if args.stop_after is not None:
         if args.figure_extraction_only or args.multi_pc:
             raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
-        if STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and not args.authorize_provider_usage:
+        offline_safe = (args.offline_figure_mapping and
+                        args.stop_after in {"figure_mapping", "figure_merge"})
+        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and
+                not args.authorize_provider_usage and not offline_safe):
             raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
@@ -1048,7 +1061,7 @@ def main() -> int:
     args.docling_py = resolve_docling_python(args.docling_py,
                                                    main_python=args.main_py)
     preflight(args.main_py, args.docling_py,
-              figure_extraction_only=args.figure_extraction_only)
+              figure_extraction_only=(args.figure_extraction_only or args.offline_figure_mapping))
     report: list[dict] = []
     report_path = args.work_root / "batch_report.json"
     print(f"[batch] targets={targets}", flush=True)
