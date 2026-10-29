@@ -28,6 +28,13 @@ def example_record(path, *, slide=1, text="At see.", provider="google_cloud_chir
 
 
 class VoiceProvenanceTests(unittest.TestCase):
+    def setUp(self):
+        # Existing production provenance fixtures explicitly select Cloud,
+        # rather than relying on the former implicit formal provider.
+        provider = patch.dict(os.environ, {"MICROGEN_FORMAL_TTS_PROVIDER": "google_cloud"})
+        provider.start()
+        self.addCleanup(provider.stop)
+
     def test_round_trip_records_and_manifest(self):
         with tempfile.TemporaryDirectory() as root:
             stage = Path(root)
