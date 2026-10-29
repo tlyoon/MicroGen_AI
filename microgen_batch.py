@@ -793,6 +793,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         args.commit,
     )
     dest = destination_for(args.source_root, subchapter)
+    offline_mapping = bool(getattr(args, "offline_figure_mapping", False))
     log_path = args.work_root / f"{subchapter}.log"
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
@@ -826,8 +827,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     commands = {
         "figure_extraction": (args.docling_py, "crop_figs_v3.py", "figure extraction"),
         "figure_mapping": (args.main_py,
-                           "microgen_offline_pdf_figure_map.py" if args.offline_figure_mapping else "map_and_rename_v5.py",
-                           "offline figure mapping" if args.offline_figure_mapping else "figure mapping"),
+                           "microgen_offline_pdf_figure_map.py" if offline_mapping else "map_and_rename_v5.py",
+                           "offline figure mapping" if offline_mapping else "figure mapping"),
         "figure_merge": (args.main_py, "merge_lettered_figs_v2.py", "lettered figure merge"),
         "slides": (args.main_py, "gen_slides_v20.py", "slide generation"),
         "narration": (args.main_py, "gen_script_v13.py", "narration"),
@@ -893,7 +894,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     log_path,
                     label,
                     gemini_stage=(stage_name in GEMINI_STAGES and not
-                                  (args.offline_figure_mapping and stage_name == "figure_mapping")),
+                                  (offline_mapping and stage_name == "figure_mapping")),
                     retries=args.stage_retries,
                     lease=lease,
                 )
