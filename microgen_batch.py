@@ -981,6 +981,17 @@ def main() -> int:
     args.repo = args.repo.resolve()
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
+    # Unbounded normal production eventually reaches paid Gemini/TTS stages.
+    # Enforce the same explicit provider authorization already required for
+    # paid --stop-after campaigns; never silently rely on stored credentials.
+    if (not args.figure_extraction_only and not args.check_assignments and
+            args.stop_after is None and not args.authorize_provider_usage):
+        raise SystemExit(
+            "Unbounded production can call billed Gemini/Cloud TTS services; "
+            "explicit --authorize-provider-usage is required. "
+            "For no-cost work, use --figure-extraction-only or "
+            "--offline-figure-mapping --stop-after figure_merge."
+        )
     if args.multi_pc and not args.check_assignments:
         verified_sha = inspect_local_checkout(args.repo, expected_commit=args.commit)
         args.commit = verified_sha
