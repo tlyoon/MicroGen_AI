@@ -32,3 +32,7 @@ The former is the default. The latter is voluntary and requires genuinely truste
 
 ## Scope and remaining implementation work
 Historical legacy promotion coordinator paths still contain their own reviewer phases and do not automatically inherit the new API; migrate those separately with regression evidence **before** deploying this contract to them. Likewise, new automated figure, academic and individual-element highlighting validators are needed before claims of fully verified scholarly video quality are justified. This contract does not retroactively validate or publish pre-existing Thomas Calculus files.
+
+## 30 October 2026 owner TTS provider amendment — authoritative override
+
+The owner now **permits Google Cloud Text-to-Speech for troubleshooting** (short pronunciation/voice/provider diagnostics), including legitimate limited chargeable API usage. It **must not remain the implicit default for formal lecture TTS**. Formal TTS defaults to `MICROGEN_FORMAL_TTS_PROVIDER=unconfigured`, deliberately refusing new WAV synthesis until an approved provider is explicitly selected. Presence of Cloud credentials, legacy Chirp WAVs or a configured voice name does not confer formal production authorization. See `docs/OWNER_TTS_CLOUD_TROUBLESHOOTING_AMENDMENT_20261030.md` for controlling diagnostic limits, separate CLI, nonpublication, account/cost and provenance safeguards. The HP-only owner device amendment remains governing; any earlier Dell-only text above is historical.

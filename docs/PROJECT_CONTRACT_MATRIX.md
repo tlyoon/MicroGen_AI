@@ -85,3 +85,7 @@ Original MicroGen_AI **HP exclusively** (Dell-115 reserved for MicroGen_AI_Web).
 | Full new slide generation and source-grounded narration | **PENDING** | Figure mapping and new Gemini slide/narration production not run |
 | Fresh TTS from new narration | **PENDING** | No billable TTS call; historical A/B corrected WAV trial remains unapproved |
 | Full first original PDF→published video | **NOT COMPLETE** | HP historical downstream video reproduced in #193, new upstream figure extraction now achieved; missing middle AI/TTS stages + scholarly review |
+
+## 30 October 2026 owner TTS provider amendment — authoritative override
+
+The owner now **permits Google Cloud Text-to-Speech for troubleshooting** (short pronunciation/voice/provider diagnostics), including legitimate limited chargeable API usage. It **must not remain the implicit default for formal lecture TTS**. Formal TTS defaults to `MICROGEN_FORMAL_TTS_PROVIDER=unconfigured`, deliberately refusing new WAV synthesis until an approved provider is explicitly selected. Presence of Cloud credentials, legacy Chirp WAVs or a configured voice name does not confer formal production authorization. See `docs/OWNER_TTS_CLOUD_TROUBLESHOOTING_AMENDMENT_20261030.md` for controlling diagnostic limits, separate CLI, nonpublication, account/cost and provenance safeguards. The HP-only owner device amendment remains governing; any earlier Dell-only text above is historical.

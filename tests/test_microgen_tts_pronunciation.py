@@ -10,6 +10,11 @@ import text_to_speech_v25 as tts
 
 
 class ScientificPronunciationTests(unittest.TestCase):
+    def setUp(self):
+        provider = patch.dict(tts.os.environ, {"MICROGEN_FORMAL_TTS_PROVIDER": "google_cloud"})
+        provider.start()
+        self.addCleanup(provider.stop)
+
     def test_thomas_continuity_section_2_5_reproductions(self):
         slide5 = (
             "The two-sided limit as x approaches c is exactly equal to "

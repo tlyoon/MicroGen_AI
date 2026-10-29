@@ -149,13 +149,15 @@ def _is_transient_tts_error(exc: Exception) -> bool:
     ) or type(exc).__name__ in {"DeadlineExceeded", "InternalServerError", "RetryError", "ServiceUnavailable", "TooManyRequests"}
 
 
-def _google_synthesize(text: str, output: Path) -> str:
+def _google_synthesize(text: str, output: Path, *, max_attempts: int = 4) -> str:
     from google.cloud import texttospeech
 
     location = LOCATION.strip().lower()
     options = None if location in {"", "global"} else {"api_endpoint": f"{location}-texttospeech.googleapis.com"}
     response = None
-    for attempt in range(4):
+    if max_attempts not in (1, 4):
+        raise ValueError("Only bounded one-attempt diagnostics or existing four-attempt formal synthesis")
+    for attempt in range(max_attempts):
         try:
             client = texttospeech.TextToSpeechClient(client_options=options) if options else texttospeech.TextToSpeechClient()
             response = client.synthesize_speech(
@@ -172,7 +174,7 @@ def _google_synthesize(text: str, output: Path) -> str:
             )
             break
         except Exception as exc:
-            if attempt == 3 or not _is_transient_tts_error(exc):
+            if attempt == max_attempts - 1 or not _is_transient_tts_error(exc):
                 raise
             time.sleep(2**attempt)
     if response is None:
@@ -201,6 +203,8 @@ def synthesize(text: str, output: Path) -> str:
     from microgen_pronunciation import require_safe_speech
     spoken = normalize_scientific_speech(text)
     require_safe_speech(text, spoken)
+    from microgen_tts_provider_policy import require_formal_provider
+    require_formal_provider()
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         return _google_synthesize(spoken, output)
@@ -249,6 +253,8 @@ def _speech_items() -> list[dict[str, str]]:
 
 
 def main() -> None:
+    from microgen_tts_provider_policy import require_formal_provider
+    require_formal_provider()  # fail before credentials, cache or production WAV access
     _load_runtime_environment()
     items = _speech_items()
     if not items:

@@ -23,6 +23,11 @@ SLIDE10 = (
 
 
 class LetterNameTests(unittest.TestCase):
+    def setUp(self):
+        provider = patch.dict(os.environ, {"MICROGEN_FORMAL_TTS_PROVIDER": "google_cloud"})
+        provider.start()
+        self.addCleanup(provider.stop)
+
     def test_real_slide_10_both_occurrences_spoken_as_why_value(self):
         spoken = tts.normalize_scientific_speech(SLIDE10)
         self.assertEqual(spoken.count("why value"), 2)
