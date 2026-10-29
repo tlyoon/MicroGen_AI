@@ -7,6 +7,7 @@ formal TTS choice.
 """
 from __future__ import annotations
 import os
+from pathlib import Path
 
 FORMAL_PROVIDER_ENV = "MICROGEN_FORMAL_TTS_PROVIDER"
 NO_FORMAL_PROVIDER = "unconfigured"
@@ -19,7 +20,20 @@ class TTSProviderPolicyError(RuntimeError):
 
 def selected_formal_provider(environ=None) -> str:
     env = os.environ if environ is None else environ
-    value = str(env.get(FORMAL_PROVIDER_ENV) or NO_FORMAL_PROVIDER).strip().lower()
+    configured = env.get(FORMAL_PROVIDER_ENV)
+    if configured is None:
+        # Read ONLY the provider selector from the established .env, without
+        # loading service-account credentials or mutating process environment.
+        from dotenv import dotenv_values
+        base = env.get("MICROVID_CONFIG_DIR")
+        if base:
+            path = Path(base).expanduser() / ".env"
+        elif env.get("LOCALAPPDATA"):
+            path = Path(env["LOCALAPPDATA"]) / "Microvid" / ".env"
+        else:
+            path = Path.home() / "AppData" / "Local" / "Microvid" / ".env"
+        configured = dotenv_values(path).get(FORMAL_PROVIDER_ENV) if path.is_file() else None
+    value = str(configured or NO_FORMAL_PROVIDER).strip().lower()
     if value in ("", NO_FORMAL_PROVIDER, "none", "off", "disabled"):
         return NO_FORMAL_PROVIDER
     if value == EXPLICIT_CLOUD_PROVIDER:

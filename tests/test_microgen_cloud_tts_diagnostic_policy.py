@@ -36,6 +36,23 @@ class TTSDiagnosticContractTests(unittest.TestCase):
                 credential.assert_not_called()
                 self.assertFalse(target.parent.exists())
 
+    def test_established_dotenv_formal_selector_is_read_without_secret_loading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            envfile = config / ".env"
+            envfile.write_text(
+                "MICROGEN_FORMAL_TTS_PROVIDER=google_cloud\n"
+                "SOME_PRIVATE_KEY=never_echo_or_load\n",
+                encoding="utf-8",
+            )
+            values = {"MICROVID_CONFIG_DIR": str(config)}
+            self.assertEqual(policy.selected_formal_provider(values), "google_cloud")
+            self.assertEqual(policy.selected_formal_provider(
+                {**values, "MICROGEN_FORMAL_TTS_PROVIDER": "unconfigured"}),
+                "unconfigured")
+            envfile.write_text("SOME_PRIVATE_KEY=irrelevant\n", encoding="utf-8")
+            self.assertEqual(policy.selected_formal_provider(values), "unconfigured")
+
     def test_formal_cloud_possible_only_with_explicit_selection(self):
         with patch.dict(os.environ, {"MICROGEN_FORMAL_TTS_PROVIDER": "google_cloud"}):
             self.assertEqual(policy.require_formal_provider(), "google_cloud")
