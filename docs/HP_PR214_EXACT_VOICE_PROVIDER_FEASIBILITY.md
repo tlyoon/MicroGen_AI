@@ -1,0 +1,29 @@
+# PR #214 — No-charge provider feasibility, genuine local WAV probe, and paid-stage safety
+
+Project: **original** `tlyoon/MicroGen_AI` — HP only. This PR does not change narration voice, invoke Gemini or Google Cloud APIs, replace production slides, or publish courseware.
+
+## What was actually verified on HP (29 October 2026)
+
+- The original production `text_to_speech_v25.py` is configured for `en-US-Chirp-HD-F` by default, and the existing HP `Microvid` voice configuration did **not** override that value. Thus the established original-MicroGen voice is **Google Cloud Chirp HD F**, not Microsoft SAPI or the distinct newer Chirp 3 model.
+- Two installed, fully local Windows SAPI voices were detected: **Microsoft David Desktop** and **Microsoft Zira Desktop**. A real source-verbatim sentence from original Serway 1.1 page 1 was synthesized on HP using the explicitly selected **Microsoft Zira Desktop** voice. Output is a quarantined diagnostic, **not** a replacement for the required production voice.
+- Real diagnostic file: `C:\Users\tlyoo\AppData\Local\MicroGen_AI_Checkpoints\20261029_HP_PR214_SAPI_DIAGNOSTIC\sapi_zira_NOT_PRODUCTION.wav`, 238788 bytes, **5.414 seconds**, mono 16-bit PCM at **22050 Hz**, SHA-256 `5e75ccad1da7ef72eb2c194034b88fe96bfe7d8dba794b80e1f850828792d019`. PCM RMS **3161**, not silent. Input sentence: `In mechanics, the three fundamental quantities are length, mass, and time.`
+- Source original and staged PDF SHA: `a9727afee30282deeb22f34ce67323e168ab6a2893f2754f27f683ab28b9`. The reusable `microgen_provider_voice_feasibility.py` validates that the sentence appears in original PDF page 1, hashes the original source and the WAV, inspects actual WAV PCM and duration, and explicitly records `production_voice_identity_verified=false`, `speech_content_phonetically_verified=false`, `publication_allowed=false`, no provider requests and no full Serway lecture. **The source-text check does not certify spoken phonemes.** The SAPI voice was selected by the test invocation but its voice string is not an independent acoustic identification.
+- Actual detailed report: `C:\Users\tlyoo\AppData\Local\MicroGen_AI_Checkpoints\20261029_HP_PR214_SAPI_DIAGNOSTIC\provider_feasibility_receipt_v2.json`. It is source SHA-bound; old receipts are never overwritten.
+- Existing Chrome processes were found, but no Chrome remote-debugging port was advertised. Therefore the current browser could not be safely attached for an authenticated, source-grounded Gemini web-text trial. **Gemini web text feasibility and identity remain unverified.** No browser prompt submitted. This is not evidence that Gemini Apps itself is unavailable; only the already-open HP session lacked an accessible read-only debugger.
+- The original SAPI fallback is already disallowed by the package's TTS voice-provenance release gate; the new regression verifies this rejection using the **existing** `microgen_tts_provenance.make_record` / `verify_record`. No alternate voice is silently blessed.
+
+## Real cost constraint
+
+Google Cloud official documentation currently states **billing must be enabled** for Google Cloud TTS and usage can incur charges after free limits: https://cloud.google.com/text-to-speech/pricing . Its current pricing table lists a monthly free allowance for **Chirp 3 HD** voices, but this does **not** establish a verified gratis entitlement for the project's different `en-US-Chirp-HD-F` voice, nor guarantee the account has remaining quota or an enabled spending cap. Google lists `en-US-Chirp-HD-F` explicitly among supported voice names: https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types . Google Gemini Apps may have a no-extra-charge user interface subject to compute limits, but **no authenticated UI source-output test** has completed on HP under this project; limits reference: https://support.google.com/gemini/answer/16275805 .
+
+**No billed API call was performed** and no free-tier account balance was queried. Do not infer subscription entitlements from credentials or available binaries.
+
+## Critical batch safety defect fixed
+
+Before this PR, `microgen_batch.py --stop-after video` without `--authorize-provider-usage` was correctly blocked, **but an unbounded default batch** could proceed to Gemini and cloud TTS without the same explicit flag. The runner now requires `--authorize-provider-usage` for any unbounded production campaign, **before creating a work folder, initializing remote resources or attempting any provider stage**. The existing safe `--figure-extraction-only`, bounded `--offline-figure-mapping --stop-after figure_merge`, and source assignment-check-only behavior stay available without provider permission. Approval of the flag itself is an operator action; it is **not** a promise of zero cost or a substitute for owner billing approval.
+
+## Testing and completion scope
+
+No paid APIs, Whisper, Google Gemini UI prompt, local computer outside HP, protected Google Drive source mutation or publication. The standalone feasibility module can only inspect an **existing** audio file and source PDF; it does not synthesize on import, cannot overwrite a prior receipt and never accepts local SAPI as production speech. Tests cover a positive synthetic technical WAV, source-text mismatch, unreadable/silent WAV, non-overwrite, unchanged release guard rejecting SAPI, identity-claim restraint even on matching voice strings, and unattended unbounded provider guards.
+
+This is a **decision-quality feasibility milestone, NOT end-to-end source-to-video completion**. Real new Serway lecture narration and narrator-matched WAVs are still absent. Next development step: an owner-authorized exact-voice provider route with verified no-cost status, or a narrow explicit change of voice/cost contract. Do not create a fake production WAV or count the SAPI sample as a lecture deliverable.
