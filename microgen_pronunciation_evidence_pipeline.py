@@ -76,8 +76,10 @@ def build_post_tts_evidence(
         for mismatch in row["screening"]["word_mismatches"]:
             left=mismatch["expected"]
             right=mismatch["recognized"]
-            if not left or not right or left==right:
+            if left == right:
                 continue
+            # Keep insertion-only and deletion-only ASR alignment hypotheses.
+            # They are reviewable evidence, never acoustic proof or repair triggers.
             # Candidates are word-pair hypotheses, *never* a confirmed error.
             key=(" ".join(left)[:90]," ".join(right)[:90])
             value=words[key]
