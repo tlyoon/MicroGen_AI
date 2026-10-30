@@ -35,3 +35,7 @@ The model recognized the same surrounding words. In this context its `sea` word 
 - Independently validated, SHA-bound comparison: `C:\Users\tlyoo\AppData\Local\MicroGen_AI_Checkpoints\20261030_HP_PR216_CDOT_HASH_BOUND_PAIR_RECEIPT.json`.
 
 All these items remain external to original G: textbook and lesson files. No Cloud requests are used in CI or test runs. Code is not a finished Serway 1.1 lecture; the formal provider default **remains unconfigured**.
+
+## SDK-level diagnostic retry/timeout correction
+
+Review of the Google Cloud client identified that `max_attempts=1` in MicroGen's own retry loop alone does not exclude client-library retries. PR #216 therefore explicitly passes `retry=None` and `timeout=30.0` to `TextToSpeechClient.synthesize_speech` **only when using the bounded diagnostic (one-attempt) mode**. Historical formal TTS calls retain their existing SDK defaults and MicroGen's four-attempt policy when separately authorized. Mocked offline SDK regressions confirm the diagnostic call makes exactly one client method invocation, has no SDK retry policy, has a 30-second request timeout, and preserves the legacy formal call signature. No additional paid API call was needed to test this correction.
