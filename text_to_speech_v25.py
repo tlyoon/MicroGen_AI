@@ -368,6 +368,21 @@ def main() -> None:
     report_path = save_immutable_risk_report(cache, risk)
     print(f"[TTS] Source-derived pronunciation risk report: {report_path} "
           f"({risk['risk_count']} risks, {len(risk['risk_review_slides'])} slides).")
+    # Automatic offline pronunciation evidence is produced after the normal
+    # TTS voice and WAV manifests are verified. This is an advisory QA
+    # checkpoint, not an acoustic approval or new Cloud provider invocation.
+    from microgen_pronunciation_evidence_pipeline import (
+        build_post_tts_evidence, save_stage_evidence,
+    )
+    pronunciation_evidence = build_post_tts_evidence(
+        Path.cwd(),
+        [{"slide": i, "tts_text": str(item["tts_text"] or item["narration"])}
+         for i, item in enumerate(items, 1)],
+        normalize_scientific_speech,
+    )
+    evidence_path = save_stage_evidence(Path.cwd(), pronunciation_evidence)
+    print(f"[TTS] Offline source/WAV pronunciation evidence: {evidence_path} "
+          f"(acoustic approval NOT implied).")
     print(f"Success: technically verified {len(items)} audio files with voice-bound {manifest}.")
     print("[QA] Acoustic transcript screening and independent listening remain REQUIRED before publication.")
 
