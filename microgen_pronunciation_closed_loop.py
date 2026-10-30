@@ -112,7 +112,14 @@ def expand_unambiguous_math(text: str, *, glossary: list[dict] | None = None) ->
 
 
 def _word(word: str) -> str:
-    val = re.sub(r"[^a-z]", "", str(word).casefold())
+    # Preserve numerical math tokens: deleting digits would fabricate blank
+    # alignment words and falsely inflate technical-term pronunciation alerts.
+    val = re.sub(r"[^a-z0-9]", "", str(word).casefold())
+    if len(val) == 1 and val in "0123456789":
+        return ("zero", "one", "two", "three", "four",
+                "five", "six", "seven", "eight", "nine")[int(val)]
+    # Longer numbers are intentionally left as numeric strings. Their spoken
+    # forms are context-dependent and must not be guessed or auto-repaired.
     return {"sea": "see", "cee": "see", "y": "why", "x": "ex"}.get(val, val)
 
 

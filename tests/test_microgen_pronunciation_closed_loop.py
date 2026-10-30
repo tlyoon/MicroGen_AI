@@ -97,6 +97,17 @@ class ClosedLoopPronunciationTests(unittest.TestCase):
                             words("the yay value changes",wavhash),wavhash)
         self.assertEqual(y["high_confidence_flags"][0]["code"],"math_letter_y_yay")
 
+    def test_numeric_tokens_do_not_vanish_from_asr_alignment(self):
+        h = "a" * 64
+        one_digit = loop.screen_audio("Use 7 and 3.", words("use seven and three", h), h)
+        self.assertEqual(one_digit["word_mismatches"], [])
+        several = loop.screen_audio("At 12, add 7.", words("at twelve add seven", h), h)
+        self.assertEqual(several["word_mismatches"], [
+            {"kind": "replace", "expected": ["12"], "recognized": ["twelve"]},
+        ])
+        self.assertFalse(several["high_confidence_flags"])
+        self.assertFalse(several["acoustic_approved"])
+
     def test_audio_mismatch_outside_known_pattern_is_not_autofixed(self):
         h="a"*64
         bad=loop.screen_audio("the function is continuous",
