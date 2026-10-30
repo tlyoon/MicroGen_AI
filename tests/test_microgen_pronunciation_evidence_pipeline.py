@@ -101,6 +101,27 @@ class PronunciationPipelineTests(unittest.TestCase):
                     self.assertEqual(row["examples"][0]["wav_sha256"], sha[0])
             self.assertFalse(report["publication_allowed"])
 
+    def test_real_wav_evidence_retains_numbers_without_blank_word_pairs(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stage, slides = make_stage(root)
+            slides[0]["tts_text"] = "Take the derivative at 7 and 12."
+            (stage / "script_tts.json").write_text(
+                json.dumps({"slides": slides}), encoding="utf8")
+            sha = [p.sha_file(stage / f"slide{i}.wav") for i in (1, 2)]
+            obs = [
+                observation("take the derivative at seven and twelve", sha[0]),
+                observation("the root of eff of ex is positive", sha[1]),
+            ]
+            result = p.build_post_tts_evidence(stage, slides, normalize, observations=obs)
+            rows = result["unverified_word_pair_candidates"]
+            self.assertIn(("12", "twelve"),
+                          {(x["expected"], x["recognized"]) for x in rows})
+            self.assertFalse(any(
+                not x["expected"].strip() and x["recognized"] for x in rows))
+            self.assertFalse(result["high_confidence_diagnostic_candidate_slides"])
+            self.assertFalse(result["publication_allowed"])
+
     def test_technical_term_difference_is_prioritized_but_never_auto_fixed(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
