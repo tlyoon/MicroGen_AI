@@ -81,14 +81,34 @@ def find_pronunciation_risks(raw: str, normalized: str) -> list[Risk]:
         add(match,"math_c_sentence","see.",bool(re.search(r"\bsee\.(?=\s|$)",normalized)),
             "Letter C at a sentence boundary may be read as 'circa'.")
     for match in _RAW_VARIABLE_EXPRESSION.finditer(raw):
-        add(match,"function_argument",None,False,
-            "Function notation requires a reviewed spoken expansion.")
+        letters = {"f": "eff", "g": "gee", "h": "aitch",
+                   "x": "ex", "y": "why", "t": "tee"}
+        expected = letters[match["function"].lower()] + " of " + letters[match["argument"].lower()]
+        approved = expected in normalized.lower()
+        add(match,"function_argument",expected if approved else None,approved,
+            "Simple single-letter function application is expanded only by reviewed TTS notation rules.")
     for match in _RAW_SUBSCRIPT.finditer(raw):
-        add(match,"subscript",None,False,
-            "Subscripts need a reviewed spoken interpretation.")
+        simple = re.fullmatch(r"(?P<letter>[xyz])_(?P<index>[0-9])", match.group(), re.I)
+        expected = None
+        if simple:
+            names = {"x":"ex","y":"why","z":"zee"}
+            digits = ("zero","one","two","three","four","five",
+                      "six","seven","eight","nine")
+            expected = names[simple["letter"].lower()] + " subscript " + digits[int(simple["index"])]
+        approved = bool(expected and expected in normalized.lower())
+        add(match,"subscript",expected if approved else None,approved,
+            "Single-digit coordinate subscripts have reviewed speech; symbolic/multidigit forms remain unreviewed.")
     for match in _AMBIGUOUS_MATH_ABBR.finditer(raw):
-        add(match,"math_abbreviation",None,False,
-            "Mathematical abbreviation/operation may be misread.")
+        function = match.group().lower()
+        operand = re.match(r"\s*\(\s*([xyt])\s*\)", raw[match.end():])
+        phrase = {"sin":"sine", "cos":"cosine",
+                  "tan":"tangent", "ln":"natural logarithm"}
+        letters = {"x":"ex","y":"why","t":"tee"}
+        expected = (phrase[function] + " of " + letters[operand.group(1)]
+                    if operand and function in phrase else None)
+        approved = bool(expected and expected in normalized.lower())
+        add(match,"math_abbreviation",expected if approved else None,approved,
+            "Exact parenthesized elementary math form is reviewed; free-text abbreviation remains ambiguous.")
     for match in _GREEK_SYMBOL.finditer(raw):
         add(match,"greek_symbol",None,False,
             "Greek name normalized, but phonetic verification is still required.")

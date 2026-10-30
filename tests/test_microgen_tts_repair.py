@@ -86,7 +86,7 @@ class BoundedRepairTests(unittest.TestCase):
             self.assertEqual(r["status"],"ACOUSTIC_QA_UNAVAILABLE")
     def test_unknown_or_unreviewed_expression_is_not_autofixed(self):
         with tempfile.TemporaryDirectory() as td:
-            p=Path(td);stage=p/"stage";regis=self.stage(stage,"Evaluate f(x).")
+            p=Path(td);stage=p/"stage";regis=self.stage(stage,"Evaluate x_12.")
             self.assertEqual(repair.authorized_slides(regis),[])
             with self.assertRaises(repair.RepairError):
                 repair.stage_repair(stage,regis,1,p/"new",lambda *a:None,normalize)

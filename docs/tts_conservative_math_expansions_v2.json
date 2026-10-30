@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "description": "Conservative unambiguous TTS-only math notation forms. Not source rewriting or acoustic certification.",
+  "rules": [
+    {
+      "id": "parenthesized-elementary-function",
+      "safety": "conservative_math_notation",
+      "replacement_kind": "math_function",
+      "regex": "(?<![A-Za-z0-9_])(?P<function>sin|cos|tan|ln)\\s*\\(\\s*(?P<variable>[xyt])\\s*\\)",
+      "examples": [
+        "sin(x)",
+        "cos(y)",
+        "tan(t)",
+        "ln(x)"
+      ],
+      "negative_examples": [
+        "sinewave(x)",
+        "arcsin(x)",
+        "sin x",
+        "sin(x+1)",
+        "Sinclair(x)"
+      ]
+    },
+    {
+      "id": "parenthesized-single-letter-function",
+      "safety": "conservative_math_notation",
+      "replacement_kind": "function_argument",
+      "regex": "(?<![A-Za-z0-9_])(?P<function>[fgh])\\s*\\(\\s*(?P<variable>[xyt])\\s*\\)",
+      "examples": [
+        "f(x)",
+        "g(y)",
+        "h(t)"
+      ],
+      "negative_examples": [
+        "fig(x)",
+        "f(x+1)",
+        "f(x,y)",
+        "f(z)",
+        "half(x)"
+      ]
+    },
+    {
+      "id": "single-digit-math-subscript",
+      "safety": "conservative_math_notation",
+      "replacement_kind": "numeric_subscript",
+      "regex": "(?<![A-Za-z0-9_])(?P<variable>[xyz])_(?P<index>[0-9])\\b",
+      "examples": [
+        "x_1",
+        "y_0",
+        "z_9"
+      ],
+      "negative_examples": [
+        "text_x_1",
+        "x_10",
+        "a_n",
+        "x_name",
+        "x_3D",
+        "index_1"
+      ]
+    }
+  ]
+}
