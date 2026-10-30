@@ -54,8 +54,13 @@ class PreflightTests(unittest.TestCase):
                 with self.assertRaisesRegex(check.PronunciationPreflightError, "raw_latex_command"):
                     check.require_safe_speech(raw, tts.normalize_scientific_speech(raw))
 
-    def test_subscript_must_be_reviewed(self):
-        for raw in ("Let x_1 be initial position.", "Coefficient a_n is finite."):
+    def test_only_unreviewed_subscripts_are_blocked(self):
+        # This exact single-digit coordinate form is now an approved
+        # context-limited TTS expansion; symbolic and compound indices remain unsafe.
+        source = "Let x_1 be initial position."
+        self.assertIn("ex subscript one", tts.normalize_scientific_speech(source))
+        check.require_safe_speech(source, tts.normalize_scientific_speech(source))
+        for raw in ("Coefficient a_n is finite.", "Evaluate x_12 next."):
             with self.subTest(raw=raw):
                 with self.assertRaisesRegex(check.PronunciationPreflightError, "raw_subscript"):
                     check.require_safe_speech(raw, tts.normalize_scientific_speech(raw))

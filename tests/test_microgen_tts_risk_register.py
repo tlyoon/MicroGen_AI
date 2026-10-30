@@ -146,19 +146,19 @@ class RiskTests(unittest.TestCase):
                 risk.save_immutable_risk_report(stage,one)
             self.assertNotEqual(path1.read_bytes(),original)
 
-    def test_repair_plan_only_for_reviewed_automatic_rule(self):
+    def test_repair_plan_includes_new_reviewed_function_rule(self):
         source=[
             {"slide":1,"tts_text":"The y-value is continuous at c. Next."},
             {"slide":2,"tts_text":"Study f(x) and its graph."},
         ]
         report=risk.build_risk_register(source,normalize)
-        self.assertEqual(report["suggested_isolated_repair_slides"],[1])
+        self.assertEqual(report["suggested_isolated_repair_slides"],[1,2])
         self.assertEqual(report["risk_review_slides"],[1,2])
         self.assertTrue(all(not a["publishable"] for s in report["slides"]
                             for a in s["repair_actions"]))
         self.assertEqual(
             report["slides"][1]["repair_actions"][0]["action"],
-            "REVIEW_AND_AUTHOR_EXPLICIT_TTS_ONLY_TEXT_BEFORE_SYNTHESIS"
+            "REGENERATE_WITH_EXISTING_REVIEWED_NORMALIZATION_IN_ISOLATED_STAGE"
         )
 
     def test_rejects_partial_or_unreadable_audio_hash_inventory(self):

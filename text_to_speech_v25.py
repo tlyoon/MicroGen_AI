@@ -75,7 +75,10 @@ def normalize_scientific_speech(text: str) -> str:
         ("π", " pi "), ("Δ", " delta "), ("σ", " sigma "), ("Ω", " ohms "),
         ("°C", " degrees Celsius "), ("%", " percent "),
     )
-    out = str(text or "")
+    from microgen_pronunciation_closed_loop import expand_unambiguous_math
+    # Reviewed, context-limited notation expansions are applied ONLY to TTS
+    # speech input, before legacy symbol/unit conversion. Never edit slides.
+    out = expand_unambiguous_math(str(text or ""))
     for source, target in replacements:
         out = out.replace(source, target)
     # Stable symbol names are safe to normalize without guessing their role.
