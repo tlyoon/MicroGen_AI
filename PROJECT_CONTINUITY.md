@@ -17,7 +17,8 @@
 - Repository: https://github.com/tlyoon/MicroGen_AI , branch `main`.
 - PR #217 merged at `05f817fd3b7d2bd25f470a5a032eb0ed68fdfcd8`: generalized, conservative math pronunciation normalization and source/WAV/ASR-bound diagnostics.
 - PR #218 merged at `388c33ffc11aa18cbf536c3154ddf622f99c0b68`: automatic immutable post-TTS pronunciation evidence capture and ASR candidate catalog. Historical HP full regression: 1085 passed, 5 skipped, 159 subtests; hosted CI four jobs passed.
-- PR #219 merged at `1bccd453777413ad6329f2b50dc7d7cb2d78b730`: preserve purely inserted/omitted recognized-word hypotheses. Tested HP root-level 1081 passed, 10 skipped, 159 subtests, hosted CI 4/4 successful. Historical branch PR #219 reported in section below is complete.
+- PR #219 merged at `1bccd453777413ad6329f2b50dc7d7cb2d78b730`: preserve purely inserted/omitted recognized-word hypotheses. Tested HP root-level 1081 passed, 10 skipped, 159 subtests, hosted CI 4/4 successful.
+- PR #220 merged at `d569b7525e00153bfa48a3ca37f802692576e85a`: numerical tokens preserved in ASR alignment. HP root-level 1083 passed, 10 skipped, 159 subtests; GitHub run 41061698504 had 4/4 Windows/Ubuntu successful. Original 23 slide WAV/source/provider hashes unchanged.
 - Real historical Thomas §2.5 evidence: 23 original WAVs + 23 SHA-bound offline ASR receipts; 69 source pronunciation risks, 91 distinct *unverified* transcript differences, 11 possible technical-term difference cases, not 91 proven defects.
 - Separate Serway §1.1 is an eight-page offline source-grounded draft, **not** a complete formal voice-matched video. Formal provider remains unconfigured.
 
@@ -40,10 +41,18 @@
 - Independent HP comparison of pre/post evidence: all 23 audio SHA-256 values, the original script SHA-256 and provider provenance manifest SHA-256 match exactly. The new 89-candidate catalog has 28 removed/changed pairs and 19 added/changed pairs relative to the previous 98; the totals are not a count of confirmed audio problems.
 - Original Serway §1.1 remains an eight-page offline draft, not a source-to-video publishable lecture.
 
-## Next priorities after PR #220
+## Current workstream — HP PR #221: real SHA-bound technical-term ASR time suggestions
 
-1. Complete full HP regression, push and verify PR #220 hosted CI, merge only if all required checks pass. Update checkpoint with exact final SHA.
-2. Produce SHA-bound **timed** candidate evidence for the remaining 11 technical-word hypotheses from real WAV + offline ASR without claiming exact phonetic certainty, and prepare bounded source-preserving listening/independent cross-check clips only where timestamps are unambiguous.
-3. Improve independently corroborated pronunciation defects conservatively; keep sound-alike homophones and uncertain ASR spellings advisory. No automatic production WAV overwrite.
-4. Choose a compatible formal TTS voice/provider within the project contract and finish a complete Serway §1.1 source-to-video proof before release; do not silently select diagnostic Google Cloud TTS as formal provider.
-5. Keep this checkpoint current after every merged PR and preserve HP-only execution.
+- New branch `feature/hp-pr221-hash-bound-asr-timing-index-20261030`, based on verified merged PR #220 main SHA `d569b7525e00153bfa48a3ca37f802692576e85a`.
+- New `microgen_tts_candidate_timing.py`: **offline only**, validates real source WAV hashes, independent per-slide Vosk report SHA and WAV identity, plausible ASR word times and confidences against actual PCM duration, and independently recomputes the exact source-bound pronunciation evidence before time-indexing technical-term hypotheses.
+- Finds unique contiguous ASR word spans; repeated matches remain `AMBIGUOUS_ASR_SPAN` with no timing guess. Every candidate remains unconfirmed, unrepaired, and nonpublishable. No Cloud/Gemini/Whisper/TTS calls or WAV/MP4/source writes. Refuses existing/external-source output overwrites.
+- Real original Thomas §2.5: all **11** technical-term hypotheses located at unique *ASR-recognized* slide intervals; 23 original WAVs and 23 SHA-bound offline Vosk reports; saved new separate immutable HP AppData file `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261030_HP_PR221_THOMAS25_TIMED_TECHNICAL_CANDIDATES.json`. These are approximate ASR timing suggestions, **not verified phoneme boundaries**. Examples: slide 14 cosine as `coast sign` near 45.36–45.96 s (ASR min confidence 0.7172); slide 11 theorem as `serum` near 0.03–0.39 s (ASR min confidence 0.49468).
+- Focused regression: **28 passed and 6 subtests passed**, covering ambiguous duplicates, forged evidence, SHA drift, impossible ASR time and immutable output rejection. **HP full root-level `python -m pytest -q`: 1087 passed, 10 skipped, 159 subtests passed, 2 known warnings, exit 0, 165.27s.** GitHub four-job CI remains independently required before merge.
+
+## Next priorities after PR #221
+
+1. Finish HP root-level regression, commit/push PR #221, check all four hosted CI jobs, merge only if successful, and record final merge SHA.
+2. Generate selectively bounded, SHA-bound short listening excerpts at verified *ASR-suggested* positions, in **external output-only** directories. Consider independent audio model/phoneme evidence where feasible; never infer phonetic correctness from Vosk alone.
+3. Fix **only** sufficiently corroborated pronunciation problems and re-verify sound; keep homophones and uncertain ASR spellings advisory. Do not auto-overwrite original WAVs or block otherwise acceptable speech.
+4. Resolve formal production TTS voice/provider within the contract, then run a source-to-video Serway §1.1 integration demonstration with independently verifiable source, figures, narrated mathematics and A/V QA, without automatic publication.
+5. Continue HP-only execution; synchronize checkpoint with each merged PR.
