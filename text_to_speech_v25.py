@@ -160,6 +160,10 @@ def _google_synthesize(text: str, output: Path, *, max_attempts: int = 4) -> str
     for attempt in range(max_attempts):
         try:
             client = texttospeech.TextToSpeechClient(client_options=options) if options else texttospeech.TextToSpeechClient()
+            # A diagnostic must bound BOTH our loop and the client SDK retry
+            # policy: otherwise one Python attempt could send several RPCs.
+            # Preserve the historical formal provider behavior unchanged.
+            rpc_options = {"retry": None, "timeout": 30.0} if max_attempts == 1 else {}
             response = client.synthesize_speech(
                 input=texttospeech.SynthesisInput(text=text),
                 voice=texttospeech.VoiceSelectionParams(
@@ -171,6 +175,7 @@ def _google_synthesize(text: str, output: Path, *, max_attempts: int = 4) -> str
                     audio_encoding=texttospeech.AudioEncoding.LINEAR16,
                     speaking_rate=SPEAKING_RATE,
                 ),
+                **rpc_options,
             )
             break
         except Exception as exc:

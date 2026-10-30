@@ -104,6 +104,41 @@ class TTSDiagnosticContractTests(unittest.TestCase):
                 paid.assert_not_called()
             creds.assert_called_once()
 
+    def test_literal_math_c_dot_control_is_quarantined_and_normalization_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dest = root / "raw_c_diagnostic_comparison"
+            calls = []
+            def fake(spoken, output, *, max_attempts=4):
+                calls.append((spoken, max_attempts))
+                synthetic_wav(output)
+                return "google_cloud_chirp3"
+            with patch.object(formal, "_load_runtime_environment"), \
+                 patch.object(formal, "_google_synthesize", side_effect=fake):
+                report = diag.run_diagnostic(
+                    "Evaluate at c. Next, take the limit.", dest,
+                    confirm_chargeable=True, literal_c_dot_comparison=True)
+            self.assertEqual(calls, [("Evaluate at c. Next, take the limit.", 1)])
+            self.assertEqual(report["synthesis_mode"], "RAW_C_DOT_CONTROL_ONLY")
+            self.assertFalse(report["normalization_applied"])
+            self.assertTrue(report["mathematical_c_dot_control_high_risk"])
+            self.assertFalse(report["publication_allowed"])
+            self.assertFalse((dest / "slide1.wav").exists())
+
+    def test_literal_mode_rejects_nonmathematical_and_unbounded_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for text in ("Vitamin C. Then eat fruit.", "The first reference is c. 1900.",
+                         "x_1 plus c. Next", "Some generic text."):
+                with self.subTest(text=text):
+                    dest = Path(tmp) / "diagnostic_reject"
+                    with patch.object(formal, "_google_synthesize") as cloud:
+                        with self.assertRaises(Exception):
+                            diag.run_diagnostic(
+                                text, dest, confirm_chargeable=True,
+                                literal_c_dot_comparison=True)
+                        cloud.assert_not_called()
+                        self.assertFalse(dest.exists())
+
     def test_failed_single_call_cleans_only_new_diagnostic_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
