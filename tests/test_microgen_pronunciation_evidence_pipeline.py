@@ -80,6 +80,27 @@ class PronunciationPipelineTests(unittest.TestCase):
             self.assertFalse(report["phonetic_identity_verified"])
             self.assertEqual(report["high_confidence_diagnostic_candidate_slides"],[])
 
+    def test_deletions_and_insertions_are_preserved_as_advisory_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage, slides = make_stage(Path(td))
+            sha = [p.sha_file(stage / f"slide{i}.wav") for i in (1, 2)]
+            obs = [
+                observation("take derivative at see next integrate two functions well", sha[0]),
+                observation("the root of eff of ex is positive", sha[1]),
+            ]
+            report = p.build_post_tts_evidence(stage, slides, normalize, observations=obs)
+            rows = report["unverified_word_pair_candidates"]
+            self.assertIn(("the", ""), {(x["expected"], x["recognized"]) for x in rows})
+            self.assertIn(("", "well"), {(x["expected"], x["recognized"]) for x in rows})
+            self.assertGreaterEqual(report["alignment_only_candidate_count"], 2)
+            for row in rows:
+                if not row["expected"] or not row["recognized"]:
+                    self.assertEqual(row["priority"], "ALIGNMENT_INSERTION_OR_OMISSION_UNVERIFIED")
+                    self.assertFalse(row["mispronunciation_confirmed"])
+                    self.assertFalse(row["automatic_rule_authorized"])
+                    self.assertEqual(row["examples"][0]["wav_sha256"], sha[0])
+            self.assertFalse(report["publication_allowed"])
+
     def test_technical_term_difference_is_prioritized_but_never_auto_fixed(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
