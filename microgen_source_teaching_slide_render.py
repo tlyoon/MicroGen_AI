@@ -15,6 +15,7 @@ from pathlib import Path
 import pymupdf as fitz
 from microgen_pronunciation_closed_loop import sha_file
 from microgen_offline_source_slide_draft import normal, OFFICIAL_SI_URL
+from microgen_section_academic_coverage import (STATUS as EXPANDED_STATUS, audit_section_11)
 
 
 class SourceSlideRenderError(ValueError):
@@ -32,7 +33,9 @@ def render_teaching_candidate(source_stage:Path, narration_qa:Path, plan_file:Pa
         raise SourceSlideRenderError("Real immutable source, figure and narration inputs required")
     report=json.loads(narration_qa.read_text(encoding="utf8"))
     plan=json.loads(plan_file.read_text(encoding="utf8"))
-    if (report.get("status")!="EIGHT_SLIDE_NARRATION_DRAFT_COMPLETE_UNAPPROVED"
+    expanded = report.get("status")==EXPANDED_STATUS
+    if (report.get("status") not in (
+            "EIGHT_SLIDE_NARRATION_DRAFT_COMPLETE_UNAPPROVED",EXPANDED_STATUS)
         or report.get("source_pdf_sha256")!=sha_file(source)
         or report.get("academic_accuracy_independently_verified") is not False
         or report.get("publication_allowed") is not False
@@ -45,6 +48,14 @@ def render_teaching_candidate(source_stage:Path, narration_qa:Path, plan_file:Pa
         or not 1<=figure_slide<=len(plan["slides"])
         or not 1<=historical_si_slide<=len(plan["slides"])):
         raise SourceSlideRenderError("Invalid historical figure/SI slide mapping")
+    if expanded:
+        # The text on page four contains the beginning of section 1.2.
+        # Verify all fourteen section-1.1 topics against the bounded source
+        # before emitting any new slide candidate.
+        audit_section_11(source_stage,narration_qa,plan_file)
+        if (report["slide_count"]!=14 or figure_slide!=7
+            or historical_si_slide!=6):
+            raise SourceSlideRenderError("Expanded source lesson figure and SI slide placements invalid")
     dest=new_output.resolve(strict=False)
     if (new_output.exists() or new_output.is_symlink() or not dest.parent.is_dir()
         or source_stage.resolve(strict=True) in dest.parents
@@ -113,12 +124,16 @@ def render_teaching_candidate(source_stage:Path, narration_qa:Path, plan_file:Pa
                 if i==historical_si_slide and OFFICIAL_SI_URL not in [
                     link.get("uri") for link in actual[i-1].get_links()]:
                     raise SourceSlideRenderError("Historical SI correction citation missing")
-        receipt={"schema_version":1,"status":"FULLER_TEACHING_SLIDE_CANDIDATE_UNAPPROVED",
+        receipt={"schema_version":1,"status":(
+            "EXPANDED_SECTION_TEACHING_SLIDE_CANDIDATE_UNAPPROVED" if expanded
+            else "FULLER_TEACHING_SLIDE_CANDIDATE_UNAPPROVED"),
             "source_pdf_sha256":source_hash,"figure_sha256":figure_hash,
             "narration_qa_sha256":qa_hash,"visual_plan_sha256":plan_hash,
             "rendered_pdf_sha256":sha_file(pdf),"slide_count":len(rows),
             "slides":rows,"figure_slide":figure_slide,
             "historical_si_slide":historical_si_slide,
+            "section_11_coverage_spot_checked":expanded,
+            "section_12_source_excluded":expanded,
             "figure_semantics_independently_verified":False,
             "academic_accuracy_independently_verified":False,
             "formal_voice_authorized":False,"generated_wavs":False,
@@ -142,8 +157,11 @@ def main(argv=None):
     p.add_argument("--narration-qa",type=Path,required=True)
     p.add_argument("--visual-plan",type=Path,required=True)
     p.add_argument("--new-dir",type=Path,required=True)
+    p.add_argument("--figure-slide",type=int,default=5)
+    p.add_argument("--historical-si-slide",type=int,default=4)
     a=p.parse_args(argv)
-    result=render_teaching_candidate(a.stage,a.narration_qa,a.visual_plan,a.new_dir)
+    result=render_teaching_candidate(a.stage,a.narration_qa,a.visual_plan,a.new_dir,
+        figure_slide=a.figure_slide,historical_si_slide=a.historical_si_slide)
     print(json.dumps({"slides":result["slide_count"],"directory":str(a.new_dir),
                       "publication_allowed":False}))
     return 0
