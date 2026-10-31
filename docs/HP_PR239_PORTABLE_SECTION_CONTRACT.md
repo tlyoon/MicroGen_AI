@@ -1,0 +1,13 @@
+# PR239 — Portable section academic-coverage contract
+
+`microgen_portable_section_contract.py` is an independent stage that validates a declarative source section specification for **different PDF chapters/sections**. The contract includes the actual source PDF SHA, narration QA SHA, visual-plan SHA, the target section start text, its next-section boundary (or explicit end of PDF), a unique set of topic identifiers and original-source-page anchors, and the required spoken + visible concept terms.
+
+The auditor opens the actual PDF, bounds the text before the adjacent next-section marker, rejects absent boundaries and wrong page/identity/word-count/text SHA, checks every declared concept against both authored speech and visible plan, and rejects forged publication state. It writes a source-locked candidate report. It deliberately does NOT assert all scientifically relevant concepts were enumerated, that math is universally correct or that source figure licenses are cleared.
+
+**Real HP compatibility verification:** the new generic contract independently passed an actual 14-topic manifest on the original Serway §1.1 source, including its shared page-four §1.2 boundary, while the manifest and copyrighted content stayed private under `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261101_HP_PR239_PORTABLE_SERWAY_11_*_PRIVATE.json`.
+
+**Second-section synthetic proof:** unit tests build a separate toy section B.2 with three original concepts and adjacent B.3 text in a freshly generated PDF. The portable auditor passes this case and rejects missing next-section boundaries, using neighboring-section material as source evidence, altered narration hashes, duplicate topic IDs and changed PDF SHA. Five focused synthetic tests passed. This demonstrates genuine **contract portability**, not a real second textbook lecture.
+
+This stage is intended to become the required manifest audit for future multi-section orchestration. The original Serway 1.1 one-shot pipeline remains independently verified; future PRs should generalize its source renderer and TTS/media generation beyond hard-coded Serway specifics and execute a second original-source pilot once its authorized source is available.
+
+No paid services, no academic manual-review gate, no source/figure modifications or publication. All source-dependent topic content and actual reports stay private on HP. Full root HP regression and all four hosted CI jobs are mandatory before merge.
