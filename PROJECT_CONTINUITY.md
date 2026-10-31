@@ -134,3 +134,11 @@
 - Actual HP source-bound audit `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR229_REAL_CRITICAL_CLAIM_REPORT.json` passed **eight high-value concept-claim groups** with nonpublication and no formal voice claimed. Important scope: does NOT prove every scientific sentence, figure-panel semantics or audio pronunciation correct.
 - Four focused synthetic regression tests pass including falsified original source, incorrect narration, incorrect modern SI artifact claim. No paid calls, source mutation or Google Drive access. Full HP regression and 4 CI required before merge.
 - Planned next PR230: independent original-figure two-panel semantic and visual PDF-vs-MP4 checks, beyond prior basic image presence/identity; PR231: formal production voice provenance/readiness and conservative release gate.
+
+## PR #230 — real Serway original figure panel/pixel integrity (31 October 2026)
+
+- PR #229 verified merged `08c900006bd9a6be62e9ba00d46b56ff7bf39b74`; HP root 1121 passed / 10 skipped / 162 subtests, hosted four green.
+- New `microgen_serway_figure_panel_audit.py` independently checks original four-page textbook PDF Figure 1.1 caption, figure SHA and full raster for each left/right section against actual Figure 1.1 embedded in rendered eight-slide PDF, source-to-slide labels, source-to-spoken narration alignment, and independent PR229 original fact audit provenance.
+- Real HP external immutable result `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR230_PANEL_REPORT.json`: both composite image panels are pixel-identical, and PDF caption, teaching slide labels and narration agree on (a) historic mass prototype, (b) atomic clock. Note pixel/caption correlation is NOT independent machine recognition of illustrated objects or full academic/phonetic acceptance. No formal voice chosen, original images unchanged.
+- Three focused synthetic tests pass, with source figure altered and narration mismatch rejected. Full HP root suite and hosted 4 CI required before merge.
+- Next PR #231: formal production voice provenance and release block/eligibility based on independently grounded source/figure/AV QA evidence; zero provider calls, never silently use diagnostic voice as a formal narrator.
