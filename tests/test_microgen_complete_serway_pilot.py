@@ -12,7 +12,11 @@ def setup(root):
     source,n,deck,coverage,model=setup_case(root)
     plan=root/"plan.json"
     vosk=root/"vosk";(vosk/"am").mkdir(parents=True)
-    return source,n,plan,model,Path(sys.executable),vosk,Path(sys.executable)
+    # Hosted Linux setup-python can expose python as a symlink. The real
+    # pipeline correctly rejects symlinked executables; the synthetic test
+    # fixture must supply the resolved interpreter path on every OS.
+    interpreter=Path(sys.executable).resolve(strict=True)
+    return source,n,plan,model,interpreter,vosk,interpreter
 
 class CompletePilotTests(unittest.TestCase):
     def test_preflight_rejects_reusing_existing_final_folder(self):
