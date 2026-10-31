@@ -73,3 +73,11 @@
 2. Conduct independent acoustic checks against these WAV excerpts (e.g., audio-signal integrity and comparison to spoken mathematical intent), but do not claim a word was mispronounced based solely on Vosk spelling. Only strong, reproducible evidence can justify isolated correction and fresh full QA; original production WAVs remain protected.
 3. Move to a truly complete second-source Serway §1.1 lecture from the original source and mapped figures, narration and a separately approved formal voice/provider, then verify slide/audio/video/academic consistency. Google Cloud voice stays diagnostics-only unless owner changes policy.
 4. Keep the persistent checkpoint accurate with exact PR/test evidence; only HP is permitted for local execution.
+
+## PR #223 — independent physical-acoustic candidate triage (31 October 2026)
+
+- Parent `main`: verified PR #222 merged at `ddde3baba5ae9fa62aed3520c7f82fd085ab8fde`; HP-only branch `feature/hp-pr223-independent-acoustic-triage-20261031`.
+- New `microgen_tts_candidate_signal_screen.py` measures PCM RMS, zero signal and frame clipping **independently of ASR transcript spelling**. Each clip and the original slide WAV are SHA-256 revalidated before and after; rejection for stale/source-drift, forged phonetic approval, symlinks, path escape and duplicate clip IDs. Creates only fresh outside-source immutable JSON.
+- Five focused tests pass. Real Thomas §2.5 original 11 external excerpts: independent physically measured **11 clips, 0 digital-silence findings, 0 significant clipping findings**, all 23 original slide WAVs untouched. Output `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR223_INDEPENDENT_SIGNAL_SCREEN.json`.
+- **No evidence at this stage proves any technical word is mispronounced.** ASR spelling is not a phonetic verdict; acoustic PCM amplitude cannot distinguish homophonic words. Therefore **0 isolated corrections authorized**, no production WAV/MP4 replacement or formal provider selection, no paid calls, and no publication.
+- Full HP regression and hosted CI to verify before merger. Continue after this with source-to-video Serway §1.1 completeness/voice-contract integration priorities rather than cycling through inconclusive ASR-only remediation.
