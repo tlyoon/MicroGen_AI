@@ -109,3 +109,11 @@
 - Real HP SHA-bound QA output (also private) `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR226_NARRATION_REPORTS\verified_narration.json`: all eight draft texts exist; no provider call or original lecture source changes. This is completed **draft authoring**, not independently passed mathematical/content quality, formally synthesized WAV/MP4 or publishability.
 - Four focused new tests pass. Full HP root regression and four hosted CI required before merge.
 - Follow-ups: PR227 rendered teaching-slide enrichment and independent cross-modal checks, PR228 offline A/V diagnostic feasibility without adopting any production TTS provider or approving release.
+
+## PR #227 — real Serway §1.1 concept-focused teaching slides (31 October 2026)
+
+- Parent verified `main` PR226 `ba17d845f0d02082bcdc36ac2abf596fb6504128` after 1110 HP pass / 10 skipped / 162 subtests and hosted four green. Only HP used.
+- Reusable `microgen_source_teaching_slide_render.py` independently pins original PDF and Figure 1.1 SHA, verified PR226 narration QA SHA, private three-point visual plan SHA and exact narration-to-slide hashes, then renders a new 16:9 multi-page PDF to a fresh external output folder; source assets remain untouched.
+- Original Serway-specific visual outline is private HP-only at `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR227_SERWAY_VISUAL_PLAN_PRIVATE.json`, **never committed to public GitHub**. Actual eight-slide rendered candidate and audit stored at `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261031_HP_PR227_RENDERED_TEACHING_SLIDES`. Real render succeeded: 8 slides, all three bullet concepts visible per slide, original Figure 1.1 panel composite displayed on slide 5, historical SI kilogram caveat/citation displayed on slide 4. Document visibly marked unapproved.
+- New tests 3 focused passed for real synthetic PDF rendering/figure/SI, missing slide rejection and source/output protection. No formal voice, paid API, WAV, MP4 or release approval. Full HP root regression / four hosted CI before merge.
+- Follow-on PR228: run end-to-end isolated offline A/V mux smoke test using *diagnostic*, explicitly non-formal audio and independent SHA/pixel/PCM manifest; do not treat the generated demo as production audio or publishable lecture.
