@@ -1,0 +1,16 @@
+# PR237 — Real 14-slide source-to-video candidate, offline and nonpublished
+
+Completes the real expanded Serway 1.1 candidate MP4 from the verified PR235 14-slide teaching deck and PR236 versioned corrected 14 neural WAVs. The original 4-page Serway source PDF, independently mapped Figure 1.1, expanded narration, rendered teaching PDF, academic source coverage receipt, Piper model card and neural PCM inputs must all have matching SHA and 14 topic/source-page IDs.
+
+`microgen_expanded_lecture_video.py` independently recomputes the section-bounded 14-topic academic checks, reconstructs the narrator synthesis text and model SHA, reopens and validates all fourteen original PCM16 WAVs and verifies their individual SHA against the separate TTS and full offline Vosk observation receipts. It refuses any proven targeted phonetic C-dot/circa or Y-dot/yay risk, but does not block harmless recognizer homophones such as meter/meet her. The offline FFmpeg mux builds an actual playable H.264/AAC MP4; checks both actual tracks, duration within 2% of input audio, and decodes the midpoint of **each** slide to compare its pixels with the exact source teaching PDF frame (max 3% normalized RGB error). The embedded original Figure 1.1 is independently checked against source pixels via the academic input verifier.
+
+The original eight-slide diagnostic/voice/video workflows continue to pass regression; `microgen_offline_diagnostic_av.py` now permits the separate academic status associated with an expanded fourteen-slide lesson but continues to mark all its audio as nonformal and not publishable. This internal mux is not a formal narrator selector.
+
+Real private HP MP4:
+`%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261101_HP_PR237_REAL_14_SLIDE_NEURAL_VIDEO\lecture_14_slide_neural_candidate.mp4`
+Evidence manifests next to the private MP4: `lecture_14_candidate_receipt.json` and `independent_mux_technical_report.json`. New WAVs are not generated in PR237, but the corrected 14 full neural WAVs are used (PR236); the original input assets remain unchanged.
+
+**Do not publish this video.** Successful topic coverage, geometric pixel identity and source-bound PCM are not blanket verification of all academic statements or every spoken phoneme. Model weights distribution rights, copyrighted textbook figure distribution rights, formal narrator selection and independent complete academic QA remain unresolved. No billed cloud TTS calls or media distribution occurred.
+Five focused source-chain regression tests reject tampered WAVs, forged ASR, incorrect source/academic report, false complete phonetics and changed voice model; full root HP regression and all four hosted CI must pass before merge.
+
+Next steps after PR237: integrate these individual source-to-video stages into a safe single fresh-output orchestration that can regenerate from the original source without relying on previous campaign intermediates; then attempt a second chapter/section with automated coverage QA rather than hardcoded Serway 1.1 anchors.
