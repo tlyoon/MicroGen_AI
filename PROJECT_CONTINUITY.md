@@ -56,3 +56,20 @@
 3. Fix **only** sufficiently corroborated pronunciation problems and re-verify sound; keep homophones and uncertain ASR spellings advisory. Do not auto-overwrite original WAVs or block otherwise acceptable speech.
 4. Resolve formal production TTS voice/provider within the contract, then run a source-to-video Serway §1.1 integration demonstration with independently verifiable source, figures, narrated mathematics and A/V QA, without automatic publication.
 5. Continue HP-only execution; synchronize checkpoint with each merged PR.
+
+## PR #222 — bounded technical-audio excerpt evidence (31 October 2026)
+
+- Parent verified main: PR #221 merged at `3c527200e1a56e07c08831a0b76834d72a558c38`. PR #221 HP validation: 1087 passed, 10 skipped, 159 subtests; all four hosted CI jobs succeeded.
+- Current branch: `feature/hp-pr222-sha-bound-technical-audio-excerpts-20261031`, based on the verified PR #221 main commit.
+- New `microgen_tts_candidate_clip_bundle.py` re-verifies SHA-anchored offline timing/evidence against the source and all independent Vosk receipts, applies a bounded nonoverlapping time window to uniquely found ASR suggestions, extracts mono PCM16 with existing byte-accurate source-preserving `microgen_tts_audio_snippets.extract_clips`, saves review metadata, confirms original evidence and clip hashes, and atomically publishes to a fresh *external* output folder. Ambiguous ASR spans are skipped, never guessed. No TTS API, regenerated production voice, pronunciation approval or release.
+- New `tests/test_microgen_tts_candidate_clip_bundle.py` covers exact source PCM byte identity, all hash/report provenance, immutable output/no overwrite, deliberately ambiguous duplicate span, budgets, source-folder/My Drive protection, tampered timing and WAV identity changes.
+- HP focused 13 passed + 3 subtests. Actual 23 original Thomas §2.5 WAVs and SHA-bound independent ASR/evidence produced **11 external short clips across 8 slides, total 16.609 seconds**, all clip SHA verified and **all 23 source WAV SHA rechecked unchanged**, zero skipped, zero provider calls. The new immutable external bundle is `%LOCALAPPDATA%\\MicroGen_AI_Checkpoints\\20261031_HP_PR222_THOMAS25_TECHNICAL_AUDIO_CLIPS`; review index `review_index.json`. All clips are **unreviewed ASR-hypothesis candidate audio**, not independently established mispronunciations. `publication_allowed=false`.
+- HP root-level full regression `python -m pytest -q` completed **1092 passed, 10 skipped, 162 subtests passed, 2 existing warnings, exit 0, 171.77 seconds**. Hosted CI and PR merge must be recorded independently; an opened PR does not count as merged.
+- Reusable operation and safety guide: `docs/HP_PR222_CANDIDATE_AUDIO_EXCERPTS.md`.
+
+### Next justified priorities after PR #222
+
+1. Require exact tested commit, full HP tests and all four hosted CI jobs green prior to merger; record verified main merge SHA.
+2. Conduct independent acoustic checks against these WAV excerpts (e.g., audio-signal integrity and comparison to spoken mathematical intent), but do not claim a word was mispronounced based solely on Vosk spelling. Only strong, reproducible evidence can justify isolated correction and fresh full QA; original production WAVs remain protected.
+3. Move to a truly complete second-source Serway §1.1 lecture from the original source and mapped figures, narration and a separately approved formal voice/provider, then verify slide/audio/video/academic consistency. Google Cloud voice stays diagnostics-only unless owner changes policy.
+4. Keep the persistent checkpoint accurate with exact PR/test evidence; only HP is permitted for local execution.
