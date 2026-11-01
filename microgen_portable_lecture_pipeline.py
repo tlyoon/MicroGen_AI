@@ -218,6 +218,8 @@ def run_portable_pipeline(stage:Path,narration:Path,plan:Path,contract:Path,
                 "source_pdf_figures_with_geometric_provenance"],
             "all_figures_original_pdf_raster_and_nearby_caption_verified":visual[
                 "all_figures_original_pdf_raster_and_nearby_caption_verified"],
+            "independently_checked_typed_math_claims_count":visual[
+                "independently_checked_typed_math_claims_count"],
             "audio_receipt_sha256":sha_file(audio_dir/"portable_audio_receipt.json"),
             "asr_advisory_sha256":sha_file(observed_path),
             "mp4_sha256":sha_file(mp4_file),

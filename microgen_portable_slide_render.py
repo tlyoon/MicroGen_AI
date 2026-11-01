@@ -12,6 +12,7 @@ from microgen_pronunciation_closed_loop import sha_file
 from microgen_portable_section_contract import audit_portable_contract, clean
 from microgen_portable_source_equations import checked_equations, SourceEquationError
 from microgen_portable_source_figure_regions import checked_source_figure_regions
+from microgen_portable_source_math_claims import verified_source_math_claims
 
 class PortableSlideError(ValueError):pass
 
@@ -60,6 +61,8 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
         equations=checked_equations(original_pdf,cfg,n,set(figures))
         source_figure_evidence=checked_source_figure_regions(
             original_pdf,cfg.get("figures",[]),figures)
+        source_math_evidence=verified_source_math_claims(
+            original_pdf,cfg,equations,source_figure_evidence)
     dest=output.resolve(strict=False)
     if (output.exists() or output.is_symlink() or not dest.parent.is_dir()
         or stage.resolve(strict=True) in dest.parents
@@ -121,6 +124,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 "bullets":bullets,"figure":image_info,
                 "source_vector_equation":equations.get(idx),
                 "source_pdf_figure_evidence":source_figure_evidence.get(idx),
+                "source_typed_math_evidence":source_math_evidence.get(idx),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
         temporary=Path(tempfile.mkdtemp(prefix=".microgen-portable-slides-",dir=dest.parent))
@@ -163,6 +167,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             "all_figures_original_pdf_raster_and_nearby_caption_verified":(
                 len(source_figure_evidence)==len(figures) and bool(figures)),
             "equation_source_geometry_sha_verified":True,
+            "independently_checked_typed_math_claims_count":len(source_math_evidence),
             "mathematical_equation_semantics_proven":False,
             "complete_academic_correctness_proven":False,
             "formal_voice_authorized":False,"publication_allowed":False}
