@@ -214,6 +214,10 @@ def run_portable_pipeline(stage:Path,narration:Path,plan:Path,contract:Path,
             "original_contract_sha256":academic["manifest_sha256"],
             "academic_topic_audit_sha256":sha_file(academic_file),
             "slides_pdf_sha256":visual["rendered_pdf_sha256"],
+            "source_pdf_figures_with_geometric_provenance":visual[
+                "source_pdf_figures_with_geometric_provenance"],
+            "all_figures_original_pdf_raster_and_nearby_caption_verified":visual[
+                "all_figures_original_pdf_raster_and_nearby_caption_verified"],
             "audio_receipt_sha256":sha_file(audio_dir/"portable_audio_receipt.json"),
             "asr_advisory_sha256":sha_file(observed_path),
             "mp4_sha256":sha_file(mp4_file),
