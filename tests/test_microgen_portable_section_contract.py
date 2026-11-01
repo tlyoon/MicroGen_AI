@@ -56,6 +56,57 @@ class PortableContracts(unittest.TestCase):
             self.assertFalse(result["independent_full_academic_certification"])
             self.assertFalse(result["publication_allowed"])
 
+    def test_preceding_section_on_same_first_page_is_not_valid_topic_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            src,narr,plan,manifest=create(root)
+            with fitz.open(src) as old:
+                page_text=[p.get_text("text") for p in old]
+            replacement=fitz.open()
+            for i,text in enumerate(page_text):
+                p=replacement.new_page()
+                if i==0:
+                    text="Unique predecessor claim about a previous section.\\n"+text
+                self.assertGreaterEqual(
+                    p.insert_textbox(fitz.Rect(30,30,550,730),text,fontsize=12),0)
+            tmp=root/"replacement.pdf"
+            replacement.save(tmp)
+            replacement.close()
+            src.write_bytes(tmp.read_bytes())
+            m=json.loads(manifest.read_text())
+            m["source_pdf_sha256"]=sha_file(src)
+            m["topics"][0]["source_anchors"]=["Unique predecessor claim"]
+            manifest.write_text(json.dumps(m))
+            # The first-page predecessor must NOT satisfy a target-section anchor.
+            with self.assertRaises(PortableSectionError):
+                audit_portable_contract(src,narr,plan,manifest)
+
+    def test_repeated_running_header_last_start_marker_preserves_real_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            src,narr,plan,manifest=create(root)
+            with fitz.open(src) as old:
+                first=old[0].get_text("text")
+                second=old[1].get_text("text")
+            pdf=fitz.open()
+            for text in (
+                "Section B.2: Abstract Measurement\\n"
+                "An editorial running header precedes the actual heading.\\n"+first,
+                second):
+                page=pdf.new_page()
+                self.assertGreaterEqual(
+                    page.insert_textbox(fitz.Rect(30,30,550,730),text,fontsize=12),0)
+            output=root/"new.pdf"
+            pdf.save(output)
+            pdf.close()
+            src.write_bytes(output.read_bytes())
+            obj=json.loads(manifest.read_text())
+            obj["source_pdf_sha256"]=sha_file(src)
+            manifest.write_text(json.dumps(obj))
+            result=audit_portable_contract(src,narr,plan,manifest)
+            self.assertEqual(result["topic_count"],3)
+            self.assertGreater(result["preceding_first_page_characters_excluded"],0)
+
     def test_adjacent_section_cannot_be_a_borrowed_anchor(self):
         with tempfile.TemporaryDirectory() as td:
             files=create(Path(td))
