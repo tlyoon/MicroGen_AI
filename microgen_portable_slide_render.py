@@ -10,6 +10,7 @@ import pymupdf as fitz
 from PIL import Image, ImageChops
 from microgen_pronunciation_closed_loop import sha_file
 from microgen_portable_section_contract import audit_portable_contract, clean
+from microgen_portable_source_equations import checked_equations, SourceEquationError
 
 class PortableSlideError(ValueError):pass
 
@@ -54,6 +55,8 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
         raise PortableSlideError("Explicit unapproved narration/voice state is required")
     count=academic["topic_count"]
     figures=checked_figures(stage,cfg,count)
+    with fitz.open(source) as original_pdf:
+        equations=checked_equations(original_pdf,cfg,n,set(figures))
     dest=output.resolve(strict=False)
     if (output.exists() or output.is_symlink() or not dest.parent.is_dir()
         or stage.resolve(strict=True) in dest.parents
@@ -71,6 +74,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 or not title.isascii() or not isinstance(bullets,list)
                 or any(not b.isascii() for b in bullets)
                 or any("\\" in b or "$" in b for b in [title]+bullets)
+                or (idx in equations and len(bullets)>3)
                 or (idx in figures and (len(bullets)>3 or
                    any(len(b)>88 for b in bullets)))):
                 raise PortableSlideError("Visible text needs reliable PDF fonts and nonoverlapping figure layout")
@@ -96,6 +100,13 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                                     fontsize=12,color=(.24,.28,.31))<0:
                     raise PortableSlideError("Figure caption overflow")
                 image_info={"filename":fig.name,"sha256":sha,"caption":caption}
+            if idx in equations:
+                eq=equations[idx]
+                with fitz.open(source) as original_pdf:
+                    p.show_pdf_page(fitz.Rect(90,333,910,458),original_pdf,
+                                    eq["source_page"]-1,
+                                    clip=fitz.Rect(eq["source_bbox"]),
+                                    keep_proportion=True)
             p.draw_line(fitz.Point(50,482),fitz.Point(910,482),
                         color=(.68,.75,.82),width=1)
             p.insert_text((50,510),"SOURCE-BOUND PRIVATE CANDIDATE - NOT FOR PUBLICATION",
@@ -105,6 +116,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             rows.append({"slide":idx,"topic_id":spoken["topic_id"],
                 "source_page":spoken["source_page"],"title":title,
                 "bullets":bullets,"figure":image_info,
+                "source_vector_equation":equations.get(idx),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
         temporary=Path(tempfile.mkdtemp(prefix=".microgen-portable-slides-",dir=dest.parent))
@@ -118,6 +130,8 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 if clean(row["title"]) not in txt or any(
                     clean(b) not in txt for b in row["bullets"]):
                     raise PortableSlideError("PDF did not preserve source-checked visible concepts")
+                if row["source_vector_equation"] and not page.get_xobjects():
+                    raise PortableSlideError("Source equation PDF vector was not embedded")
                 if row["figure"]:
                     imgs=page.get_images(full=True)
                     if len(imgs)!=1:
@@ -141,6 +155,8 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             "rendered_pdf_sha256":sha_file(result),
             "slide_count":count,"slides":rows,
             "figures_exact_original_pixels_verified":True,
+            "equation_source_geometry_sha_verified":True,
+            "mathematical_equation_semantics_proven":False,
             "complete_academic_correctness_proven":False,
             "formal_voice_authorized":False,"publication_allowed":False}
         (temporary/"teaching_slide_receipt.json").write_text(
