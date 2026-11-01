@@ -42,7 +42,8 @@ def inspect_inputs(slides_dir:Path, narration_qa:Path, diagnostic_wav_dir:Path,
     n=json.loads(narration_qa.read_text(encoding="utf8"))
     if (m.get("status") not in (
             "FULLER_TEACHING_SLIDE_CANDIDATE_UNAPPROVED",
-            "EXPANDED_SECTION_TEACHING_SLIDE_CANDIDATE_UNAPPROVED")
+            "EXPANDED_SECTION_TEACHING_SLIDE_CANDIDATE_UNAPPROVED",
+            "PORTABLE_SECTION_TEACHING_SLIDE_CANDIDATE_UNAPPROVED")
         or m.get("rendered_pdf_sha256")!=sha_file(pdf)
         or m.get("narration_qa_sha256")!=sha_file(narration_qa)
         or m.get("publication_allowed") is not False
