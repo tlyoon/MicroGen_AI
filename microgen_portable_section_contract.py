@@ -49,8 +49,15 @@ def audit_portable_contract(source:Path,narration:Path,visual_plan:Path,manifest
         raise PortableSectionError("Incomplete source-bound section contract or forged approval")
     with fitz.open(source) as pdf:
         raw=[clean(page.get_text("text")) for page in pdf]
-    if not 1<=len(raw)<=100 or clean(m["start_marker"]) not in raw[0]:
-        raise PortableSectionError("Original section start marker not present")
+    start=clean(m["start_marker"])
+    if not 1<=len(raw)<=100 or not start or start not in raw[0]:
+        raise PortableSectionError("Original section start marker not present on first page")
+    # Printed running headers may repeat the section name before the actual
+    # section heading. Last occurrence conservatively excludes that prefix.
+    # This can reject legitimate early content, but cannot borrow earlier text.
+    original_first=raw[0]
+    raw[0]=start+" "+original_first.rsplit(start,1)[1]
+    removed_prefix_chars=len(original_first)-len(raw[0])
     end=m.get("next_section_marker")
     if end is not None:
         if not isinstance(end,str) or not end.strip():
@@ -104,6 +111,7 @@ def audit_portable_contract(source:Path,narration:Path,visual_plan:Path,manifest
       "visual_plan_sha256":shas[str(visual_plan)],
       "manifest_sha256":shas[str(manifest_file)],
       "topic_count":len(rows),"topics":rows,
+      "preceding_first_page_characters_excluded":removed_prefix_chars,
       "next_section_excluded":end is not None,
       "self_declared_manifest_does_not_prove_all_source_topics_included":True,
       "independent_full_academic_certification":False,
