@@ -51,7 +51,7 @@ def audit_portable_contract(source:Path,narration:Path,visual_plan:Path,manifest
     # mistaking a body discussion of "dimensional analysis" for its heading.
     # The lazy import avoids a module-import cycle with source discovery.
     from microgen_source_passage_discovery import (
-        _heading_bound, normalized_passage)
+        _heading_bound, _find_section_end_page, normalized_passage)
     end=m.get("next_section_marker")
     if end is not None and (not isinstance(end,str) or not end.strip()):
         raise PortableSectionError("Malformed adjacent-section boundary")
@@ -63,18 +63,23 @@ def audit_portable_contract(source:Path,narration:Path,visual_plan:Path,manifest
             raise PortableSectionError("Invalid section page count")
         try:
             start_top,start_bottom=_heading_bound(pdf[0],m["start_marker"],True)
-            end_top=(_heading_bound(pdf[-1],end,False)[0]
-                     if end is not None else float(pdf[-1].rect.height))
+            if end is not None:
+                end_idx,end_top,_=_find_section_end_page(
+                    pdf,end,start_bottom)
+            else:
+                end_idx=len(pdf)-1
+                end_top=float(pdf[-1].rect.height)
         except ValueError as error:
             raise PortableSectionError("A true section boundary heading is missing") from error
-        if len(pdf)==1 and end_top<=start_bottom:
+        if end_idx==0 and end_top<=start_bottom:
             raise PortableSectionError("Section boundaries reversed")
-        raw=[clean(page.get_text("text")) for page in pdf]
+        raw=[clean(page.get_text("text")) if idx<=end_idx else ""
+             for idx,page in enumerate(pdf)]
         original_first=raw[0]
-        for index in {0,len(pdf)-1}:
+        for index in {0,end_idx}:
             page=pdf[index]
             bottom=start_bottom if index==0 else 0
-            top=end_top if index==len(pdf)-1 else float(page.rect.height)
+            top=end_top if index==end_idx else float(page.rect.height)
             blocks=page.get_text("blocks",sort=True)
             footers=[b[1] for b in blocks if
                      "copyright" in clean(normalized_passage(b[4])[:90])]
