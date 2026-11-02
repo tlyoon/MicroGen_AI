@@ -206,6 +206,70 @@ def _validate_draft(packet:dict,draft:dict,source_pdf:Path)->tuple[list,dict]:
     }
     return lessons,report
 
+
+
+def _line_safe_source_anchor(original_anchor:str,passage_text:str,
+                             source_page_lines:str)->tuple[str,bool]:
+    """Preserve original citation despite PDF superscript reflow differences.
+
+    Superscript text may read "109" as a block, but "10 9" as separate glyph
+    spans.  Retain the longest ORIGINAL prefix also present unambiguously in
+    the physical PDF line representation; never invent words or edit source.
+    """
+    if (not isinstance(original_anchor,str)
+        or not isinstance(passage_text,str) or not isinstance(source_page_lines,str)
+        or clean(original_anchor) not in clean(passage_text)):
+        raise AuthoringGateError("Source anchor is not in its cited passage")
+    text=clean(source_page_lines)
+    if clean(original_anchor) in text:
+        return original_anchor,False
+    words=original_anchor.split()
+    for count in range(len(words)-1,4,-1):
+        candidate=" ".join(words[:count]).strip()
+        simple=clean(candidate)
+        if (24<=len(candidate)<=160 and len(simple)>=20
+            and simple in clean(passage_text)
+            and text.count(simple)==1):
+            return candidate,True
+    raise AuthoringGateError("No unambiguous original source-line-compatible citation prefix")
+
+
+def _ensure_source_line_compatible_anchors(source:Path,packet:dict,
+                                            lessons:list)->tuple[list,list]:
+    """Repair only anchor strings, not narration, source PDF or model draft."""
+    by_id={x["passage_id"]:x for x in packet["source_evidence"]}
+    replacements=[]
+    adjusted=[]
+    with fitz.open(source) as original:
+        page_cache={}
+        for index,item in enumerate(lessons,1):
+            page=item["source_page"]
+            if page not in page_cache:
+                p=original[page-1]
+                lines=[line for block in p.get_text("dict")["blocks"]
+                       if block.get("type")==0
+                       for line in block.get("lines",[])]
+                page_cache[page]=" ".join(" ".join(
+                    span.get("text","") for span in line["spans"]) for line in lines)
+            passage=" ".join(by_id[i]["text"] for i in item["source_passage_ids"])
+            candidate,changed=_line_safe_source_anchor(
+                item["source_anchor"],passage,page_cache[page])
+            updated=dict(item)
+            updated["source_anchor"]=candidate
+            adjusted.append(updated)
+            if changed:
+                replacements.append({
+                    "slide":index,"source_page":page,
+                    "source_passage_ids":item["source_passage_ids"],
+                    "original_source_anchor_sha256":hashlib.sha256(
+                        item["source_anchor"].encode("utf8")).hexdigest(),
+                    "adopted_source_anchor_sha256":hashlib.sha256(
+                        candidate.encode("utf8")).hexdigest(),
+                    "only_trailing_unstable_glyphs_trimmed":True,
+                    "source_content_changed":False
+                })
+    return adjusted,replacements
+
 def write_validated_stage(source:Path,packet:dict,draft:dict,new_stage:Path):
     source,new_stage=Path(source),Path(new_stage)
     if source.is_symlink() or not source.is_file():
@@ -225,6 +289,9 @@ def write_validated_stage(source:Path,packet:dict,draft:dict,new_stage:Path):
     if canonical_hash(fresh)!=canonical_hash(packet):
         raise AuthoringGateError("Authoring packet differs from original PDF source")
     lessons,qa=_validate_draft(packet,draft,source)
+    lessons,repairs=_ensure_source_line_compatible_anchors(source,packet,lessons)
+    qa["source_anchor_line_reflow_repairs"]=repairs
+    qa["source_anchor_line_reflow_repair_count"]=len(repairs)
     qa["source_coverage_semantic_risk_triage"]=profile_source_coverage(packet,draft)
     n={"publication_allowed":False,"formal_voice_authorized":False,"slides":[]}
     v={"publication_allowed":False,"slides":[]}
