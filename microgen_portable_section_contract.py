@@ -47,27 +47,48 @@ def audit_portable_contract(source:Path,narration:Path,visual_plan:Path,manifest
         or not isinstance(m.get("max_narration_words"),int)
         or not 60<=m["min_narration_words"]<=m["max_narration_words"]<=250):
         raise PortableSectionError("Incomplete source-bound section contract or forged approval")
-    with fitz.open(source) as pdf:
-        raw=[clean(page.get_text("text")) for page in pdf]
-    start=clean(m["start_marker"])
-    if not 1<=len(raw)<=100 or not start or start not in raw[0]:
-        raise PortableSectionError("Original section start marker not present on first page")
-    # Printed running headers may repeat the section name before the actual
-    # section heading. Last occurrence conservatively excludes that prefix.
-    # This can reject legitimate early content, but cannot borrow earlier text.
-    original_first=raw[0]
-    raw[0]=start+" "+original_first.rsplit(start,1)[1]
-    removed_prefix_chars=len(original_first)-len(raw[0])
+    # Reuse the already verified geometric heading finder at runtime to avoid
+    # mistaking a body discussion of "dimensional analysis" for its heading.
+    # The lazy import avoids a module-import cycle with source discovery.
+    from microgen_source_passage_discovery import (
+        _heading_bound, normalized_passage)
     end=m.get("next_section_marker")
-    if end is not None:
-        if not isinstance(end,str) or not end.strip():
-            raise PortableSectionError("Malformed adjacent-section boundary")
-        marker=clean(end)
-        if marker not in raw[-1]:
-            raise PortableSectionError("Adjacent section boundary absent; fail closed")
-        raw[-1]=raw[-1].split(marker,1)[0]
-    elif m.get("end_of_pdf") is not True:
+    if end is not None and (not isinstance(end,str) or not end.strip()):
+        raise PortableSectionError("Malformed adjacent-section boundary")
+    if end is None and m.get("end_of_pdf") is not True:
         raise PortableSectionError("End of target section must be independently bounded")
+    start=clean(m["start_marker"])
+    with fitz.open(source) as pdf:
+        if not 1<=len(pdf)<=100:
+            raise PortableSectionError("Invalid section page count")
+        try:
+            start_top,start_bottom=_heading_bound(pdf[0],m["start_marker"],True)
+            end_top=(_heading_bound(pdf[-1],end,False)[0]
+                     if end is not None else float(pdf[-1].rect.height))
+        except ValueError as error:
+            raise PortableSectionError("A true section boundary heading is missing") from error
+        if len(pdf)==1 and end_top<=start_bottom:
+            raise PortableSectionError("Section boundaries reversed")
+        raw=[clean(page.get_text("text")) for page in pdf]
+        original_first=raw[0]
+        for index in {0,len(pdf)-1}:
+            page=pdf[index]
+            bottom=start_bottom if index==0 else 0
+            top=end_top if index==len(pdf)-1 else float(page.rect.height)
+            blocks=page.get_text("blocks",sort=True)
+            footers=[b[1] for b in blocks if
+                     "copyright" in clean(normalized_passage(b[4])[:90])]
+            if footers:top=min(top,min(footers))
+            # A PDF block may contain BOTH the heading and subsequent
+            # paragraphs. Clip at line geometry instead of dropping its text.
+            lines=[line for block in page.get_text("dict")["blocks"]
+                   if block.get("type")==0
+                   for line in block.get("lines",[])
+                   if line["bbox"][1]>=bottom-.01 and line["bbox"][3]<=top+.01]
+            text=" ".join(" ".join(span.get("text","") for span
+                       in line["spans"]) for line in lines)
+            raw[index]=(start+" " if index==0 else "")+clean(text)
+        removed_prefix_chars=max(0,len(original_first)-len(raw[0]))
     seen=set();rows=[]
     for i,(topic,spoken,visible) in enumerate(zip(topics,n["slides"],v["slides"]),1):
         page=topic.get("source_page")

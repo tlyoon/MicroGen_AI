@@ -33,9 +33,32 @@ def normalized_passage(text: str) -> str:
 def _heading_bound(page: fitz.Page, marker: str, first: bool) -> tuple[float, float]:
     """Return a marked text block's vertical bound; reject missing boundaries."""
     candidates = []
-    for x0, y0, x1, y1, text, *_ in page.get_text("blocks", sort=False):
-        if clean(marker) in clean(normalized_passage(text)):
-            candidates.append((float(y0), float(y1)))
+    needle = clean(marker)
+    # Text blocks can hold an entire section's text. Examine each *line*
+    # rather than taking the containing block bbox or the last mention.
+    for block in page.get_text("dict").get("blocks",[]):
+        if block.get("type")!=0:
+            continue
+        for line in block.get("lines",[]):
+            # Some synthetic/legacy source files contain literal escaped
+            # newline tokens rather than physical PDF line breaks.
+            segments=" ".join(s.get("text","") for s in
+                              line.get("spans",[])).split(chr(92)+"n")
+            for segment in segments:
+                rendered=clean(segment)
+                at=rendered.find(needle)
+                if at<0:
+                    continue
+                prefix=rendered[:at].strip()
+                suffix=rendered[at+len(needle):].strip()
+                if prefix and not re.fullmatch(
+                    r"(?:(?:section|chapter)\s+)?(?:[a-z]?\d+[.\-]\d+(?:[.\-]\d+)*):?",
+                    prefix,re.I):
+                    continue
+                if suffix and not re.fullmatch(r"\d{1,3}",suffix):
+                    continue
+                x0,y0,x1,y1=line["bbox"]
+                candidates.append((float(y0),float(y1)))
     if not candidates:
         raise SourceDiscoveryError(f"Required section boundary absent: {marker}")
     # A printed header may duplicate an actual section heading near the top.

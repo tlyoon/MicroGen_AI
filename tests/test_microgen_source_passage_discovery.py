@@ -183,3 +183,38 @@ def test_short_example_heading_and_last_page_content_before_footer_not_lost():
         assert "Mathematical representation" in content
         assert "Copyright protects" not in content
         assert result["source_page_count"]==2
+
+
+def test_repeated_topic_words_inside_body_do_not_move_heading_boundary():
+    with tempfile.TemporaryDirectory() as td:
+        root=Path(td)
+        src=root/"source.pdf"
+        pdf=fitz.open()
+        p=pdf.new_page()
+        p.insert_text((45,40),"Chapter 7 header")
+        p.insert_text((45,90),"7.2 Dimensional Analysis",fontsize=13)
+        p.insert_textbox(fitz.Rect(45,135,520,250),
+            "The dimensions of a speed relate length and time. "
+            "Dimensional analysis is a useful consistency test for any equation. "*3,
+            fontsize=12)
+        p.insert_textbox(fitz.Rect(45,300,520,420),
+            "A new equation should keep consistent dimensions on both sides. "*5,
+            fontsize=12)
+        p=pdf.new_page()
+        p.insert_text((45,35),"7.2 Dimensional Analysis",fontsize=13)
+        p.insert_textbox(fitz.Rect(45,105,520,250),
+            "With dimensional analysis we can compare the dimensions of different expressions. "*4,
+            fontsize=12)
+        p.insert_text((45,390),"7.3 Unit Conversions",fontsize=13)
+        p.insert_textbox(fitz.Rect(45,420,520,535),
+            "Unrelated conversions should not be part of this section. "*5,
+            fontsize=12)
+        pdf.save(src);pdf.close()
+        result=discover_passages(src,"Dimensional Analysis","Unit Conversions")
+        content=" ".join(x["text"] for x in result["passages"])
+        assert result["first_page_heading_y"]<100
+        assert "speed relate length" in content
+        assert "A new equation" in content
+        assert "consistent dimensions" in content
+        assert "Unrelated conversions" not in content
+        assert len(result["passages"])>=3
