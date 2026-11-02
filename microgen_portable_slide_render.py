@@ -16,6 +16,7 @@ from microgen_portable_source_math_claims import verified_source_math_claims
 from microgen_portable_source_dimensional_relations import check_source_dimensional_relations
 from microgen_portable_source_unit_conversions import verified_source_unit_conversions
 from microgen_portable_narration_unit_equivalence import check_narrated_unit_equivalences
+from microgen_portable_scientific_comparison_polarity import checked_source_comparison_narration
 
 class PortableSlideError(ValueError):pass
 
@@ -69,6 +70,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             original_pdf,cfg,equations,source_figure_evidence)
     source_dimension_evidence=check_source_dimensional_relations(source,cfg,n)
     source_unit_evidence=verified_source_unit_conversions(source,cfg,n)
+    source_comparison_evidence=checked_source_comparison_narration(cfg,n,source_unit_evidence)
     dest=output.resolve(strict=False)
     if (output.exists() or output.is_symlink() or not dest.parent.is_dir()
         or stage.resolve(strict=True) in dest.parents
@@ -133,6 +135,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 "source_typed_math_evidence":source_math_evidence.get(idx),
                 "source_dimension_evidence":source_dimension_evidence.get(idx),
                 "source_unit_conversion_evidence":source_unit_evidence.get(idx),
+                "source_comparison_spoken_polarity_evidence":source_comparison_evidence.get(idx),
                 "automatic_narration_unit_equivalence_evidence":narrated_unit_evidence.get(idx,[]),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
@@ -179,6 +182,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             "independently_checked_typed_math_claims_count":len(source_math_evidence),
             "independently_checked_dimension_relations_count":len(source_dimension_evidence),
             "independently_checked_unit_conversion_claims_count":len(source_unit_evidence),
+            "source_verified_spoken_speed_limit_conclusions_count":len(source_comparison_evidence),
             "automatically_checked_narration_unit_equivalences_count":sum(map(len,narrated_unit_evidence.values())),
             "mathematical_equation_semantics_proven":False,
             "complete_academic_correctness_proven":False,
