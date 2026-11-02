@@ -13,6 +13,7 @@ from microgen_portable_section_contract import audit_portable_contract, clean
 from microgen_portable_source_equations import checked_equations, SourceEquationError
 from microgen_portable_source_figure_regions import checked_source_figure_regions
 from microgen_portable_source_math_claims import verified_source_math_claims
+from microgen_portable_source_dimensional_relations import check_source_dimensional_relations
 
 class PortableSlideError(ValueError):pass
 
@@ -63,6 +64,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             original_pdf,cfg.get("figures",[]),figures)
         source_math_evidence=verified_source_math_claims(
             original_pdf,cfg,equations,source_figure_evidence)
+    source_dimension_evidence=check_source_dimensional_relations(source,cfg,n)
     dest=output.resolve(strict=False)
     if (output.exists() or output.is_symlink() or not dest.parent.is_dir()
         or stage.resolve(strict=True) in dest.parents
@@ -125,6 +127,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 "source_vector_equation":equations.get(idx),
                 "source_pdf_figure_evidence":source_figure_evidence.get(idx),
                 "source_typed_math_evidence":source_math_evidence.get(idx),
+                "source_dimension_evidence":source_dimension_evidence.get(idx),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
         temporary=Path(tempfile.mkdtemp(prefix=".microgen-portable-slides-",dir=dest.parent))
@@ -168,6 +171,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 len(source_figure_evidence)==len(figures) and bool(figures)),
             "equation_source_geometry_sha_verified":True,
             "independently_checked_typed_math_claims_count":len(source_math_evidence),
+            "independently_checked_dimension_relations_count":len(source_dimension_evidence),
             "mathematical_equation_semantics_proven":False,
             "complete_academic_correctness_proven":False,
             "formal_voice_authorized":False,"publication_allowed":False}
