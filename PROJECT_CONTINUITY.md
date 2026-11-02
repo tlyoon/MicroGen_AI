@@ -284,3 +284,10 @@ Base clean main `6a4962446cc64a9149ea25a5ea1249c2a74d334d`; original MicroGen_AI
 - Next: make an approved local authoring model genuinely available, validate and improve semantic content/figure/math references on new subsections; source figure and lecture publication rights remain NOT cleared.
 
 - §1.3 new-seven-slide original pilot independently generated private H264/AAC MP4 311.407s SHA 8f50a8ba00cd6e99fd99d49c558dd2bf0b4d1a9975d84a45c2ead6361eefa16a, independent 7/7 frame match max normalized RGB 0.005911 and source/media SHA unchanged, Vosk 0 targeted pronunciation risks/misses, original HP-only audio candidate not published. Private report 20261102_HP_PR248_REAL_SERWAY13_INDEPENDENT_POSTFLIGHT.json.
+
+## PR249 — optional source-bounded generalized L/M/T formula consistency (2 November 2026)
+
+- Parent/main merged PR248 SHA `c917101381d21089c1d432813517890977b2d4d4`; HP original MicroGen_AI only.
+- New `microgen_portable_source_dimensional_relations.py` safely parses typed expressions by bounded Python AST, computes L/M/T exponent vectors, requires original source PDF hash, source page and original PR244/248 passage anchor/terms, rejects invalid/malicious mathematical expressions and dimensionally inconsistent equations. Optional `source_dimension_claims` through existing `microgen_portable_slide_render.py` and media receipt; zero checked on legacy manifests, no false general science approval.
+- Real private new Serway §1.3 source unchanged SHA `181f0f361809d90daf72fce1bf50bcf2b88fbf37fc59ed181411266b53cb5ae8`; three source-linked dimension relations for position, speed, circular acceleration passed, added to prior seven-topic pilot stage `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261102_HP_PR249_SERWAY13_THREE_DIMENSIONAL_RELATIONS_STAGE`. Seven-slide PDF SHA `37b9a9e53d7c25552fa41317c95e47eb7867a5a18c30fb6eec8a0937d872f936`.
+- Synthetic focused 44 passed (new dimensions + existing numeric typed math). Complete HP root and GitHub 4/4 CI required; no source textbooks/media/weights committed. This is necessary dimensional identity, not sufficient source semantics or publication permission.
