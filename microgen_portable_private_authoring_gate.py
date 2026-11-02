@@ -21,6 +21,7 @@ from microgen_source_passage_discovery import _heading_bound
 from microgen_pronunciation_closed_loop import sha_file
 from microgen_portable_section_contract import audit_portable_contract, clean
 from microgen_source_passage_discovery import discover_passages
+from microgen_portable_semantic_coverage_triage import profile_source_coverage
 
 class AuthoringGateError(ValueError):
     pass
@@ -224,6 +225,7 @@ def write_validated_stage(source:Path,packet:dict,draft:dict,new_stage:Path):
     if canonical_hash(fresh)!=canonical_hash(packet):
         raise AuthoringGateError("Authoring packet differs from original PDF source")
     lessons,qa=_validate_draft(packet,draft,source)
+    qa["source_coverage_semantic_risk_triage"]=profile_source_coverage(packet,draft)
     n={"publication_allowed":False,"formal_voice_authorized":False,"slides":[]}
     v={"publication_allowed":False,"slides":[]}
     topics=[]
