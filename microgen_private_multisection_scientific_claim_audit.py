@@ -23,6 +23,7 @@ from microgen_portable_source_unit_conversions import verified_source_unit_conve
 from microgen_portable_narration_unit_equivalence import check_narrated_unit_equivalences
 from microgen_portable_scientific_comparison_polarity import checked_source_comparison_narration
 from microgen_private_original_figure_math_reaudit import audit_original_figure_math
+from microgen_private_source_significant_figures import verify_source_significant_figure_claims
 
 
 class MultiSectionScientificEvidenceError(ValueError):
@@ -81,6 +82,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         narrated=check_narrated_unit_equivalences(narration)
         polarity=checked_source_comparison_narration(manifest,narration,si)
         original_math=audit_original_figure_math(stage,original,manifest,narration)
+        sigfig=verify_source_significant_figure_claims(original,manifest,narration)
         for spec in manifest.get("figures",[]):
             original_figure=(stage/spec["filename"]).resolve(strict=True)
             freeze[str(original_figure)]=sha_file(original_figure)
@@ -98,6 +100,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
             "original_source_raster_figures_checked":original_math["original_source_raster_figures_checked"],
             "original_source_vector_equation_crops_checked":original_math["source_vector_equation_crops_checked"],
             "original_source_typed_math_claims_recalculated":original_math["independently_recalculated_source_typed_math_claims"],
+            "original_source_significant_figure_claims_verified":len(sigfig),
             "original_source_geometry_and_math_pipeline_checked":True,
             "complete_scientific_entailment_verified":False,
             "complete_academic_coverage_proven":False,
@@ -118,6 +121,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         "original_source_raster_figures_checked":sum(x["original_source_raster_figures_checked"] for x in rows),
         "original_source_vector_equation_crops_checked":sum(x["original_source_vector_equation_crops_checked"] for x in rows),
         "original_source_typed_math_claims_recalculated":sum(x["original_source_typed_math_claims_recalculated"] for x in rows),
+        "original_source_significant_figure_claims_verified":sum(x["original_source_significant_figure_claims_verified"] for x in rows),
         "source_or_narration_excerpts_in_report":False,
         "all_original_inputs_unchanged":True,
         "provider_or_local_language_model_invoked":False,
@@ -158,6 +162,7 @@ def main(argv=None):
         "original_figures_checked":res["original_source_raster_figures_checked"],
         "original_vector_equations_checked":res["original_source_vector_equation_crops_checked"],
         "original_typed_math_checks":res["original_source_typed_math_claims_recalculated"],
+        "source_significant_figure_checks":res["original_source_significant_figure_claims_verified"],
         "publication_allowed":False
     }))
     return 0

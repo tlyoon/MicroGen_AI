@@ -126,6 +126,7 @@ def audit_unified_private_campaign(cases:list,output:Path)->dict:
                 "verified_source_figures":b["original_source_raster_figures_checked"],
                 "verified_source_vector_equations":b["original_source_vector_equation_crops_checked"],
                 "verified_source_typed_math":b["original_source_typed_math_claims_recalculated"],
+                "verified_source_significant_figure_claims":b["original_source_significant_figure_claims_verified"],
                 "verified_dimensional_relations":b["typed_dimensional_equalities_checked"],
                 "verified_si_relations":b["typed_si_unit_relations_checked"],
                 "verified_spoken_si_equalities":b["automatically_checked_spoken_unit_equalities"],
