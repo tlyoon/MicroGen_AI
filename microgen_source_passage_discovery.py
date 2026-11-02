@@ -68,6 +68,32 @@ def _heading_bound(page: fitz.Page, marker: str, first: bool) -> tuple[float, fl
     return max(pool, key=lambda p: p[0]) if first else min(pool, key=lambda p: p[0])
 
 
+
+
+def _find_section_end_page(pdf: fitz.Document,marker:str,
+                           start_bottom:float)->tuple[int,float,float]:
+    """Locate next real heading on any page, not just last PDF page.
+
+    A supplied subsection source may include summary/problemset pages after
+    its next section begins. A later repeated running header does not displace
+    the earliest substantive heading. Preserve original PDF page indices.
+    """
+    if not marker or not isinstance(marker,str):
+        raise SourceDiscoveryError("Explicit next section marker required")
+    candidates=[]
+    for index,page in enumerate(pdf):
+        try:
+            top,bottom=_heading_bound(page,marker,first=False)
+        except SourceDiscoveryError:
+            continue
+        if index==0 and top<=start_bottom:
+            continue
+        candidates.append((index,top,bottom))
+    if not candidates:
+        raise SourceDiscoveryError(f"Required section boundary absent: {marker}")
+    substantive=[item for item in candidates if item[1]>=55]
+    return min(substantive or candidates,key=lambda item:(item[0],item[1]))
+
 def _figure_labels(text: str) -> list[str]:
     # Text citations alone cannot prove which image panel a caption describes.
     found = re.findall(r"\bFigure\s+(\d+(?:[.\-]\d+)+)\b", text, flags=re.I)
@@ -130,22 +156,26 @@ def discover_passages(source_pdf: Path, start_marker: str,
         # Require actual first / last page heading; no inference from neighboring PDFs.
         start_top, start_bottom = _heading_bound(pdf[0], start_marker, first=True)
         if next_marker is not None:
-            end_top, end_bottom = _heading_bound(pdf[-1], next_marker, first=False)
+            end_page_idx, end_top, end_bottom = _find_section_end_page(
+                pdf, next_marker, start_bottom)
         else:
+            end_page_idx=len(pdf)-1
             end_top, end_bottom = float(pdf[-1].rect.height), float(pdf[-1].rect.height)
-        if len(pdf) == 1 and end_top <= start_bottom:
+        if end_page_idx == 0 and end_top <= start_bottom:
             raise SourceDiscoveryError("Section end precedes section start")
         page_count = len(pdf)
         passages = []
         excluded_by_geometry = 0
         excluded_furniture = 0
         for page_no, page in enumerate(pdf, 1):
+            if page_no > end_page_idx+1:
+                continue
             lower = start_bottom if page_no == 1 else 55.0
             blocks = page.get_text("blocks", sort=True)
             footer_tops = [float(b[1]) for b in blocks
                            if "copyright" in clean(normalized_passage(b[4])[:90])]
             footer_top = min(footer_tops) if footer_tops else float(page.rect.height)-15
-            upper = min(end_top, footer_top) if page_no == len(pdf) else footer_top
+            upper = min(end_top, footer_top) if page_no == end_page_idx+1 else footer_top
             for block in blocks:
                 x0, y0, x1, y1, raw, *extra = block
                 if extra and extra[-1] != 0:
@@ -200,6 +230,8 @@ def discover_passages(source_pdf: Path, start_marker: str,
         "end_of_pdf": bool(end_of_pdf),
         "first_page_heading_y": round(start_top, 3),
         "last_page_next_heading_y": round(end_top, 3) if next_marker else None,
+        "next_section_heading_source_page":end_page_idx+1 if next_marker else None,
+        "trailing_pdf_pages_outside_section":page_count-end_page_idx-1,
         "passage_count": len(passages),
         "passages": passages,
         "candidate_topics": [_draft_topic(p) for p in passages],

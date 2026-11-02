@@ -17,7 +17,7 @@ import tempfile
 import pymupdf as fitz
 
 from microgen_portable_source_equations import crop_sha
-from microgen_source_passage_discovery import _heading_bound
+from microgen_source_passage_discovery import _heading_bound, _find_section_end_page
 from microgen_pronunciation_closed_loop import sha_file
 from microgen_portable_section_contract import audit_portable_contract, clean
 from microgen_source_passage_discovery import discover_passages
@@ -99,9 +99,12 @@ def _validate_draft(packet:dict,draft:dict,source_pdf:Path)->tuple[list,dict]:
     original_pdf=fitz.open(source_pdf)
     try:
         first_heading_end=_heading_bound(original_pdf[0],packet["start_marker"],True)[1]
-        next_heading_start=(_heading_bound(original_pdf[-1],
-            packet["next_section_marker"],False)[0]
-            if packet["next_section_marker"] else None)
+        if packet["next_section_marker"]:
+            next_heading_page,next_heading_start,_=_find_section_end_page(
+                original_pdf,packet["next_section_marker"],first_heading_end)
+        else:
+            next_heading_page=len(original_pdf)-1
+            next_heading_start=None
     finally:
         original_pdf.close()
     narration_ngrams=Counter()
@@ -164,8 +167,10 @@ def _validate_draft(packet:dict,draft:dict,source_pdf:Path)->tuple[list,dict]:
                 if (not box.is_valid or box.is_empty or box.width<15 or box.height<10
                     or not pg.rect.contains(box)
                     or (page==1 and box.y0<first_heading_end)
-                    or (page==len(pdf) and next_heading_start is not None
-                        and box.y1>next_heading_start)
+                    or (next_heading_start is not None
+                        and (page-1>next_heading_page or
+                             (page-1==next_heading_page and
+                              box.y1>next_heading_start)))
                     or crop_sha(pg,box)!=extra["source_crop_sha256"]):
                     raise AuthoringGateError("Numeric source not bounded and hash verified")
                 observed=_source_numbers(" ".join(pg.get_text(clip=box).split()))
