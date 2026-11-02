@@ -15,6 +15,7 @@ from microgen_portable_source_figure_regions import checked_source_figure_region
 from microgen_portable_source_math_claims import verified_source_math_claims
 from microgen_portable_source_dimensional_relations import check_source_dimensional_relations
 from microgen_portable_source_unit_conversions import verified_source_unit_conversions
+from microgen_portable_narration_unit_equivalence import check_narrated_unit_equivalences
 
 class PortableSlideError(ValueError):pass
 
@@ -55,6 +56,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
     cfg=json.loads(contract.read_text(encoding="utf8"))
     n=json.loads(narration.read_text(encoding="utf8"))
     v=json.loads(plan.read_text(encoding="utf8"))
+    narrated_unit_evidence=check_narrated_unit_equivalences(n)
     if n.get("formal_voice_authorized") is not False:
         raise PortableSlideError("Explicit unapproved narration/voice state is required")
     count=academic["topic_count"]
@@ -131,6 +133,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 "source_typed_math_evidence":source_math_evidence.get(idx),
                 "source_dimension_evidence":source_dimension_evidence.get(idx),
                 "source_unit_conversion_evidence":source_unit_evidence.get(idx),
+                "automatic_narration_unit_equivalence_evidence":narrated_unit_evidence.get(idx,[]),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
         temporary=Path(tempfile.mkdtemp(prefix=".microgen-portable-slides-",dir=dest.parent))
@@ -176,6 +179,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             "independently_checked_typed_math_claims_count":len(source_math_evidence),
             "independently_checked_dimension_relations_count":len(source_dimension_evidence),
             "independently_checked_unit_conversion_claims_count":len(source_unit_evidence),
+            "automatically_checked_narration_unit_equivalences_count":sum(map(len,narrated_unit_evidence.values())),
             "mathematical_equation_semantics_proven":False,
             "complete_academic_correctness_proven":False,
             "formal_voice_authorized":False,"publication_allowed":False}

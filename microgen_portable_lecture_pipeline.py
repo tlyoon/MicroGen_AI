@@ -224,6 +224,8 @@ def run_portable_pipeline(stage:Path,narration:Path,plan:Path,contract:Path,
                 "independently_checked_dimension_relations_count"],
             "independently_checked_unit_conversion_claims_count":visual[
                 "independently_checked_unit_conversion_claims_count"],
+            "automatically_checked_narration_unit_equivalences_count":visual[
+                "automatically_checked_narration_unit_equivalences_count"],
             "audio_receipt_sha256":sha_file(audio_dir/"portable_audio_receipt.json"),
             "asr_advisory_sha256":sha_file(observed_path),
             "mp4_sha256":sha_file(mp4_file),
