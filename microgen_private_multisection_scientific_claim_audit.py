@@ -22,6 +22,7 @@ from microgen_portable_source_dimensional_relations import check_source_dimensio
 from microgen_portable_source_unit_conversions import verified_source_unit_conversions
 from microgen_portable_narration_unit_equivalence import check_narrated_unit_equivalences
 from microgen_portable_scientific_comparison_polarity import checked_source_comparison_narration
+from microgen_private_original_figure_math_reaudit import audit_original_figure_math
 
 
 class MultiSectionScientificEvidenceError(ValueError):
@@ -79,6 +80,11 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         si=verified_source_unit_conversions(original,manifest,narration)
         narrated=check_narrated_unit_equivalences(narration)
         polarity=checked_source_comparison_narration(manifest,narration,si)
+        original_math=audit_original_figure_math(stage,original,manifest,narration)
+        for spec in manifest.get("figures",[]):
+            original_figure=(stage/spec["filename"]).resolve(strict=True)
+            freeze[str(original_figure)]=sha_file(original_figure)
+            protected.append(original_figure)
         rows.append({
             "section_id":c["section_id"],
             "original_pdf_sha256":sha_file(original),
@@ -89,7 +95,10 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
             "typed_si_unit_relations_checked":len(si),
             "automatically_checked_spoken_unit_equalities":sum(len(x) for x in narrated.values()),
             "source_confirmed_spoken_speed_limit_conclusions_checked":len(polarity),
-            "typed_math_claims_from_other_pipeline_checked":False,
+            "original_source_raster_figures_checked":original_math["original_source_raster_figures_checked"],
+            "original_source_vector_equation_crops_checked":original_math["source_vector_equation_crops_checked"],
+            "original_source_typed_math_claims_recalculated":original_math["independently_recalculated_source_typed_math_claims"],
+            "original_source_geometry_and_math_pipeline_checked":True,
             "complete_scientific_entailment_verified":False,
             "complete_academic_coverage_proven":False,
         })
@@ -106,6 +115,9 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         "typed_si_unit_relations_checked":sum(x["typed_si_unit_relations_checked"] for x in rows),
         "automatically_checked_spoken_unit_equalities":sum(x["automatically_checked_spoken_unit_equalities"] for x in rows),
         "source_confirmed_spoken_speed_limit_conclusions_checked":sum(x["source_confirmed_spoken_speed_limit_conclusions_checked"] for x in rows),
+        "original_source_raster_figures_checked":sum(x["original_source_raster_figures_checked"] for x in rows),
+        "original_source_vector_equation_crops_checked":sum(x["original_source_vector_equation_crops_checked"] for x in rows),
+        "original_source_typed_math_claims_recalculated":sum(x["original_source_typed_math_claims_recalculated"] for x in rows),
         "source_or_narration_excerpts_in_report":False,
         "all_original_inputs_unchanged":True,
         "provider_or_local_language_model_invoked":False,
@@ -143,6 +155,9 @@ def main(argv=None):
         "si_checks":res["typed_si_unit_relations_checked"],
         "spoken_unit_checks":res["automatically_checked_spoken_unit_equalities"],
         "source_polarity_checks":res["source_confirmed_spoken_speed_limit_conclusions_checked"],
+        "original_figures_checked":res["original_source_raster_figures_checked"],
+        "original_vector_equations_checked":res["original_source_vector_equation_crops_checked"],
+        "original_typed_math_checks":res["original_source_typed_math_claims_recalculated"],
         "publication_allowed":False
     }))
     return 0
