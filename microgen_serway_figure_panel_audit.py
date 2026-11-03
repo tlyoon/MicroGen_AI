@@ -83,7 +83,7 @@ def inspect_serway_figure(stage:Path,slides:Path,narration:Path,claims:Path)->di
             err=ImageStat.Stat(ImageChops.difference(original_panel,actual_panel))
             mae=sum(err.mean)/(3*255)
             # White-border-tolerant but both panels must contain real imagery.
-            nonwhite=sum(1 for pixel in original_panel.resize((32,32)).get_flattened_data()
+            nonwhite=sum(1 for pixel in original_panel.resize((32,32)).getdata()
                          if min(pixel)<235)
             if mae>1/255 or nonwhite<80:
                 raise FigurePanelError(f"Composite panel {name} corrupted or empty")
