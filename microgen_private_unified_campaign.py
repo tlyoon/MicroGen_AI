@@ -14,7 +14,7 @@ import shutil
 import tempfile
 
 from microgen_pronunciation_closed_loop import sha_file
-from microgen_portable_private_authoring_gate import _safe_output
+from microgen_portable_private_authoring_gate import _safe_output, canonical_hash
 from microgen_private_cross_section_coverage import (
     _read_private_json, audit_private_section_campaign)
 from microgen_private_multisection_scientific_claim_audit import (
@@ -23,6 +23,49 @@ from microgen_private_multisection_scientific_claim_audit import (
 
 class UnifiedPrivateCampaignError(ValueError):
     pass
+
+
+
+
+def _verified_authored_stage_alignment(case:dict, contract:dict)->dict:
+    """Bind source-approved original draft to actual rendered text, not just counts.
+
+    Some legacy originally source-approved authored stages retain an earlier
+    packet SHA. An exact identity of ALL authored slide text, topic IDs, page
+    references and technical-term requirements allows that historical SHA
+    discrepancy to remain advisory, not an academic or voice approval.
+    """
+    packet = _read_private_json(Path(case["private_packet"]))
+    draft = _read_private_json(Path(case["private_draft"]))
+    stage = Path(case["stage"])
+    slides = _read_private_json(stage/"narration.json").get("slides")
+    plan = _read_private_json(stage/"plan.json").get("slides")
+    compiled = contract.get("topics")
+    topics = draft.get("topics")
+    if not all(isinstance(rows,list) for rows in (slides,plan,compiled,topics)):
+        raise UnifiedPrivateCampaignError("Authored lesson text inventory absent")
+    if not 2<=len(topics)<=60 or not all(
+        len(rows)==len(topics) for rows in (slides,plan,compiled)):
+        raise UnifiedPrivateCampaignError("Authored response and compiled stage inventory drift")
+    for idx,(old,voice,visual,record) in enumerate(zip(topics,slides,plan,compiled),1):
+        if (not all(isinstance(x,dict) for x in (old,voice,visual,record))
+            or old.get("narration")!=voice.get("narration")
+            or old.get("title")!=visual.get("title")
+            or old.get("bullets")!=visual.get("bullets")
+            or old.get("required_terms")!=record.get("required_terms")
+            or any(q.get("topic_id")!=old.get("topic_id")
+                   or q.get("source_page")!=old.get("source_page")
+                   for q in (voice,visual,record))
+            or voice.get("slide")!=idx or visual.get("slide")!=idx):
+            raise UnifiedPrivateCampaignError(
+                f"Section {case['section_id']} slide {idx}: authored original text does not match compiled lesson")
+    lineage = (contract.get("authoring_source_packet_sha256")==canonical_hash(packet)
+               and contract.get("authoring_draft_sha256")==canonical_hash(draft))
+    return {
+        "original_source_draft_and_compiled_spoken_visual_text_identical":True,
+        "strict_authoring_packet_and_draft_hash_lineage":bool(lineage),
+        "historical_authoring_sha_lineage_discrepancy_advisory":not lineage,
+    }
 
 
 def audit_unified_private_campaign(cases:list,output:Path)->dict:
@@ -41,6 +84,7 @@ def audit_unified_private_campaign(cases:list,output:Path)->dict:
     science_cases=[]
     before={}
     protected_stages=[]
+    authored_alignment={}
     seen=set()
     for case in cases:
         if (not isinstance(case,dict) or set(case)!={
@@ -74,6 +118,7 @@ def audit_unified_private_campaign(cases:list,output:Path)->dict:
         # Freeze image source evidence as well, including files the scientific
         # checker will use to re-render and hash-compare original source pixels.
         manifest=_read_private_json(stage/"contract.json")
+        authored_alignment[section]=_verified_authored_stage_alignment(case,manifest)
         figures=manifest.get("figures",[])
         if not isinstance(figures,list) or len(figures)>60:
             raise UnifiedPrivateCampaignError("Invalid figure inventory")
@@ -122,6 +167,7 @@ def audit_unified_private_campaign(cases:list,output:Path)->dict:
                 "source_passages_discovered":a["source_passages_discovered"],
                 "source_passages_linked":a["source_passages_cited"],
                 "authored_topics_verified":a["authored_topics_verified"],
+                **authored_alignment[section],
                 "high_interest_uncited_advisory":len(a["high_interest_uncited"]),
                 "verified_source_figures":b["original_source_raster_figures_checked"],
                 "verified_source_vector_equations":b["original_source_vector_equation_crops_checked"],
@@ -145,6 +191,9 @@ def audit_unified_private_campaign(cases:list,output:Path)->dict:
             "science_receipt_sha256":sha_file(
                 temp/"science"/"multisection_private_science_receipt.json"),
             "original_sources_unchanged":True,
+            "historical_authoring_sha_discrepancy_advisory_count":sum(
+                v["historical_authoring_sha_lineage_discrepancy_advisory"]
+                for v in authored_alignment.values()),
             "textbook_or_narration_excerpts_in_any_receipt":False,
             "locally_installed_language_model_invoked":False,
             "paid_provider_api_calls":0,

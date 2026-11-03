@@ -126,3 +126,18 @@ def test_campaign_size_and_unsafe_output_protected():
             audit_unified_private_campaign(rows*7,root/"many")
         with pytest.raises((ValueError,KeyError)):
             audit_unified_private_campaign(rows,Path(rows[0]["stage"])/"within-stage")
+
+
+def test_source_valid_author_draft_cannot_claim_unrelated_compiled_lesson():
+    """A matching source PDF and slide count do NOT establish text identity."""
+    with tempfile.TemporaryDirectory() as td:
+        root=Path(td)
+        rows=cases(root)
+        draft=Path(rows[1]["private_draft"])
+        data=json.loads(draft.read_text())
+        data["topics"][0]["title"]="A source-valid but different original title"
+        draft.write_text(json.dumps(data),encoding="utf8")
+        out=root/"should_not_exist"
+        with pytest.raises(UnifiedPrivateCampaignError,match="authored original text"):
+            audit_unified_private_campaign(rows,out)
+        assert not out.exists()
