@@ -226,6 +226,8 @@ def run_portable_pipeline(stage:Path,narration:Path,plan:Path,contract:Path,
                 "independently_checked_unit_conversion_claims_count"],
             "source_verified_significant_figures_claims_count":visual[
                 "source_verified_significant_figures_claims_count"],
+            "source_verified_decimal_rounding_examples_count":visual[
+                "source_verified_decimal_rounding_examples_count"],
             "source_verified_spoken_speed_limit_conclusions_count":visual[
                 "source_verified_spoken_speed_limit_conclusions_count"],
             "automatically_checked_narration_unit_equivalences_count":visual[
