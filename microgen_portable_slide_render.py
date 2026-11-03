@@ -18,6 +18,7 @@ from microgen_portable_source_unit_conversions import verified_source_unit_conve
 from microgen_portable_narration_unit_equivalence import check_narrated_unit_equivalences
 from microgen_portable_scientific_comparison_polarity import checked_source_comparison_narration
 from microgen_private_source_significant_figures import verify_source_significant_figure_claims
+from microgen_private_source_rounding_examples import verified_original_source_rounding
 
 class PortableSlideError(ValueError):pass
 
@@ -73,6 +74,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
     source_unit_evidence=verified_source_unit_conversions(source,cfg,n)
     source_comparison_evidence=checked_source_comparison_narration(cfg,n,source_unit_evidence)
     sigfig_evidence=verify_source_significant_figure_claims(source,cfg,n)
+    rounding_evidence=verified_original_source_rounding(source,cfg,n)
     dest=output.resolve(strict=False)
     if (output.exists() or output.is_symlink() or not dest.parent.is_dir()
         or stage.resolve(strict=True) in dest.parents
@@ -139,6 +141,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
                 "source_unit_conversion_evidence":source_unit_evidence.get(idx),
                 "source_comparison_spoken_polarity_evidence":source_comparison_evidence.get(idx),
                 "original_source_significant_figures_evidence":sigfig_evidence.get(idx),
+                "original_source_decimal_rounding_evidence":rounding_evidence.get(idx,[]),
                 "automatic_narration_unit_equivalence_evidence":narrated_unit_evidence.get(idx,[]),
                 "narration_sha256":spoken["spoken_text_sha256"],
                 "independent_complete_academic_certification":False})
@@ -186,6 +189,7 @@ def render_portable_slides(stage:Path,narration:Path,plan:Path,contract:Path,
             "independently_checked_dimension_relations_count":len(source_dimension_evidence),
             "independently_checked_unit_conversion_claims_count":len(source_unit_evidence),
             "source_verified_significant_figures_claims_count":len(sigfig_evidence),
+            "source_verified_decimal_rounding_examples_count":sum(map(len,rounding_evidence.values())),
             "source_verified_spoken_speed_limit_conclusions_count":len(source_comparison_evidence),
             "automatically_checked_narration_unit_equivalences_count":sum(map(len,narrated_unit_evidence.values())),
             "mathematical_equation_semantics_proven":False,

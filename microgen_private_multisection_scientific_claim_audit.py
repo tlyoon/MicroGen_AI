@@ -24,6 +24,7 @@ from microgen_portable_narration_unit_equivalence import check_narrated_unit_equ
 from microgen_portable_scientific_comparison_polarity import checked_source_comparison_narration
 from microgen_private_original_figure_math_reaudit import audit_original_figure_math
 from microgen_private_source_significant_figures import verify_source_significant_figure_claims
+from microgen_private_source_rounding_examples import verified_original_source_rounding
 
 
 class MultiSectionScientificEvidenceError(ValueError):
@@ -83,6 +84,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         polarity=checked_source_comparison_narration(manifest,narration,si)
         original_math=audit_original_figure_math(stage,original,manifest,narration)
         sigfig=verify_source_significant_figure_claims(original,manifest,narration)
+        rounding=verified_original_source_rounding(original,manifest,narration)
         for spec in manifest.get("figures",[]):
             original_figure=(stage/spec["filename"]).resolve(strict=True)
             freeze[str(original_figure)]=sha_file(original_figure)
@@ -101,6 +103,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
             "original_source_vector_equation_crops_checked":original_math["source_vector_equation_crops_checked"],
             "original_source_typed_math_claims_recalculated":original_math["independently_recalculated_source_typed_math_claims"],
             "original_source_significant_figure_claims_verified":len(sigfig),
+            "original_source_rounding_examples_verified":sum(map(len,rounding.values())),
             "original_source_geometry_and_math_pipeline_checked":True,
             "complete_scientific_entailment_verified":False,
             "complete_academic_coverage_proven":False,
@@ -122,6 +125,7 @@ def audit_private_science_campaign(cases:list,output:Path)->dict:
         "original_source_vector_equation_crops_checked":sum(x["original_source_vector_equation_crops_checked"] for x in rows),
         "original_source_typed_math_claims_recalculated":sum(x["original_source_typed_math_claims_recalculated"] for x in rows),
         "original_source_significant_figure_claims_verified":sum(x["original_source_significant_figure_claims_verified"] for x in rows),
+        "original_source_rounding_examples_verified":sum(x["original_source_rounding_examples_verified"] for x in rows),
         "source_or_narration_excerpts_in_report":False,
         "all_original_inputs_unchanged":True,
         "provider_or_local_language_model_invoked":False,
@@ -163,6 +167,7 @@ def main(argv=None):
         "original_vector_equations_checked":res["original_source_vector_equation_crops_checked"],
         "original_typed_math_checks":res["original_source_typed_math_claims_recalculated"],
         "source_significant_figure_checks":res["original_source_significant_figure_claims_verified"],
+        "source_rounding_example_checks":res["original_source_rounding_examples_verified"],
         "publication_allowed":False
     }))
     return 0
