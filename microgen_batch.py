@@ -32,12 +32,13 @@ STAGES = [
     "figure_merge",
     "slides",
     "narration",
+    "science_qa",
     "tts",
     "slide_slicing",
     "video",
     "published",
 ]
-GEMINI_STAGES = {"figure_mapping", "slides", "narration"}
+GEMINI_STAGES = {"figure_mapping", "slides", "narration", "science_qa"}
 
 
 def inspect_local_checkout(repo: Path, *, expected_commit: str | None = None) -> str:
@@ -308,7 +309,7 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             return False
     if name == "published":
         return quality.published_manifest_valid(dest)
-    if name in {"slides", "narration", "tts", "slide_slicing", "video"}:
+    if name in {"slides", "narration", "science_qa", "tts", "slide_slicing", "video"}:
         try:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
@@ -317,6 +318,10 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
             if name == "narration":
                 quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+            elif name == "science_qa":
+                from microgen_autonomous_science_qa import verify_receipt
+                quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+                verify_receipt(stage)
             elif name == "tts":
                 quality.check_wavs(stage, count)
             elif name == "slide_slicing":
@@ -832,6 +837,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         "figure_merge": (args.main_py, "merge_lettered_figs_v2.py", "lettered figure merge"),
         "slides": (args.main_py, "gen_slides_v20.py", "slide generation"),
         "narration": (args.main_py, "gen_script_v13.py", "narration"),
+        "science_qa": (args.main_py, "microgen_autonomous_science_qa.py", "source-grounded independent scientific QA"),
         "tts": (args.main_py, "text_to_speech_v25.py", "TTS"),
         "slide_slicing": (args.main_py, "slice_pdf_v21.py", "slide slicing"),
         "video": (args.main_py, "gen_video_v22.py", "video assembly"),
