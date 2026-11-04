@@ -212,7 +212,45 @@ def synthesize(text: str, output: Path) -> str:
     spoken = normalize_scientific_speech(text)
     require_safe_speech(text, spoken)
     from microgen_tts_provider_policy import require_formal_provider
-    require_formal_provider()
+    provider = require_formal_provider()
+    if provider == "gemini":
+        # The ordinary user-facing API-TTS default now matches MicroGen_AI_Web:
+        # Gemini 3.8 Flash-Lite, Kore; Flash first backup, Cloud ONLY when opted in.
+        # Direct single-slide calls remain non-batch; use main()/render_batch()
+        # for strict whole-lecture narrator continuity.
+        from microgen_flash_tts import (
+            DEFAULT_VOICE, CLOUD_FALLBACK_ENV, CLOUD_MAX_CHARS_ENV,
+            provider_specs, _speak, _valid_wav,
+        )
+        allow_cloud = (
+            os.environ.get(CLOUD_FALLBACK_ENV) == "1"
+            and os.environ.get(CLOUD_MAX_CHARS_ENV, "").isdigit()
+            and int(os.environ[CLOUD_MAX_CHARS_ENV]) >= len(spoken)
+        )
+        specs = provider_specs(
+            os.environ.get("MICROGEN_TTS_VOICE", DEFAULT_VOICE),
+            enable_cloud=allow_cloud,
+        )
+        errors = []
+        for spec in specs:
+            try:
+                payload = _speak(spoken, spec)
+                _valid_wav(payload)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                candidate = output.with_name(output.name + ".partial")
+                if candidate.exists():
+                    raise RuntimeError("Refuse existing partially written WAV")
+                try:
+                    candidate.write_bytes(payload)
+                    os.replace(candidate, output)
+                finally:
+                    candidate.unlink(missing_ok=True)
+                return spec["provider"]
+            except Exception as exc:
+                errors.append(f"{spec['model']}:{type(exc).__name__}")
+        raise RuntimeError("All authorized Gemini/Chirp fallbacks failed: " + ", ".join(errors))
+    if provider != "google_cloud":
+        raise RuntimeError("Unsupported TTS provider selection")
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         return _google_synthesize(spoken, output)
@@ -260,10 +298,139 @@ def _speech_items() -> list[dict[str, str]]:
     return [{"narration": text, "tts_text": text} for text in _legacy_script_slides(SCRIPT_FILE)]
 
 
+def _run_flash_batch(items: list[dict[str, str]]) -> None:
+    """Gemini-first lecture batch; whole-engine failover with atomic WAV rollback."""
+    import shutil
+    import tempfile
+    from microgen_flash_tts import (
+        render_batch, DEFAULT_VOICE, CLOUD_FALLBACK_ENV, CLOUD_MAX_CHARS_ENV,
+    )
+    from microgen_quality import check_wavs
+    from microgen_tts_provenance import (
+        make_record, verify_records, verify_manifest, write_manifest,
+    )
+    texts = [normalize_scientific_speech(x["tts_text"] or x["narration"]) for x in items]
+    voice = os.environ.get("MICROGEN_TTS_VOICE", DEFAULT_VOICE)
+    if Path(".microgen_tts_provenance.json").is_file():
+        try:
+            previous = verify_manifest(Path.cwd(), texts)
+            if (previous["provider"] in ("gemini_flash_lite_tts", "gemini_flash_tts")
+                    and previous["voice_name"] == voice
+                    and previous["slide_count"] == len(texts)):
+                print("[TTS] Reusing verified same-voice Gemini Flash batch.")
+                return
+        except Exception:
+            pass
+    allow_cloud = os.environ.get(CLOUD_FALLBACK_ENV) == "1"
+    if allow_cloud:
+        raw = os.environ.get(CLOUD_MAX_CHARS_ENV, "")
+        if not raw.isdigit() or int(raw) < sum(map(len, texts)):
+            raise RuntimeError("Cloud Chirp3 fallback requires explicit per-batch character ceiling")
+    with tempfile.TemporaryDirectory(prefix=".microgen-flash-stage-", dir=str(Path.cwd())) as temp:
+        root = Path(temp)
+        report = render_batch(
+            texts, root / "ready", voice=voice, allow_cloud=allow_cloud,
+        )
+        stage = root / "prepared"
+        stage.mkdir()
+        model, engine, actual_voice = report["model"], report["engine"], report["voice"]
+        rate = 0.9 if engine == "google_cloud_chirp3" else 1.0
+        records = []
+        for index, spoken in enumerate(texts, 1):
+            candidate = stage / f"slide{index}.wav"
+            shutil.copy2(root / "ready" / f"slide{index:02}.wav", candidate)
+            key = hashlib.sha256(json.dumps(
+                [spoken, engine, model, actual_voice, "en-US", rate, "global",
+                 "microgen-flash-tts-v1-provenance"],
+                ensure_ascii=False, sort_keys=True,
+            ).encode("utf8")).hexdigest()
+            record = make_record(
+                slide=index, path=candidate, text=spoken, provider=engine,
+                key=key, voice_name=actual_voice, language_code="en-US",
+                speaking_rate=rate, location="global",
+            )
+            records.append(record)
+        verify_records(stage, records, texts)
+        write_manifest(stage, records, texts)
+        check_wavs(stage, len(texts))
+        cache = Path(".microgen_tts_cache")
+        # Create cache only after complete source/voice/PCM validation.
+        cache_preexisted = cache.exists()
+        if not cache_preexisted:
+            cache.mkdir()
+        files = [(stage / f"slide{i}.wav", Path(f"slide{i}.wav"))
+                 for i in range(1, len(texts) + 1)]
+        for i, record in enumerate(records, 1):
+            meta = stage / f"slide{i}.json"
+            meta.write_text(json.dumps(record, indent=2), encoding="utf8")
+            files.append((meta, cache / f"slide{i}.json"))
+        files.append((stage / ".microgen_tts_provenance.json",
+                      Path(".microgen_tts_provenance.json")))
+        backups = root / "old_files"
+        backups.mkdir()
+        touched = []
+        try:
+            for position, (source, dest) in enumerate(files):
+                backup = backups / f"{position}.original"
+                existed = dest.exists()
+                if existed:
+                    if dest.is_symlink() or not dest.is_file():
+                        raise RuntimeError("Unsafe existing narration target")
+                    shutil.copy2(dest, backup)
+                replacement = dest.with_name(dest.name + ".flash_new")
+                if replacement.exists():
+                    raise RuntimeError("Existing uncommitted Gemini candidate")
+                try:
+                    shutil.copy2(source, replacement)
+                    os.replace(replacement, dest)
+                    touched.append((dest, backup if existed else None))
+                finally:
+                    replacement.unlink(missing_ok=True)
+            verify_manifest(Path.cwd(), texts)
+        except Exception:
+            for dest, backup in reversed(touched):
+                if backup is None:
+                    dest.unlink(missing_ok=True)
+                else:
+                    shutil.copy2(backup, dest)
+            if not cache_preexisted:
+                try:
+                    cache.rmdir()
+                except OSError:
+                    pass
+            raise
+    from microgen_tts_risk_register import build_risk_register, save_immutable_risk_report
+    from microgen_pronunciation_evidence_pipeline import (
+        build_post_tts_evidence, save_stage_evidence,
+    )
+    wav_evidence = check_wavs(Path.cwd(), len(texts))
+    risk = build_risk_register(
+        [{"slide": i, "tts_text": str(x["tts_text"] or x["narration"])}
+         for i, x in enumerate(items, 1)],
+        normalize_scientific_speech, wav_evidence["seconds"],
+        wav_sha256=wav_evidence["sha256"],
+    )
+    risk_path = save_immutable_risk_report(Path(".microgen_tts_cache"), risk)
+    evidence = build_post_tts_evidence(
+        Path.cwd(),
+        [{"slide": i, "tts_text": str(x["tts_text"] or x["narration"])}
+         for i, x in enumerate(items, 1)],
+        normalize_scientific_speech,
+    )
+    evidence_path = save_stage_evidence(Path.cwd(), evidence)
+    print(f"[TTS] Gemini Flash batch verified: {engine}, {actual_voice}.")
+    print(f"[QA] Evidence: {evidence_path}; risks: {risk_path}.")
+    print("[QA] Independent listening/academic/copyright release checks remain required.")
+
+
 def main() -> None:
     from microgen_tts_provider_policy import require_formal_provider
-    require_formal_provider()  # fail before credentials, cache or production WAV access
-    _load_runtime_environment()
+    selected_provider = require_formal_provider()
+    if selected_provider == "google_cloud":
+        _load_runtime_environment()  # historical explicitly selected Cloud only
+    else:
+        from microgen_flash_tts import _load_gemini_keys_from_microvid
+        _load_gemini_keys_from_microvid()
     items = _speech_items()
     if not items:
         raise RuntimeError("No slide narration found.")
@@ -284,6 +451,9 @@ def main() -> None:
         raise PronunciationPreflightError(
             f"Reviewed pronunciation lexicon mismatch: {rule_drift[:5]}"
         )
+    if selected_provider == "gemini":
+        _run_flash_batch(items)
+        return
     from microgen_quality import sha256, check_wavs
     from microgen_tts_provenance import (
         TTSProvenanceError, make_record, verify_record,

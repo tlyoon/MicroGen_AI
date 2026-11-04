@@ -59,7 +59,7 @@ def make_record(
     # A successful Cloud request binds the configured voice to the provider.
     # SAPI.SpVoice currently uses a machine default, not a selectable/pinned
     # identity, so it must NOT pass the voice-provenance verification gate.
-    pinned_voice = provider == "google_cloud_chirp3" and bool(voice_name)
+    pinned_voice = provider in {"google_cloud_chirp3", "gemini_flash_lite_tts", "gemini_flash_tts"} and bool(voice_name)
     return {
         "schema_version": SCHEMA_VERSION,
         "slide": slide,
@@ -92,7 +92,7 @@ def verify_record(
     for field, value in required.items():
         if record.get(field) != value:
             raise TTSProvenanceError(f"TTS {field} mismatch for slide {slide}")
-    if record.get("provider") != "google_cloud_chirp3":
+    if record.get("provider") not in {"google_cloud_chirp3", "gemini_flash_lite_tts", "gemini_flash_tts"}:
         raise TTSProvenanceError(f"Unverified TTS provider for slide {slide}")
     if digest_file(path) != record.get("sha256"):
         raise TTSProvenanceError(f"WAV SHA-256 drift for slide {slide}")

@@ -1,9 +1,9 @@
-"""Authoritative owner TTS policy: Cloud is permitted for troubleshooting.
+"""Authoritative provider policy for API-based MicroGen_AI (NOT MicroGen_AI_Web).
 
-Formal TTS intentionally has NO default provider. Historical provenance
-remains valid; this policy governs only NEW syntheses. Do not treat stored
-credentials, a provider's free quota, or CLI --authorize-provider-usage as a
-formal TTS choice.
+Owner-requested PR270 default is Gemini 3.8 Flash-Lite TTS, voice Kore,
+matching the separate Selenium project's TTS engine. Google Cloud is an
+explicit formal selector or opt-in LAST fallback, never the default. Historical
+Chirp-HD-F provenance and limited Cloud diagnostic permissions remain valid.
 """
 from __future__ import annotations
 import os
@@ -11,6 +11,7 @@ from pathlib import Path
 
 FORMAL_PROVIDER_ENV = "MICROGEN_FORMAL_TTS_PROVIDER"
 NO_FORMAL_PROVIDER = "unconfigured"
+DEFAULT_GEMINI_PROVIDER = "gemini"
 EXPLICIT_CLOUD_PROVIDER = "google_cloud"
 
 
@@ -33,10 +34,10 @@ def selected_formal_provider(environ=None) -> str:
         else:
             path = Path.home() / "AppData" / "Local" / "Microvid" / ".env"
         configured = dotenv_values(path).get(FORMAL_PROVIDER_ENV) if path.is_file() else None
-    value = str(configured or NO_FORMAL_PROVIDER).strip().lower()
+    value = str(DEFAULT_GEMINI_PROVIDER if configured is None else configured).strip().lower()
     if value in ("", NO_FORMAL_PROVIDER, "none", "off", "disabled"):
         return NO_FORMAL_PROVIDER
-    if value == EXPLICIT_CLOUD_PROVIDER:
+    if value in (DEFAULT_GEMINI_PROVIDER, EXPLICIT_CLOUD_PROVIDER):
         return value
     raise TTSProviderPolicyError(
         "Unsupported formal TTS provider; no local voice has been certified. "
@@ -48,12 +49,10 @@ def require_formal_provider(environ=None) -> str:
     selected = selected_formal_provider(environ)
     if selected == NO_FORMAL_PROVIDER:
         raise TTSProviderPolicyError(
-            "Formal lecture TTS has no default provider under the revised "
-            "owner contract. Google Cloud may be used for diagnostics only "
-            "without choosing it for formal output. To explicitly opt into "
-            "Google Cloud for a formal run, separately configure "
-            "MICROGEN_FORMAL_TTS_PROVIDER=google_cloud subject to the "
-            "applicable owner and cost authorizations."
+            "Formal lecture TTS was explicitly disabled in the configuration. "
+            "The ordinary default is gemini-3.8-flash-lite-tts with Kore; "
+            "an explicit unconfigured/off selector still blocks production. "
+            "Google Cloud is never the implicit primary provider."
         )
     return selected
 

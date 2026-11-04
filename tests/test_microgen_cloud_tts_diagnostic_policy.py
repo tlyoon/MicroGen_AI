@@ -51,7 +51,8 @@ class TTSDiagnosticContractTests(unittest.TestCase):
                 {**values, "MICROGEN_FORMAL_TTS_PROVIDER": "unconfigured"}),
                 "unconfigured")
             envfile.write_text("SOME_PRIVATE_KEY=irrelevant\n", encoding="utf-8")
-            self.assertEqual(policy.selected_formal_provider(values), "unconfigured")
+            # PR270 owner-requested Gemini Flash-Lite default; no credential read.
+            self.assertEqual(policy.selected_formal_provider(values), "gemini")
 
     def test_formal_cloud_possible_only_with_explicit_selection(self):
         with patch.dict(os.environ, {"MICROGEN_FORMAL_TTS_PROVIDER": "google_cloud"}):
