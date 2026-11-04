@@ -31,6 +31,11 @@ evidence without a mandatory human sign-off. The resulting source-bound receipt
 never grants copyrighted-material publication rights. See
 [`docs/AUTONOMOUS_PRIVATE_RELEASE_ACCEPTANCE.md`](docs/AUTONOMOUS_PRIVATE_RELEASE_ACCEPTANCE.md).
 
+On Windows, the Beamer `\\pause` cleaner now writes already-normalized
+CRLF/LF text as exact UTF-8 bytes. This prevents repeated cleanup from
+introducing blank paragraphs inside display maths. See
+[`docs/WINDOWS_TEX_NEWLINE_IDEMPOTENCE.md`](docs/WINDOWS_TEX_NEWLINE_IDEMPOTENCE.md).
+
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
