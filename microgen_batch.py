@@ -337,6 +337,23 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
     return False
 
 
+def _science_qa_update_upstream_fingerprints(cp: dict, stage: Path,
+                                             dest: Path) -> None:
+    """Rebind accepted source-verbatim repairs to previously verified stages.
+
+    This avoids regenerating the narration/slides on the next resume after a
+    legitimate science-stage correction. It may run only on valid QA evidence.
+    """
+    from microgen_autonomous_science_qa import verify_receipt
+    verify_receipt(stage)
+    for name in ("slides", "narration"):
+        if cp.get("completed", {}).get(name):
+            if not stage_valid(stage, name, dest):
+                raise RuntimeError(f"Accepted scientific correction invalidated {name}")
+            cp.setdefault("dependency_fingerprints", {})[name] = (
+                quality.dependency_fingerprint(stage, name))
+
+
 def invalidate_from(cp: dict, stage_name: str) -> None:
     completed = cp.setdefault("completed", {})
     idx = STAGES.index(stage_name)
@@ -882,6 +899,15 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         if completed and fingerprint_ok:
             print(f"[{subchapter}] resume: {stage_name} and dependencies verified", flush=True)
             continue
+        if (stage_name == "science_qa"
+            and not cp.get("completed", {}).get("science_qa")
+            and stage_valid(stage, "science_qa", dest)):
+            # Source-bound receipt exists but the process crashed before
+            # mark_complete. Do not pay for duplicate model review.
+            _science_qa_update_upstream_fingerprints(cp, stage, dest)
+            mark_complete(cp, checkpoint_path, "science_qa", stage)
+            print(f"[{subchapter}] recovered exact-source scientific QA receipt",flush=True)
+            continue
 
         invalidate_from(cp, stage_name)
         save_checkpoint(checkpoint_path, cp)
@@ -908,6 +934,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     lease.assert_held()
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
+            if stage_name == "science_qa":
+                _science_qa_update_upstream_fingerprints(cp, stage, dest)
             mark_complete(cp, checkpoint_path, stage_name, stage)
         except Exception as exc:
             cp["last_error"] = {

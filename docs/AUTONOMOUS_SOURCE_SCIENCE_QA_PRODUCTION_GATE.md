@@ -34,20 +34,32 @@ The public status says only `SOURCE_GROUNDED_MODEL_SCREEN_PASSED`, never
 
 ## Bounded correction policy
 
-Only exact **narration** substrings may be repaired, and only when the proposed
-replacement is an actual source-PDF passage. Each change must be:
+**PR #272 extension:** Exactly source-quoted changes may be made to one
+unambiguous, literal slide *text* passage as well as up to three total
+narration/slide corrections per bounded assessment. Narration changes must
+agree across `script.txt`, `narration` and `tts_text`.
 
-1. A clear source-contradicting error reported by the separate reviewer.
-2. A unique literal occurrence in `script.txt`, `narration` and `tts_text`.
-3. Replaced by a source-quoted literal phrase, not an unsupported model rewrite.
-4. Accepted in a second, bounded, complete source-slide-narration review.
+For a slide change the engine requires a unique literal in its original
+`slides.tex` and rendered PDF text; the old and new text must contain no
+unsafe TeX control characters, math delimiters or macros. It compiles a new
+candidate deck with `pdflatex -no-shell-escape` in isolated local scratch,
+checks unchanged page count, unrelated slide text and embedded original figure
+bytes, and passes the candidate *rendered* slides to a second source-grounded
+Gemini review. Only then are the candidate PDF/TeX and any revised narration
+committed together, with rollback on failure. If WAVs/MP4 already exist, no
+source text correction is permitted without separately regenerating downstream
+media. Original `source.pdf` and protected media remain unchanged.
 
-At most three such substitutions are allowed. Both text files update together
-with rollback on failure. No WAV/MP4 or original PDF is touched by this QA
-stage. Unresolved scientific slide/equation errors, forged source citations
-and provider failures *block that stage*; they do not trigger unbounded PDF
-regeneration. Later autonomous improvement may add separately verified,
-source-preserving **slide** repair in a new change request.
+TeX equation rewrites, visual figure-semantic errors and nonverbatim scientific
+claims are **not** silently fixed; they remain explicit blockers with immutable
+private diagnostics. The small bound prevents repeated PDF-specific fixing
+loops. This contract does not equate model agreement with guaranteed scientific
+correctness.
+
+Passing receipts now also bind the science QA and slide-repair implementation
+hashes. The batch can recover an exact previously completed QA receipt after a
+checkpoint crash, avoiding duplicate model costs, and updates upstream stage
+fingerprints after an accepted correction to prevent needless regeneration.
 
 A successful machine audit creates
 `.microgen_autonomous_science_qa.json` tied by SHA-256 to the exact

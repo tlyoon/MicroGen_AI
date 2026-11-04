@@ -47,6 +47,8 @@ def make_stage(root: Path, *, wrong: bool = False) -> Path:
         f"**Slide 2 [10 sec]:\n{slide2}\n",encoding="utf8")
     (stage/"microgen_autonomous_science_qa.py").write_text(
         "pinned_code_revision",encoding="utf8")
+    (stage/"microgen_autonomous_slide_repair.py").write_text(
+        "pinned_slide_repair_code",encoding="utf8")
     return stage
 
 
