@@ -34,11 +34,12 @@ STAGES = [
     "narration",
     "science_qa",
     "tts",
+    "acoustic_qa",
     "slide_slicing",
     "video",
     "published",
 ]
-GEMINI_STAGES = {"figure_mapping", "slides", "narration", "science_qa"}
+GEMINI_STAGES = {"figure_mapping", "slides", "narration", "science_qa", "acoustic_qa"}
 
 
 def inspect_local_checkout(repo: Path, *, expected_commit: str | None = None) -> str:
@@ -309,7 +310,7 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             return False
     if name == "published":
         return quality.published_manifest_valid(dest)
-    if name in {"slides", "narration", "science_qa", "tts", "slide_slicing", "video"}:
+    if name in {"slides", "narration", "science_qa", "tts", "acoustic_qa", "slide_slicing", "video"}:
         try:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
@@ -324,6 +325,9 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 verify_receipt(stage)
             elif name == "tts":
                 quality.check_wavs(stage, count)
+            elif name == "acoustic_qa":
+                from microgen_autonomous_acoustic_gate import verify_receipt
+                verify_receipt(stage)
             elif name == "slide_slicing":
                 quality.numbered_files(stage, "pdf", count)
             elif name == "video":
@@ -860,6 +864,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         "narration": (args.main_py, "gen_script_v13.py", "narration"),
         "science_qa": (args.main_py, "microgen_autonomous_science_qa.py", "source-grounded independent scientific QA"),
         "tts": (args.main_py, "text_to_speech_v25.py", "TTS"),
+        "acoustic_qa": (args.main_py, "microgen_autonomous_acoustic_gate.py",
+                        "independent two-model acoustic QA"),
         "slide_slicing": (args.main_py, "slice_pdf_v21.py", "slide slicing"),
         "video": (args.main_py, "gen_video_v22.py", "video assembly"),
     }
