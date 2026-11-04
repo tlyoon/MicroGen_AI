@@ -12,6 +12,12 @@ corrections and SHA-bound acceptance evidence. This is a model-based scientific
 screen, not a guarantee of scholarly correctness or publication rights. See
 [`docs/AUTONOMOUS_SOURCE_SCIENCE_QA_PRODUCTION_GATE.md`](docs/AUTONOMOUS_SOURCE_SCIENCE_QA_PRODUCTION_GATE.md).
 
+For real lectures longer than 600 seconds, the default video pipeline now
+automatically splits **at verified whole-slide boundaries**, producing private
+`slides_part_XX.mp4` files using SHA-bound existing PDF/WAV/video segments,
+without regenerating narration or requesting manual approval. See
+[`docs/AUTONOMOUS_VIDEO_SEGMENTATION.md`](docs/AUTONOMOUS_VIDEO_SEGMENTATION.md).
+
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 

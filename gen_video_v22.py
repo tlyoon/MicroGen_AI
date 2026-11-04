@@ -230,6 +230,15 @@ def main() -> None:
         from microgen_multipart import render_parts
         result = render_parts(Path.cwd(), segments, _concat)
         print(f"[video] validated {len(result['parts'])} source-grounded video parts")
+    else:
+        # Autonomous development never requires a human-approved scene file.
+        # For long lectures, generate <600s whole-slide parts from the
+        # already SHA-verified PDF/WAV/MP4 cache; preserve full original MP4.
+        from microgen_autonomous_video_parts import render_if_needed
+        automatic = render_if_needed(Path.cwd(), _concat)
+        if automatic is not None:
+            print(f"[video] independently checked {len(automatic['parts'])} "
+                  "whole-slide autonomous parts; full MP4 preserved")
     print(f"Video created and verified successfully: {OUTPUT_FILE}")
 
 
