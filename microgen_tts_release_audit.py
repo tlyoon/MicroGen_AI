@@ -106,11 +106,18 @@ def audit_stage(
     video_hash=file_hash(video) if video.is_file() else ""
     video_seconds=None
     video_ok=False
+    automatic_parts_evidence=None
     if video.is_file():
         try:
             data=check_video(video,expected_seconds=sum(seconds))
             video_seconds=data["seconds"]
             video_ok=0<video_seconds<600
+            if video_seconds>=600 and (folder/".microgen_autonomous_parts.json").is_file():
+                from microgen_autonomous_video_parts import verify_receipt
+                automatic_parts_evidence=verify_receipt(folder)
+                parts=automatic_parts_evidence["parts"]
+                video_ok=bool(parts) and all(
+                    0<p["actual_seconds"]<600 for p in parts)
         except (OSError,ValueError,RuntimeError):
             video_ok=False
     multipart_evidence=None
@@ -152,6 +159,7 @@ def audit_stage(
         "video_sha256":video_hash or None,
         "video_duration_seconds":video_seconds,
         "multipart_delivery_evidence":multipart_evidence,
+        "automatic_whole_slide_parts_evidence":automatic_parts_evidence,
         "total_wav_seconds":round(sum(seconds),4),
         "wav_sha256":audio_hash,
         "source_risks":risks["risk_count"],

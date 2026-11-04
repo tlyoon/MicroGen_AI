@@ -25,10 +25,16 @@ identify a correctable speech slip; ambiguous results block technical
 acceptance without human gating. See
 [`docs/AUTONOMOUS_ACOUSTIC_QA_STAGE.md`](docs/AUTONOMOUS_ACOUSTIC_QA_STAGE.md).
 
+The final private `acceptance` stage now independently requires scientific,
+two-model acoustic, figure-provenance, WAV/PCM and duration-compliant media
+evidence without a mandatory human sign-off. The resulting source-bound receipt
+never grants copyrighted-material publication rights. See
+[`docs/AUTONOMOUS_PRIVATE_RELEASE_ACCEPTANCE.md`](docs/AUTONOMOUS_PRIVATE_RELEASE_ACCEPTANCE.md).
+
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
-The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, Google Cloud text-to-speech audio, per-slide PDF/WAV assets, and a final narrated MP4 video.
+The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, default Gemini Flash-Lite/Kore TTS audio, per-slide PDF/WAV assets and privately verified narrated MP4 videos. Google Cloud TTS is an opt-in fallback, not the default.
 
 ## Design goals
 

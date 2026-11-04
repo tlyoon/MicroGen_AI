@@ -37,6 +37,7 @@ STAGES = [
     "acoustic_qa",
     "slide_slicing",
     "video",
+    "acceptance",
     "published",
 ]
 GEMINI_STAGES = {"figure_mapping", "slides", "narration", "science_qa", "acoustic_qa"}
@@ -310,7 +311,7 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             return False
     if name == "published":
         return quality.published_manifest_valid(dest)
-    if name in {"slides", "narration", "science_qa", "tts", "acoustic_qa", "slide_slicing", "video"}:
+    if name in {"slides", "narration", "science_qa", "tts", "acoustic_qa", "slide_slicing", "video", "acceptance"}:
         try:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
@@ -330,6 +331,9 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 verify_receipt(stage)
             elif name == "slide_slicing":
                 quality.numbered_files(stage, "pdf", count)
+            elif name == "acceptance":
+                from microgen_autonomous_acceptance import verify_receipt
+                verify_receipt(stage)
             elif name == "video":
                 wav = quality.check_wavs(stage, count)
                 media = quality.check_video(
@@ -868,6 +872,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                         "independent two-model acoustic QA"),
         "slide_slicing": (args.main_py, "slice_pdf_v21.py", "slide slicing"),
         "video": (args.main_py, "gen_video_v22.py", "video assembly"),
+        "acceptance": (args.main_py, "microgen_autonomous_acceptance.py",
+                       "autonomous final technical acceptance"),
     }
 
     for stage_name in STAGES:
