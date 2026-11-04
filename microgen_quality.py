@@ -534,6 +534,13 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         "slide_slicing": ("slides.pdf", "slice_pdf_v21.py"),
         "video": ("slides.pdf", "gen_video_v22.py",
                   "microgen_autonomous_video_parts.py"),
+        "acceptance": ("source.pdf", "slides.pdf", "slides.tex",
+                       "script.txt", "script_tts.json", "slides.mp4",
+                       ".microgen_autonomous_science_qa.json",
+                       ".microgen_autonomous_acoustic_qa.json",
+                       ".microgen_autonomous_acceptance.json",
+                       "microgen_autonomous_acceptance.py",
+                       "microgen_tts_release_audit.py"),
         "published": ("source.pdf", "slides.pdf", "slides.tex", "script.txt",
                       "script_tts.json", "slides.mp4"),
     }
@@ -544,6 +551,16 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
             inputs.append(".microgen_autonomous_acoustic_qa.json")
+    if name == "acceptance":
+        inputs += sorted(p.name for p in stage.glob("slide*.wav"))
+        inputs += sorted(p.name for p in stage.glob("slide*.pdf"))
+        inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+        for optional in (".microgen_autonomous_parts.json",
+                         "figure_composition_receipt.json",
+                         ".microgen_tts_provenance.json"):
+            if (stage/optional).is_file():
+                inputs.append(optional)
+        inputs += sorted(p.name for p in stage.glob("slides_part_*.mp4"))
     if name in {"video", "published"}:
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if name == "video" and (stage / ".microgen_autonomous_parts.json").is_file():
