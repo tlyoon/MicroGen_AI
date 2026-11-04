@@ -85,7 +85,9 @@ def _review_prompt(source: list[str], slides: list[str], items: list[dict]) -> s
             "observed_quote (exact literal text of the affected slide/narration), "
             "source_quote (exact contiguous quote from the provided source), "
             "and suggested_replacement (ONLY if an exact original source quote "
-            "is a safe narration replacement; otherwise empty string).",
+            "can safely replace a unique plain-text narration or slide sentence; "
+            "never rewrite TeX macros, equations, graphics or symbolic formulas; "
+            "otherwise use empty string).",
             "Mark an error only for a clear, source-contradicting statement.",
             "Do not flag differences in wording, supplementary teaching examples "
             "or legitimate rounding as errors without a clear contradiction.",
@@ -167,7 +169,7 @@ def _grounded(candidate: str, corpus: str) -> bool:
 
 
 def _plan_corrections(rows: list[dict], source: list[str],
-                      slides: list[str], items: list[dict]) -> list[tuple[int,str,str]]:
+                      slides: list[str], items: list[dict]) -> list[tuple[int,str,str,str]]:
     ops = []
     for i, row in enumerate(rows):
         if row["status"] != "error":
@@ -176,19 +178,28 @@ def _plan_corrections(rows: list[dict], source: list[str],
             quoted = issue["observed_quote"]
             cited = issue["source_quote"]
             replacement = issue["suggested_replacement"]
+            field = issue["field"]
             if (not _grounded(cited, "\n".join(source))
                 or len(ops) >= MAX_CORRECTIONS
-                or issue["field"] != "narration"
                 or not replacement or replacement != cited
-                or not _grounded(quoted, items[i]["narration"])
-                or not _grounded(quoted, items[i].get("tts_text") or items[i]["narration"])
-                or items[i]["narration"].count(quoted) != 1
-                or (items[i].get("tts_text") or items[i]["narration"]).count(quoted) != 1
                 or quoted == replacement):
-                raise ScienceQAError(
-                    "Source-contradicting content cannot be safely auto-corrected; "
-                    "no unsafe slide/equation rewrite permitted")
-            ops.append((i, quoted, replacement))
+                raise ScienceQAError("Unsupported or ungrounded scientific correction")
+            if field == "narration":
+                if (not _grounded(quoted, items[i]["narration"])
+                    or not _grounded(quoted, items[i].get("tts_text") or items[i]["narration"])
+                    or items[i]["narration"].count(quoted) != 1
+                    or (items[i].get("tts_text") or items[i]["narration"]).count(quoted) != 1):
+                    raise ScienceQAError("Ambiguous narration correction")
+            elif field == "slide":
+                from microgen_autonomous_slide_repair import _safe_text
+                if (not _safe_text(quoted) or not _safe_text(replacement)
+                    or slides[i].count(quoted) != 1):
+                    raise ScienceQAError("Unsupported slide equation, markup or ambiguous text")
+            else:
+                raise ScienceQAError("Unknown correction field")
+            ops.append((i, field, quoted, replacement))
+    if sum(field == "slide" for _, field, _, _ in ops) > 1:
+        raise ScienceQAError("Only one independently re-rendered slide per review")
     return ops
 
 
@@ -212,6 +223,14 @@ def _same_input_hashes(stage: Path, before: dict) -> None:
         raise ScienceQAError("Lecture inputs changed during independent QA")
 
 
+def _implementation_hashes() -> dict[str, str]:
+    import microgen_autonomous_slide_repair as slide_repair
+    return {
+        "science_qa":sha256(Path(__file__)),
+        "slide_repair":sha256(Path(slide_repair.__file__)),
+    }
+
+
 def _receipt_valid(stage: Path, record: dict) -> bool:
     return (isinstance(record, dict)
         and record.get("schema_version") == 1
@@ -219,6 +238,7 @@ def _receipt_valid(stage: Path, record: dict) -> bool:
             "SOURCE_GROUNDED_MODEL_SCREEN_PASSED",
             "SOURCE_GROUNDED_MODEL_SCREEN_PASSED_AFTER_CORRECTION"}
         and record.get("inputs") == _inputs(stage)
+        and record.get("implementation_sha256") == _implementation_hashes()
         and record.get("model") == record.get("reviewer_model")
         and isinstance(record.get("slide_count"), int)
         and record.get("slide_count") > 0
@@ -269,8 +289,42 @@ def _record_blocked(stage: Path, inputs: dict, rows: list[dict],
     path.write_text(json.dumps(data,indent=2,ensure_ascii=False),encoding="utf8")
 
 
+def _archive_stale_receipt(stage: Path) -> None:
+    """Keep old SHA evidence but never promote an outdated implementation."""
+    path=stage/RECEIPT
+    if path.is_symlink():
+        raise ScienceQAError("Unsafe scientific QA receipt symlink")
+    if not path.exists():
+        return
+    prior=path.read_bytes()
+    try:
+        parsed=json.loads(prior)
+        if _receipt_valid(stage,parsed):
+            raise ScienceQAError("Already accepted source-bound scientific QA receipt")
+    except (UnicodeError,json.JSONDecodeError,KeyError,ValueError) as exc:
+        if isinstance(exc,ScienceQAError):
+            raise
+    archive=stage/(".microgen_science_qa_prior_"+hashlib.sha256(prior).hexdigest()[:20]+".json")
+    if archive.exists():
+        if archive.is_symlink() or archive.read_bytes()!=prior:
+            raise ScienceQAError("Conflicting previous scientific QA evidence")
+        path.unlink()
+    else:
+        path.rename(archive)
+
+
 def audit_stage(stage: Path, *, reviewer: Callable | None = None) -> dict:
+    """Verify first; correct only exact source-linked text; re-review; commit atomically.
+
+    A slide-level edit is compiled as an isolated candidate before changing any
+    existing TeX or PDF. A second science review sees the *candidate rendered*
+    slide text, not the old slide. No model may approve its own unsafe markup.
+    """
+    from contextlib import ExitStack
+    from tempfile import TemporaryDirectory
+    from microgen_autonomous_slide_repair import candidate_slide_edit
     stage = Path(stage)
+    _archive_stale_receipt(stage)
     source, slides, items, data = _fingerprinted_slides(stage)
     before = _inputs(stage)
     reviewer = reviewer or _live_review
@@ -281,62 +335,84 @@ def audit_stage(stage: Path, *, reviewer: Callable | None = None) -> dict:
         _record_blocked(stage,before,rows,str(exc))
         raise
     advisories = sum(r["status"] == "advisory" for r in rows)
-    new_data, new_script = None, None
-    if operations:
-        try:
-            new_data, new_script = _candidate_changes(
-                data, (stage / "script.txt").read_text(encoding="utf8"), operations)
-        except ScienceQAError as exc:
-            _record_blocked(stage, before, rows, str(exc))
-            raise
-        verified = _validate_review(
-            reviewer(source, slides, new_data["slides"]), len(items))
-        if any(r["status"] == "error" for r in verified):
-            _record_blocked(stage, before, verified,
-                            "Proposed narration corrections failed source recheck")
-            raise ScienceQAError("Corrected content did not pass independent source recheck")
-        advisories = sum(r["status"] == "advisory" for r in verified)
-    _same_input_hashes(stage, before)
-    # Commit only AFTER both bounded checks succeed; rollback on any file
-    # write, validation or receipt error. Never touch finished WAV/MP4.
-    originals = [(stage / f).read_bytes() for f in ("script_tts.json", "script.txt")]
+    narration_ops = [(i, old, new) for i, kind, old, new in operations
+                     if kind == "narration"]
+    slide_ops = [(i, old, new) for i, kind, old, new in operations
+                 if kind == "slide"]
     path = stage / RECEIPT
     if path.exists() or path.is_symlink():
-        # A failed or stale receipt must be intentionally audited again via a
-        # separate work stage, rather than silently overwritten.
         raise ScienceQAError("Existing scientific QA receipt cannot be overwritten")
-    try:
+    if operations and (any(stage.glob("slide*.wav")) or
+                       any(stage.glob("slides*.mp4"))):
+        raise ScienceQAError(
+            "Refusing to change a source-bound lecture after audio/video generation")
+    files = ("script_tts.json", "script.txt", "slides.tex", "slides.pdf")
+    originals = {name:(stage/name).read_bytes() for name in files}
+    with ExitStack() as stack:
+        new_data = data
+        new_script = (stage / "script.txt").read_text(encoding="utf8")
+        replacement_tex = replacement_pdf = None
+        candidate_pages = slides
         if operations:
-            (stage / "script_tts.json").write_text(
-                json.dumps(new_data, ensure_ascii=False, indent=2), encoding="utf8")
-            (stage / "script.txt").write_text(new_script, encoding="utf8")
-            check_narration(stage / "script.txt", stage / "script_tts.json", len(items))
-        result = {
-            "schema_version": 1,
-            "status": ("SOURCE_GROUNDED_MODEL_SCREEN_PASSED_AFTER_CORRECTION"
-                       if operations else "SOURCE_GROUNDED_MODEL_SCREEN_PASSED"),
-            "model": os.environ.get("MICROGEN_SCIENCE_QA_MODEL", MODEL),
-            "reviewer_model": os.environ.get("MICROGEN_SCIENCE_QA_MODEL", MODEL),
-            "slide_count": len(items),
-            "all_slides_reviewed": True,
-            "source_bound_narration_corrections": len(operations),
-            "advisory_slide_count": advisories,
-            "unresolved_blocking_issues": 0,
-            "inputs": _inputs(stage),
-            "automatic_review": True,
-            "human_review_required_for_development": False,
-            "scientific_correctness_fully_certified": False,
-            "publication_allowed": False,
-        }
-        path.write_text(json.dumps(result, indent=2), encoding="utf8")
-        verify_receipt(stage)
-        return result
-    except Exception:
-        path.unlink(missing_ok=True)
-        if operations:
-            for name, raw in zip(("script_tts.json", "script.txt"), originals):
-                (stage / name).write_bytes(raw)
-        raise
+            try:
+                if narration_ops:
+                    new_data, new_script = _candidate_changes(
+                        data, new_script, narration_ops)
+                if slide_ops:
+                    i, old, new = slide_ops[0]
+                    scratch = Path(stack.enter_context(TemporaryDirectory(
+                        prefix=".microgen-science-slide-repair-",dir=stage.parent)))
+                    replacement_tex,replacement_pdf,candidate_pages = (
+                        candidate_slide_edit(stage, i+1, old, new, scratch))
+                verified = _validate_review(
+                    reviewer(source, candidate_pages, new_data["slides"]), len(items))
+                if any(r["status"] == "error" for r in verified):
+                    raise ScienceQAError(
+                        "Corrected slide/narration did not pass independent source recheck")
+                advisories = sum(r["status"] == "advisory" for r in verified)
+            except (OSError, RuntimeError, ValueError) as exc:
+                _record_blocked(stage,before,rows,str(exc))
+                raise ScienceQAError(
+                    "Automatic scientific correction failed safely: " + str(exc)) from exc
+        _same_input_hashes(stage,before)
+        try:
+            if narration_ops:
+                (stage/"script_tts.json").write_text(
+                    json.dumps(new_data,ensure_ascii=False,indent=2),encoding="utf8")
+                (stage/"script.txt").write_text(new_script,encoding="utf8")
+                check_narration(stage/"script.txt",stage/"script_tts.json",len(items))
+            if slide_ops:
+                (stage/"slides.tex").write_bytes(replacement_tex.read_bytes())
+                (stage/"slides.pdf").write_bytes(replacement_pdf.read_bytes())
+                check_slide_pdf(stage/"slides.pdf",require_footer=True)
+            result={
+                "schema_version":1,
+                "status":("SOURCE_GROUNDED_MODEL_SCREEN_PASSED_AFTER_CORRECTION"
+                          if operations else "SOURCE_GROUNDED_MODEL_SCREEN_PASSED"),
+                "model":os.environ.get("MICROGEN_SCIENCE_QA_MODEL",MODEL),
+                "reviewer_model":os.environ.get("MICROGEN_SCIENCE_QA_MODEL",MODEL),
+                "slide_count":len(items),
+                "all_slides_reviewed":True,
+                "source_bound_narration_corrections":len(narration_ops),
+                "source_bound_slide_text_corrections":len(slide_ops),
+                "advisory_slide_count":advisories,
+                "unresolved_blocking_issues":0,
+                "inputs":_inputs(stage),
+                "implementation_sha256":_implementation_hashes(),
+                "automatic_review":True,
+                "human_review_required_for_development":False,
+                "scientific_correctness_fully_certified":False,
+                "publication_allowed":False,
+            }
+            path.write_text(json.dumps(result,indent=2),encoding="utf8")
+            verify_receipt(stage)
+            return result
+        except Exception:
+            path.unlink(missing_ok=True)
+            if operations:
+                for name, raw in originals.items():
+                    (stage/name).write_bytes(raw)
+            raise
 
 
 def main() -> int:
