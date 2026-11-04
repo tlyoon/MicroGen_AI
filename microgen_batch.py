@@ -328,9 +328,13 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 quality.numbered_files(stage, "pdf", count)
             elif name == "video":
                 wav = quality.check_wavs(stage, count)
-                quality.check_video(stage / "slides.mp4", expected_seconds=wav["total_seconds"])
+                media = quality.check_video(
+                    stage / "slides.mp4", expected_seconds=wav["total_seconds"])
                 if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
                     quality.check_multipart_receipt(stage)
+                elif media["seconds"] >= 600:
+                    from microgen_autonomous_video_parts import verify_receipt
+                    verify_receipt(stage)
             return True
         except (quality.QualityError, OSError, ValueError):
             return False

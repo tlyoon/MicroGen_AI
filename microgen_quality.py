@@ -527,7 +527,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                        "microgen_autonomous_slide_repair.py"),
         "tts": ("script_tts.json", "text_to_speech_v25.py"),
         "slide_slicing": ("slides.pdf", "slice_pdf_v21.py"),
-        "video": ("slides.pdf", "gen_video_v22.py"),
+        "video": ("slides.pdf", "gen_video_v22.py",
+                  "microgen_autonomous_video_parts.py"),
         "published": ("source.pdf", "slides.pdf", "slides.tex", "script.txt",
                       "script_tts.json", "slides.mp4"),
     }
@@ -536,6 +537,9 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
     if name in {"video", "published"}:
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
+        if name == "video" and (stage / ".microgen_autonomous_parts.json").is_file():
+            inputs.append(".microgen_autonomous_parts.json")
+            inputs += sorted(p.name for p in stage.glob("slides_part_*.mp4"))
         if (stage / "lesson_scenes.json").is_file():
             inputs.append("lesson_scenes.json")
         if (stage / ".microgen_multipart_receipt.json").is_file() and name == "published":
