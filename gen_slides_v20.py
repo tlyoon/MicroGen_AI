@@ -147,7 +147,11 @@ def clean_pause_in_place(path: str = "slides.tex") -> None:
     if newline != "\n":
         text = text.replace("\n", newline)
 
-    p.write_text(text, encoding="utf-8")
+    # A text-mode write on Windows would translate the CRLF characters once
+    # more (\r\n -> \r\r\n). Repeated slide cleanup used to double the
+    # resulting blank paragraphs and break Beamer display math. Write the
+    # already-normalized bytes exactly as composed, on every platform.
+    p.write_bytes(text.encode("utf-8"))
 
 
 ##
