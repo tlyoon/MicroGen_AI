@@ -526,6 +526,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                        "microgen_autonomous_science_qa.py",
                        "microgen_autonomous_slide_repair.py"),
         "tts": ("script_tts.json", "text_to_speech_v25.py"),
+        "acoustic_qa": ("script_tts.json",
+                        ".microgen_tts_provenance.json",
+                        "microgen_autonomous_acoustic_gate.py",
+                        "microgen_tts_acoustic_qa.py",
+                        "microgen_tts_evidence.py"),
         "slide_slicing": ("slides.pdf", "slice_pdf_v21.py"),
         "video": ("slides.pdf", "gen_video_v22.py",
                   "microgen_autonomous_video_parts.py"),
@@ -535,6 +540,10 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     inputs = list(dependencies.get(name, ("source.pdf",)))
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+    if name == "acoustic_qa":
+        inputs += sorted(p.name for p in stage.glob("slide*.wav"))
+        if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
+            inputs.append(".microgen_autonomous_acoustic_qa.json")
     if name in {"video", "published"}:
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if name == "video" and (stage / ".microgen_autonomous_parts.json").is_file():

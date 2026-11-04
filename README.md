@@ -18,6 +18,13 @@ automatically splits **at verified whole-slide boundaries**, producing private
 without regenerating narration or requesting manual approval. See
 [`docs/AUTONOMOUS_VIDEO_SEGMENTATION.md`](docs/AUTONOMOUS_VIDEO_SEGMENTATION.md).
 
+After Gemini TTS, the default production pipeline also applies a **two-model
+independent acoustic screen** using actual WAVs, not a script-only claim. A
+bounded, same-source/same-voice targeted retry is possible when both models
+identify a correctable speech slip; ambiguous results block technical
+acceptance without human gating. See
+[`docs/AUTONOMOUS_ACOUSTIC_QA_STAGE.md`](docs/AUTONOMOUS_ACOUSTIC_QA_STAGE.md).
+
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
