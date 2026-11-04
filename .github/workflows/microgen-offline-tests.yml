@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Fallback when GitHub does not enqueue pull_request checks; the same
+  # unchanged four-job offline matrix can be run against an exact branch ref.
+  workflow_dispatch:
 
 jobs:
   unit:
