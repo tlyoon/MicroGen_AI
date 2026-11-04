@@ -6,6 +6,12 @@ sign-offs. Technical failures and unavailable acoustic evidence remain blockers;
 optional human review must not be forged or represented as completed.
 See [`docs/AUTONOMOUS_QA_DEVELOPMENT_CONTRACT_20261020.md`](docs/AUTONOMOUS_QA_DEVELOPMENT_CONTRACT_20261020.md).
 
+The resumable batch now runs a source-grounded **autonomous scientific-content
+review after narration and before TTS**, with bounded, source-verbatim narration
+corrections and SHA-bound acceptance evidence. This is a model-based scientific
+screen, not a guarantee of scholarly correctness or publication rights. See
+[`docs/AUTONOMOUS_SOURCE_SCIENCE_QA_PRODUCTION_GATE.md`](docs/AUTONOMOUS_SOURCE_SCIENCE_QA_PRODUCTION_GATE.md).
+
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
