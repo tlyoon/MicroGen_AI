@@ -241,6 +241,46 @@ def call_with_retry(
     raise RuntimeError(f"{label} exhausted retries")
 
 
+def _windows_process_identity(pid: int) -> tuple[bool, float | None] | None:
+    """Read-only Windows PID probe: (alive, creation_epoch) or unknown.
+
+    PID reuse matters: a new unrelated process must not make a crashed
+    worker's queue ticket appear healthy. Never terminate a process here.
+    """
+    if os.name != "nt" or pid < 1:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel.OpenProcess(0x1000,False,pid)  # QUERY_LIMITED_INFORMATION
+        if not handle:
+            error = ctypes.get_last_error()
+            return (False,None) if error in {87,1168} else None
+        try:
+            kernel.GetProcessTimes.argtypes = [
+                wintypes.HANDLE,*([ctypes.POINTER(wintypes.FILETIME)]*4)]
+            kernel.GetProcessTimes.restype = wintypes.BOOL
+            created=wintypes.FILETIME()
+            exited=wintypes.FILETIME()
+            kernel_time=wintypes.FILETIME()
+            user_time=wintypes.FILETIME()
+            if not kernel.GetProcessTimes(
+                handle,ctypes.byref(created),ctypes.byref(exited),
+                ctypes.byref(kernel_time),ctypes.byref(user_time)
+            ):
+                return None
+            ticks=(created.dwHighDateTime << 32) | created.dwLowDateTime
+            return True,ticks/10_000_000 - 11_644_473_600
+        finally:
+            kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+            kernel.CloseHandle(handle)
+    except (OSError,AttributeError,ValueError):
+        return None
+
+
 class GeminiLane:
     def __init__(self, stage: str, model: str = "", cooldown: float | None = None) -> None:
         raw = os.environ.get("MICROGEN_GEMINI_LANE_DIR", "").strip()
@@ -309,20 +349,56 @@ class GeminiLane:
         except OSError:
             return []
 
+    def _same_host_orphan(self, path: Path, now: float) -> bool:
+        """Close only a verified dead *local-host* ticket, never other PCs.
+
+        Wait at least two heartbeat periods before checking, and confirm the
+        recorded PID's process creation time to prevent PID-reuse mistakes.
+        Unknown Windows process-query results leave the ticket untouched.
+        """
+        safe_wait = max(60.0, self.heartbeat * 2.0, self.poll * 2.0)
+        if now - path.stat().st_mtime < safe_wait:
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            host = str(data.get("host", ""))
+            pid = int(data.get("pid", 0))
+            token = str(data.get("token", ""))
+            issued = datetime.fromisoformat(str(data.get("created_utc", ""))).timestamp()
+            if (host != self.host or pid < 1 or pid == self.pid
+                or not token or len(token) != 32
+                or f"__{_safe(host)}__{pid}__{token}.ticket.json" not in path.name
+                or now - issued < safe_wait or issued > now):
+                return False
+            identity = _windows_process_identity(pid)
+            if identity is None:
+                return False
+            alive, started = identity
+            return (not alive) or (
+                started is not None and started > issued + 2.0)
+        except (OSError,ValueError,TypeError,KeyError):
+            return False
+
     def _remove_stale(self) -> None:
         now = time.time()
         for path in self._tickets():
             if self.ticket is not None and path == self.ticket:
                 continue
             try:
-                if now - path.stat().st_mtime > self.stale:
-                    stale_name = f"{path.name}.stale.{_utc_stamp()}"
-                    try:
-                        path.replace(self.history_dir / stale_name)
-                    except OSError:
-                        path.unlink(missing_ok=True)
-                    print(f"[Gemini lane] removed stale ticket {path.name}", flush=True)
+                aged = now - path.stat().st_mtime > self.stale
+                orphaned = False if aged else self._same_host_orphan(path, now)
+                if not aged and not orphaned:
+                    continue
+                kind = "stale" if aged else "verified-local-orphan"
+                target = self.history_dir / f"{path.name}.{kind}.{_utc_stamp()}"
+                # Atomic move into history, rather than a dangerous delete
+                # fallback that could remove another PC's live lease.
+                path.replace(target)
+                print(f"[Gemini lane] archived {kind} ticket {path.name}",
+                      flush=True)
             except OSError:
+                # Fail closed: never unlink shared queue records if an archive
+                # move failed due to Drive sync, locking or permissions.
                 continue
 
     def _heartbeat_loop(self) -> None:

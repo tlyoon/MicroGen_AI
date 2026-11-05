@@ -29,11 +29,12 @@ def inspect_environment(
             modules[name] = importlib.util.find_spec(name) is not None
         except (ImportError, AttributeError, ModuleNotFoundError):
             modules[name] = False
-    # find_spec alone can return True when the installed SDK crashes during
-    # import (observed on Yoga6 with damaged Miniforge package metadata).
+    # Import-only checks previously accepted google-genai 1.4 despite its
+    # missing HttpRetryOptions, causing expensive downstream Gemini failures.
+    from microgen_runtime_preflight import SDK_PROBE_CODE, find_ffprobe
     try:
         deep_import=subprocess.run(
-            [python_exe,"-c","import google.genai, google.cloud.texttospeech, pydantic"],
+            [python_exe,"-c",SDK_PROBE_CODE],
             stdin=subprocess.DEVNULL,capture_output=True,text=True,
             errors="replace",timeout=30,
         )
@@ -75,6 +76,7 @@ def inspect_environment(
     checks = {"python_version_3_11_plus": sys.version_info >= (3, 11),
               "gemini_tts_sdks_importable": sdk_importable,
               "pdflatex_available": latex, "ffmpeg_available": ffmpeg,
+              "ffprobe_available": bool(find_ffprobe()),
               "gemini_key_configured": gemini_keys,
               "cloud_tts_credentials_configured": any(possible_credentials),
               **{f"python:{k}": v for k, v in modules.items()}}
@@ -98,10 +100,11 @@ def inspect_environment(
         disk = scratch_disk_status(work_root)
         checks["scratch_disk_capacity"] = disk["enough_space"]
     remediation = (None if sdk_importable else
-                   "Installed Google packages could not be imported. In this "
-                   "Python interpreter run: python -c 'import google.genai, "
-                   "google.cloud.texttospeech, pydantic'; repair broken package "
-                   "metadata or use a fresh isolated Python environment.")
+                   "The selected Python interpreter is missing Gemini SDK "
+                   "imports or required HTTP retry APIs. Upgrade only that "
+                   "interpreter with python -m pip install "
+                   "'google-genai>=2.33,<3' or use a clean isolated "
+                   "environment; leave the global Python installation intact.")
     return {"host": os.environ.get("COMPUTERNAME") or "unknown",
             "python_executable": python_exe, "checks": checks,
             "sdk_import_remediation": remediation,
