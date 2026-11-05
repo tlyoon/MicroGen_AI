@@ -722,19 +722,23 @@ def preflight(main_py: str, docling_py: str, *, figure_extraction_only: bool = F
         for exe in ("pdflatex",):
             if not shutil.which(exe):
                 raise RuntimeError(f"Required executable not found on PATH: {exe}")
-    # Validate the primary runtime before hours of work are queued.
-    code = (
-        "import importlib.metadata as m; "
-        "from google.genai import types; "
-        "import google.cloud.texttospeech, PyPDF2, imageio_ffmpeg, contractions, fitz; "
-        "print('google-genai='+m.version('google-genai')); "
-        "print('ThinkingConfig='+','.join(getattr(types.ThinkingConfig,'model_fields',{}).keys()))"
+    # Validate the *actual* SDK HTTP retry API before paid work. Importing an
+    # old google-genai alone previously passed preflight yet broke figure mapping.
+    from microgen_runtime_preflight import SDK_PROBE_CODE, prepare_media_tools
+    code = SDK_PROBE_CODE + (
+        "\nimport PyPDF2, imageio_ffmpeg, contractions, fitz"
     )
     if not figure_extraction_only:
         proc = subprocess.run([main_py, "-c", code], capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Primary Python environment failed preflight: {proc.stderr}")
         print(proc.stdout.strip(), flush=True)
+        # FFprobe and an H.264-capable FFmpeg are required by actual media
+        # acceptance. Locate existing user-local binaries automatically and
+        # fail *before* paid Gemini work if either cannot be resolved.
+        media = prepare_media_tools()
+        print("[batch] validated media tools: FFprobe and libx264 FFmpeg; "
+              "current process configured", flush=True)
 
     docling_code = "import docling, pdf2image, PIL; print('Docling environment OK')"
     proc2 = subprocess.run([docling_py, "-c", docling_code], capture_output=True, text=True)
