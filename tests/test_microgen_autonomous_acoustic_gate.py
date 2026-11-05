@@ -85,11 +85,74 @@ class AutonomousAudioTests(unittest.TestCase):
             def outage(_):
                 calls.append("fail")
                 raise RuntimeError("503 provider unavailable")
-            with self.assertRaises(gate.AutonomousAcousticError):
+            with self.assertRaisesRegex(
+                    gate.AutonomousAcousticError, "transcription unavailable"):
                 gate.audit_stage(stage,engines=(outage,outage),
                                  models=("A","B"))
             self.assertEqual(len(calls),2)
             self.assertFalse((stage/gate.RECEIPT).exists())
+            blocked=list(stage.glob(".microgen_acoustic_blocked_*.json"))
+            self.assertEqual(len(blocked),1)
+            evidence=json.loads(blocked[0].read_text())
+            self.assertEqual(evidence["unavailable_recognizer_passes"],[0,1])
+            self.assertEqual(set(evidence["slide_assessments"].values()),
+                             {"REVIEW_REQUIRED_TRANSCRIPTION_UNAVAILABLE"})
+
+    def test_repeated_failed_audits_keep_fresh_status_only_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td))
+            before=[digest_file(stage/f"slide{i}.wav") for i in (1,2)]
+            def unavailable(_):
+                raise RuntimeError("503 UNAVAILABLE")
+            for _ in range(2):
+                with self.assertRaises(gate.AutonomousAcousticError):
+                    gate.audit_stage(stage,engines=(unavailable,unavailable),
+                                     models=("model-A","model-B"))
+            records=sorted(stage.glob(".microgen_acoustic_blocked_*.json"))
+            self.assertEqual(len(records),2)
+            for record in records:
+                data=json.loads(record.read_text())
+                self.assertEqual(data["review_required_slides"],[1,2])
+                self.assertEqual(data["unavailable_recognizer_passes"],[0,1])
+                self.assertEqual(data["recognition_models"],["model-A","model-B"])
+                self.assertEqual(data["model_difference_fractions"]["1"],[])
+                self.assertFalse(data["accepted_for_video"])
+                self.assertNotIn("transcripts",data)
+            self.assertEqual(before,[digest_file(stage/f"slide{i}.wav")
+                                     for i in (1,2)])
+
+    def test_partial_asr_is_rechecked_once_without_exposing_script(self):
+        with tempfile.TemporaryDirectory() as td:
+            sentence="The orange engine spins steadily in open space. "
+            spoken=sentence*5
+            stage=audio_stage(Path(td),texts=[spoken])
+            calls=[]
+            def first(_):
+                calls.append("first")
+                return "The orange engine" if calls.count("first")==1 else spoken
+            def second(_):
+                calls.append("second")
+                return spoken
+            report=gate._transcripts(stage,[normalize_scientific_speech(spoken)],
+                                     (first,second),("model-A","model-B"),memo={})
+            self.assertEqual(report["review_required_slides"],[])
+            self.assertEqual(calls,["first","first","second"])
+
+    def test_still_truncated_after_one_recheck_remains_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            spoken="The purple engine moves steadily around the laboratory. "*5
+            stage=audio_stage(Path(td),texts=[spoken])
+            calls=[]
+            def first(_):
+                calls.append("first")
+                return "The purple engine"
+            def second(_):
+                calls.append("second")
+                return spoken
+            report=gate._transcripts(stage,[normalize_scientific_speech(spoken)],
+                                     (first,second),("model-A","model-B"),memo={})
+            self.assertEqual(report["review_required_slides"],[1])
+            self.assertEqual(calls,["first","first","second"])
 
     def test_same_voice_bounded_local_rerender_passes_two_model_recheck(self):
         with tempfile.TemporaryDirectory() as td:
