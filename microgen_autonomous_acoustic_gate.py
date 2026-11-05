@@ -30,6 +30,7 @@ from microgen_quality import check_wavs, QualityError
 
 RECEIPT=".microgen_autonomous_acoustic_qa.json"
 MAX_REPAIR_SLIDES=2
+MAX_DISAGREEMENT_RECHECK_SLIDES=2
 DEFAULT_MODELS=("gemini-3.5-flash", "gemini-3.8-flash")
 PASS="ASR_SCREEN_PASS_LISTENING_REQUIRED"
 REPAIRABLE="REVIEW_REQUIRED_PRONUNCIATION_RISK"
@@ -143,6 +144,68 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
     return audit_with_recognizer(
         stage,texts,caching(0),normalize_scientific_speech,
         independent_recognizer=caching(1),recognition_models=models)
+
+
+def _recheck_disagreements(stage:Path, report:dict, texts:list[str],
+                           engines:tuple[Callable,Callable],
+                           models:tuple[str,str], memo:dict) -> dict:
+    """At most two independent dual-model retakes of disputed audio.
+
+    A recognizer's one-off transcription error must not become a fake TTS
+    defect. Neither model sees the expected text. Both retakes must agree
+    with each other AND with at least one original blind recognition.
+    Every retake is compared to the original script by the strict screen
+    afterwards; unresolved or sensitive mistakes still block acceptance.
+    """
+    disputed=[
+        row for row in report.get("slides",[])
+        if row["assessment"]=="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
+        and not row["source_pronunciation_risks"]
+    ]
+    if not disputed or len(disputed)>MAX_DISAGREEMENT_RECHECK_SLIDES:
+        return report
+    attempted=[]
+    resolved=[]
+    for row in disputed:
+        n=row["slide"]
+        wav=stage/f"slide{n}.wav"
+        previous=row.get("transcripts",[])
+        if len(previous)!=2 or any(not t for t in previous):
+            continue
+        attempted.append(n)
+        retakes=[]
+        for engine in engines:
+            try:
+                transcript=str(engine(wav)).strip()
+                if len(transcript)<5 or any(
+                        marker in transcript.lower()
+                        for marker in ("[unclear]","[inaudible]")):
+                    raise AutonomousAcousticError("Unreliable retake")
+                retakes.append(transcript)
+            except Exception:
+                retakes=[]
+                break
+        if len(retakes)!=2:
+            continue
+        try:
+            consensus=mismatch_details(retakes[0],retakes[1])
+            has_original_support=any(
+                mismatch_details(old,retakes[0])[
+                    "difference_fraction_upper_bound"]<=0.05
+                for old in previous)
+            if (consensus["difference_fraction_upper_bound"]<=0.05
+                    and has_original_support):
+                fingerprint=digest_file(wav)
+                for i in range(2):
+                    memo[(i,fingerprint)]=retakes[i]
+                resolved.append(n)
+        except AcousticQAError:
+            continue
+    if resolved:
+        report=_transcripts(stage,texts,engines,models,memo=memo)
+    report["independent_disagreement_rechecks"]={
+        "attempted_slides":attempted,"resolved_slides":resolved}
+    return report
 
 
 def _verify(stage:Path, report:dict, texts:list[str]) -> None:
@@ -341,6 +404,7 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
         raise AutonomousAcousticError("Distinct independent Gemini recognizers required")
     memo={}
     report=_transcripts(stage,texts,engines,models,memo=memo)
+    report=_recheck_disagreements(stage,report,texts,engines,models,memo)
     correction_count=0
     try:
         # Provider outages are not pronunciation defects. Never spend the
