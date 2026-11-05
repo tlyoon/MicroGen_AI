@@ -154,6 +154,64 @@ class AutonomousAudioTests(unittest.TestCase):
             self.assertEqual(report["review_required_slides"],[1])
             self.assertEqual(calls,["first","first","second"])
 
+    def test_disagreement_resolves_only_after_two_blind_model_retakes(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td))
+            originals=[digest_file(stage/f"slide{i}.wav") for i in (1,2)]
+            calls=[]
+            def first(wav):
+                calls.append(("A",wav.name))
+                if wav.name=="slide1.wav" and calls.count(("A","slide1.wav"))==1:
+                    return "The orange engine sinks steadily in open space."
+                return WORDS[int(wav.stem.removeprefix("slide"))-1]
+            def second(wav):
+                calls.append(("B",wav.name))
+                return WORDS[int(wav.stem.removeprefix("slide"))-1]
+            receipt=gate.audit_stage(stage,engines=(first,second),
+                                     models=("model-A","model-B"))
+            review=receipt["independent_report"]["independent_disagreement_rechecks"]
+            self.assertEqual(review["attempted_slides"],[1])
+            self.assertEqual(review["resolved_slides"],[1])
+            self.assertEqual(receipt["repaired_audio_slides"],0)
+            self.assertEqual(calls.count(("A","slide1.wav")),2)
+            self.assertEqual(calls.count(("B","slide1.wav")),2)
+            self.assertEqual(originals,[digest_file(stage/f"slide{i}.wav")
+                                        for i in (1,2)])
+
+    def test_persistent_disagreement_fails_after_one_bounded_retaken_pair(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td))
+            calls=[]
+            def first(wav):
+                calls.append(("A",wav.name))
+                return ("The orange engine sinks steadily in open space."
+                        if wav.name=="slide1.wav" else WORDS[1])
+            def second(wav):
+                calls.append(("B",wav.name))
+                return WORDS[int(wav.stem.removeprefix("slide"))-1]
+            with self.assertRaises(gate.AutonomousAcousticError):
+                gate.audit_stage(stage,engines=(first,second),
+                                 models=("model-A","model-B"))
+            self.assertEqual(calls.count(("A","slide1.wav")),2)
+            self.assertEqual(calls.count(("B","slide1.wav")),2)
+            self.assertFalse((stage/gate.RECEIPT).exists())
+
+    def test_more_than_two_disputed_slides_never_triggers_retakes(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td),texts=[WORDS[0]]*3)
+            calls=[]
+            def first(wav):
+                calls.append(("A",wav.name))
+                return "The orange engine sinks steadily in open space."
+            def second(wav):
+                calls.append(("B",wav.name))
+                return WORDS[0]
+            with self.assertRaises(gate.AutonomousAcousticError):
+                gate.audit_stage(stage,engines=(first,second),
+                                 models=("model-A","model-B"))
+            self.assertEqual(len(calls),6)
+            self.assertFalse((stage/gate.RECEIPT).exists())
+
     def test_same_voice_bounded_local_rerender_passes_two_model_recheck(self):
         with tempfile.TemporaryDirectory() as td:
             stage=audio_stage(Path(td))
