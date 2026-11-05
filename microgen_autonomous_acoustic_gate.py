@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from typing import Callable
 
 from microgen_tts_acoustic_qa import (
@@ -72,8 +73,38 @@ def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
             os.environ.get("MICROGEN_ACOUSTIC_MODEL_B",DEFAULT_MODELS[1]))
     if models[0]==models[1] or not all(models):
         raise AutonomousAcousticError("Two distinct Gemini audio reviewers required")
-    return (gemini_audio_recognizer(keys[index],model=models[0]),
-            gemini_audio_recognizer(keys[index],model=models[1]),models)
+    # Every independent model may use the configured key pool. Preserve
+    # distinct model identities while avoiding repeat requests to a key that
+    # has already failed during this model's recognition pass.
+    ordered_keys = keys[index:] + keys[:index]
+
+    def key_pool_recognizer(model:str) -> Callable:
+        engines = [gemini_audio_recognizer(key,model=model)
+                   for key in ordered_keys]
+        preferred_slot = 0
+
+        def transcribe(wav:Path) -> str:
+            nonlocal preferred_slot
+            for offset in range(len(engines)):
+                slot = (preferred_slot + offset) % len(engines)
+                try:
+                    transcript = str(engines[slot](wav)).strip()
+                    if len(transcript) < 5:
+                        raise AcousticQAError("Empty independent transcript")
+                    preferred_slot = slot
+                    return transcript
+                except Exception as exc:
+                    # Never log the credential or expected narration.
+                    print(f"[Acoustic QA] {model} key slot #{slot+1} "
+                          f"unavailable ({type(exc).__name__}); "
+                          "trying next configured slot",flush=True)
+            raise AutonomousAcousticError(
+                f"Independent acoustic recognizer {model} unavailable "
+                f"across {len(engines)} configured Gemini key slots")
+        return transcribe
+
+    return (key_pool_recognizer(models[0]),
+            key_pool_recognizer(models[1]),models)
 
 
 def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable],
@@ -82,7 +113,30 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
         def run(path:Path):
             key=(index,digest_file(path))
             if key not in memo:
-                memo[key]=engines[index](path)
+                transcript=str(engines[index](path)).strip()
+                # A short partial ASR response for a full-length lecture is
+                # not evidence that the TTS stopped speaking. Recheck this
+                # model ONCE, without passing the expected words to Gemini.
+                from microgen_tts_acoustic_qa import tokens
+                try:
+                    slide=int(path.stem.removeprefix("slide"))
+                    reference_words=len(tokens(texts[slide-1]))
+                except (ValueError,IndexError):
+                    reference_words=0
+                if (reference_words>=25 and
+                        len(tokens(transcript)) < 0.45*reference_words):
+                    print(f"[Acoustic QA] model {models[index]} returned "
+                          f"short partial transcript for {path.name}; "
+                          "one independent recheck",flush=True)
+                    try:
+                        candidate=str(engines[index](path)).strip()
+                        if len(tokens(candidate))>len(tokens(transcript)):
+                            transcript=candidate
+                    except Exception:
+                        # The original partial response stays untrusted and
+                        # the final acoustic report will fail closed.
+                        pass
+                memo[key]=transcript
             return memo[key]
         return run
     from text_to_speech_v25 import normalize_scientific_speech
@@ -289,6 +343,12 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     report=_transcripts(stage,texts,engines,models,memo=memo)
     correction_count=0
     try:
+        # Provider outages are not pronunciation defects. Never spend the
+        # local two-slide audio-repair budget on missing ASR transcripts.
+        if report.get("unavailable_recognizer_passes"):
+            raise AutonomousAcousticError(
+                "Independent acoustic transcription unavailable for model "
+                "pass(es) "+str(report["unavailable_recognizer_passes"]))
         if report["review_required_slides"]:
             correction_count=_repair(
                 stage,report,texts,engines,
@@ -319,16 +379,42 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
         # Preserve a source/WAV-bound local diagnostic; never forge a pass.
         snap=_input_snapshot(stage,len(texts))
         signature=hashlib.sha256(json.dumps(snap,sort_keys=True).encode()).hexdigest()[:16]
-        failed=stage/f".microgen_acoustic_blocked_{signature}.json"
-        if not failed.exists():
-            failed.write_text(json.dumps({
-                "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
-                "input_snapshot_sha256":snap,
-                "review_required_slides":report.get("review_required_slides",[]),
-                "failure_type":type(exc).__name__,
-                "accepted_for_video":False,
-                "human_approval_required":False,
-                "publication_allowed":False},indent=2),encoding="utf8")
+        # A stable input SHA alone is NOT a unique audit attempt: new model
+        # transcripts and improved QA code must never be hidden behind an old
+        # blocked diagnostic. Keep every bounded failure as its own receipt.
+        stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        failed=stage/f".microgen_acoustic_blocked_{signature}_{stamp}.json"
+        rows=report.get("slides",[])
+        diagnostic={
+            "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
+            "input_snapshot_sha256":snap,
+            "audit_utc":stamp,
+            "qa_code_sha256":digest_file(Path(__file__)),
+            "recognition_models":list(models),
+            "review_required_slides":report.get("review_required_slides",[]),
+            "unavailable_recognizer_passes":
+                report.get("unavailable_recognizer_passes",[]),
+            # Status-only diagnostics: never expose blind ASR transcripts,
+            # expected narration, credentials, or human approval claims.
+            "slide_assessments":{str(row["slide"]):row["assessment"]
+                                 for row in rows},
+            "model_difference_fractions":{
+                str(row["slide"]):[
+                    m.get("difference_fraction_upper_bound") if isinstance(m,dict)
+                    else None for m in row.get("comparisons",[])]
+                for row in rows},
+            "recognized_word_counts":{
+                str(row["slide"]):[len(t.split()) for t in row.get("transcripts",[])]
+                for row in rows},
+            "source_pronunciation_risk_slides":[
+                row["slide"] for row in rows if row.get("source_pronunciation_risks")],
+            "failure_type":type(exc).__name__,
+            "accepted_for_video":False,
+            "human_approval_required":False,
+            "publication_allowed":False,
+        }
+        with failed.open("x",encoding="utf8") as f:
+            json.dump(diagnostic,f,indent=2)
         raise AutonomousAcousticError("Autonomous acoustic QA blocked: "+str(exc)) from exc
 
 

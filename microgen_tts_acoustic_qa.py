@@ -27,9 +27,9 @@ SENSITIVE = set("""
 circa limit limits theorem intermediate value derivative derivatives
 continuous continuity discontinuity integral integrals minus plus
 positive negative numerator denominator fraction infinite infinity
-equals equal zero one two three four five six seven eight nine ten
+equals equal point zero one two three four five six seven eight nine ten
 not never no greater less negative positive above below minus multiplied divided
-""".split())
+""".split()) | set("0 1 2 3 4 5 6 7 8 9 10".split())
 
 class AcousticQAError(RuntimeError):
     """Missing/unreliable independent verification: fail closed."""
@@ -44,11 +44,48 @@ def sha256(path: Path) -> str:
 
 
 def tokens(text: str) -> list[str]:
+    """Canonicalize only equivalent spoken forms; preserve math/negation changes.
+
+    Punctuation, hyphenated words, expanded contractions, and spellings of
+    numbered equation references must not inflate the acoustic error budget.
+    A removed mathematical sign, changed digit or changed subscript letter
+    remains a real discrepancy.
+    """
+    # The hyphen between non and isolated does not change the audible word.
+    text = re.sub(r"\bnon[\s-]?isolated\b", "non isolated", text,
+                  flags=re.IGNORECASE)
+    # Some ASR models choose the contraction even when the TTS script did not.
+    text = re.sub(r"\b(you|we|they|i)['\u2019]ve\b",
+                  lambda m: m.group(1) + " have", text,
+                  flags=re.IGNORECASE)
+    numbers = {"zero": "0", "one": "1", "two": "2", "three": "3",
+               "four": "4", "five": "5", "six": "6", "seven": "7",
+               "eight": "8", "nine": "9", "ten": "10"}
+    digits = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|\d+)"
+    # "Equation eight point two" and "Equation 8.2" are the same citation.
+    # Do not discard "point" from general decimal measurements.
+    reference = re.compile(
+        rf"\b(equation|figure|section|chapter|table|example|exercise|quiz)"
+        rf"\s+({digits})\s+point\s+({digits})\b", re.IGNORECASE)
+    text = reference.sub(lambda m: (
+        f"{m.group(1)} {numbers.get(m.group(2).lower(), m.group(2))}."
+        f"{numbers.get(m.group(3).lower(), m.group(3))}"), text)
+    raw = re.findall(r"[A-Za-z]+|\d+", text.lower())
     out = []
-    for w in re.findall(r"[A-Za-z]+|\d+", text.lower()):
-        # Orthographic ASR variants are *not* pronunciation errors.
-        out.append({"c": "see", "sea": "see", "x": "ex", "why": "y",
-                    "twos": "two"}.get(w, w))
+    for i, w in enumerate(raw):
+        w = {"c": "see", "sea": "see", "x": "ex", "why": "y",
+             "twos": "two"}.get(w, w)
+        w = numbers.get(w, w)
+        # Script "T sub M T" may be recognized as "T sub MT". Split
+        # compact two-letter indices only in an explicit subscript phrase.
+        if (i >= 2 and raw[i-1] == "sub" and len(raw[i-2]) == 1
+                and len(w) == 2 and w.isalpha()
+                and w not in {"is", "be", "to", "of", "on", "in",
+                              "at", "an", "or", "it", "as", "by",
+                              "we", "he", "no", "do"}):
+            out.extend(w)
+        else:
+            out.append(w)
     return out
 
 
