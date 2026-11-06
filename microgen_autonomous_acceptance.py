@@ -51,12 +51,59 @@ def _snap(stage:Path, count:int)->dict[str,str]:
         timings=inspect_timed_highlights(stage)
         if timings["slide_count"]!=count:
             raise AutonomousAcceptanceError("Timed source-cue count mismatch")
+        from microgen_measured_highlight_video_qa import RECEIPT as VISUAL_RECEIPT
+        if not (stage/VISUAL_RECEIPT).is_file() or (stage/VISUAL_RECEIPT).is_symlink():
+            raise AutonomousAcceptanceError(
+                "Missing independent visual highlight receipt for timed lecture")
+        names.append(VISUAL_RECEIPT)
         names.append(MANIFEST)
         rows=json.loads((stage/MANIFEST).read_text(encoding="utf8"))["slides"]
         names += [cue["audio_chunk"] for row in rows for cue in row["cues"]]
     if len(names)!=len(set(names)):
         raise AutonomousAcceptanceError("Duplicate or ambiguous acceptance assets")
     return {name:sha256(stage/name) for name in names}
+
+
+def _verified_timed_visual(stage:Path, count:int)->dict | None:
+    """Require independent decoded-video evidence for a measured-cue lecture.
+
+    Unchanged static lectures do not acquire new approval requirements.
+    This is a *visual* technical gate: it does not certify spoken phonemes,
+    mathematics, scientific semantics, or textbook publication rights.
+    """
+    from microgen_timed_highlight_contract import MANIFEST
+    manifest=stage/MANIFEST
+    if manifest.is_symlink():
+        raise AutonomousAcceptanceError("Unsafe timed-cue manifest link")
+    if not manifest.exists():
+        return None
+    from microgen_measured_highlight_video_qa import verify_receipt as verify_visual
+    from microgen_runtime_preflight import find_h264_ffmpeg
+
+    ffmpeg=os.environ.get("MICROVID_FFMPEG") or find_h264_ffmpeg()
+    if not ffmpeg or not Path(ffmpeg).is_file():
+        raise AutonomousAcceptanceError("Timed lecture lacks decoded-frame QA tool")
+    try:
+        report=verify_visual(stage,ffmpeg=Path(ffmpeg))
+    except (RuntimeError, ValueError, OSError, TypeError, KeyError) as exc:
+        raise AutonomousAcceptanceError(
+            "Timed lecture requires independently verified visual QA receipt"
+        ) from exc
+    if (not isinstance(report,dict) or
+            report.get("status")!=
+                "SOURCE_PCM_TIMED_VISUAL_HIGHLIGHTS_INDEPENDENTLY_CHECKED" or
+            report.get("slide_count")!=count or
+            type(report.get("cue_count")) is not int or
+            report["cue_count"]<1 or
+            not isinstance(report.get("checked_cues"),list) or
+            len(report["checked_cues"])!=report["cue_count"] or
+            report.get("visual_highlight_rendering_verified") is not True or
+            report.get("spoken_word_to_element_alignment_verified") is not False or
+            report.get("academic_correctness_verified") is not False or
+            report.get("publication_allowed") is not False):
+        raise AutonomousAcceptanceError(
+            "Timed visual QA does not establish the declared private evidence")
+    return report
 
 
 def inspect_stage(stage:Path)->dict:
@@ -90,6 +137,7 @@ def inspect_stage(stage:Path)->dict:
     source_figures=validate_figure_receipt(stage)
     unmapped=audit_unmapped_source_crops(stage,receipt=source_figures)
     video=check_video(stage/"slides.mp4",expected_seconds=wavs["total_seconds"])
+    timed_visual=_verified_timed_visual(stage,count)
     parts=[]
     if video["seconds"]>=600:
         from microgen_autonomous_video_parts import verify_receipt as verify_parts
@@ -108,7 +156,7 @@ def inspect_stage(stage:Path)->dict:
     source_after=hashlib.sha256((stage/"source.pdf").read_bytes()).hexdigest()
     if source_after!=before:
         raise AutonomousAcceptanceError("Source changed during technical QA")
-    return {
+    evidence={
         "slide_count":count,
         "source_sha256":before,
         "scientific_screen_status":science_receipt["status"],
@@ -133,6 +181,17 @@ def inspect_stage(stage:Path)->dict:
         "human_approval_required":False,
         "publication_allowed":False,
     }
+    # Preserve the byte-for-byte legacy static acceptance shape. Old private
+    # receipts remain valid, but measured-cue stages need a new, bound field.
+    if timed_visual is not None:
+        evidence["timed_visual_highlight_qa"]={
+            "status":timed_visual["status"],
+            "cue_count":timed_visual["cue_count"],
+            "visual_highlight_rendering_verified":True,
+            "spoken_word_to_element_alignment_verified":False,
+            "publication_allowed":False,
+        }
+    return evidence
 
 
 def _accepted(record:dict)->bool:

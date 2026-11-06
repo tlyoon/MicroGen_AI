@@ -596,6 +596,13 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
             raw=json.loads((stage/MANIFEST).read_text(encoding="utf8"))
             inputs += [cue["audio_chunk"]
                        for row in raw["slides"] for cue in row["cues"]]
+            # Bind timed resumes and downstream publication snapshots to
+            # the independent real-frame checker, not just the cue producer.
+            from microgen_measured_highlight_video_qa import RECEIPT as VISUAL_RECEIPT
+            if (stage/VISUAL_RECEIPT).is_file():
+                inputs.append(VISUAL_RECEIPT)
+            if (stage/"microgen_measured_highlight_video_qa.py").is_file():
+                inputs.append("microgen_measured_highlight_video_qa.py")
             if inspected["slide_count"]<1:
                 raise QualityError("Invalid source-bound highlight slide count")
     if name == "published":

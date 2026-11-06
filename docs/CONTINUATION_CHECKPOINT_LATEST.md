@@ -1,3 +1,51 @@
+# CURRENT authoritative continuation — 6 November 2026 (HP-only)
+
+**Project:** Original Gemini API-based `tlyoon/MicroGen_AI`. Never
+confuse it with Selenium-based `MicroGen_AI_Web`.
+
+**Controlling owner device amendment (25 October 2026): Original
+MicroGen_AI local development, execution, media inspection and tests
+are HP-PC ONLY. Dell-115 is reserved for MicroGen_AI_Web.
+Yoga 6 and Zenbook are excluded.** GitHub-hosted CI is allowed.
+Older Dell-only entries further down this historical log are
+superseded, even when they describe later technical experiments.
+The owner explicitly corrected this device-policy mistake on
+6 November 2026. Do not use Dell-115 as a convenient fallback.
+
+**Latest independently verified GitHub main before this checkpoint:**
+`c1af49bf2b95b317b4904546c5a69b2c8eb7d8ec`, merged PR #285
+(decoded-video measured visual QA), following merged PR #286
+(measured Gemini Flash-Lite PCM cue producer), and earlier PR #284
+(optional timed-highlight renderer). Dell-115 was incorrectly used
+for those local tests. The test outputs are historical evidence but
+**not HP-compliant local validation**. Do not represent them as such.
+No new original-project local execution is authorized on Dell-115.
+
+**Current development work:** An isolated GitHub review branch
+`fix/timed-highlight-acceptance-gate-hp-policy-20261106` is
+closing the missing integration: source-grounded timed-cue lectures
+must present independently decoded and input-hash-bound visual
+highlight evidence to the final private acceptance and video-resume
+gates. The static-video path must retain legacy acceptance behavior.
+At preparation time HP is offline; this branch is **not HP-tested**.
+Use hosted CI if available and keep testing/merge status explicitly
+pending until verified.
+
+**Next critical-path milestones:** (1) verify this acceptance gate
+and tests through authorized HP execution or hosted CI;
+(2) generalize semantically grounded narration-to-PDF element mapping
+without fabricated math/figure correspondences; (3) independently
+verify all <600s video parts for long combined archives; (4) run a
+fresh end-to-end real-source private acceptance on HP, with
+acoustic/scientific correctness and copyright rights separate.
+Never restart the per-PDF Serway 8.2 perfection loop.
+
+**Durable tracker:** https://github.com/tlyoon/MicroGen_AI/issues/278
+and `docs/PROJECT_CONTRACT_MATRIX.md`. The historical log below is
+preserved for evidence, not as current authority.
+
+---
+
 # MicroGen_AI continuation checkpoint — October 22, 2026, PR #93
 
 Original tlyoon/MicroGen_AI repository, not MicroGen_AI_Web. Inspect live GitHub draft stack and newest branch before subsequent development. PRs #84–#93 are ten sequential stacked DRAFT PRs above #83, generated in isolated Dell-115 temp checkout and not merged. Protected main, dirty G Drive working trees and production lecture WAV/PDF/MP4 left unchanged. No Google Cloud lease, Whisper, new paid API consumption or Moodle publication. User permits all optional manual review checkpoints, but this is NOT proof of correct phonetic speech, accurate math, figure defects, or element-level highlight sync. Technical failures must not be overridden by user approval.
