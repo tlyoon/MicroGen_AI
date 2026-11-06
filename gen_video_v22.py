@@ -243,6 +243,15 @@ def main() -> None:
     _concat(segments, candidate)
     checked = check_wavs(Path.cwd(), len(wavs))
     check_video(candidate, expected_seconds=checked["total_seconds"])
+    if timed is not None:
+        # Re-decode the actual candidate, not a producer-declared overlay.
+        # A failed highlight cannot replace an existing accepted MP4.
+        from microgen_measured_highlight_video_qa import inspect_visual_timing
+        from microgen_runtime_preflight import find_h264_ffmpeg
+        media = os.environ.get("MICROVID_FFMPEG") or find_h264_ffmpeg()
+        if not media:
+            raise RuntimeError("Verified local FFmpeg needed for independent highlight QA")
+        inspect_visual_timing(Path.cwd(),ffmpeg=Path(media),video_override=candidate)
     # Keep earlier complete outputs until the candidate is fully verified.
     if OUTPUT_FILE.is_file():
         backup = Path(f"slides.before-microgen-{sha256(OUTPUT_FILE)[:12]}.mp4")
@@ -251,6 +260,11 @@ def main() -> None:
             if sha256(backup) != sha256(OUTPUT_FILE):
                 raise RuntimeError("Previous media backup checksum mismatch")
     candidate.replace(OUTPUT_FILE)
+    if timed is not None:
+        from microgen_measured_highlight_video_qa import audit_stage
+        audit_stage(Path.cwd(),ffmpeg=Path(media))
+        print("[video] independent decoded-frame highlight QA passed; "
+              "speech/academic and publication approvals remain separate",flush=True)
     if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
         from microgen_multipart import render_parts
         result = render_parts(Path.cwd(), segments, _concat)
