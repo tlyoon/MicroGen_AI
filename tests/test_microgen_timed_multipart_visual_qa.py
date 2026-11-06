@@ -153,6 +153,18 @@ class TimedMultipartVisualTests(unittest.TestCase):
             visual.MeasuredVisualQAError,"no independently visible"):
             visual.inspect_visual_timing(self.stage,ffmpeg=self.ffmpeg)
 
+    def test_part_clock_drift_over_one_second_is_rejected(self):
+        def shifted_video(path,*,expected_seconds=None):
+            result=self.mock_video(path,expected_seconds=expected_seconds)
+            if Path(path).name=="slides_part_02.mp4":
+                return {"seconds":302.4}
+            return result
+        self._patch(video=shifted_video)
+        with self.assertRaisesRegex(
+            visual.MeasuredVisualQAError,
+            "media clock drifts from source PCM timing"):
+            visual.inspect_visual_timing(self.stage,ffmpeg=self.ffmpeg)
+
     def test_no_long_candidate_assumed_to_have_verified_parts(self):
         self._patch()
         with self.assertRaisesRegex(
