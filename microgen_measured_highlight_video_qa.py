@@ -26,6 +26,9 @@ RECEIPT = ".microgen_visual_highlight_qa.json"
 SIZE = (640, 360)
 MIN_SAMPLE_CUE_SECONDS = 0.45
 MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE = 8.5
+# The generic media probe allows up to 4% runtime drift. That is too loose
+# for a timed highlight cue audit, so independently bound each part clock.
+MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS = 1.0
 
 
 class MeasuredVisualQAError(RuntimeError):
@@ -137,6 +140,9 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
             media=check_video(path,expected_seconds=total)
             if media["seconds"]>=600:
                 raise MeasuredVisualQAError("Delivered part exceeds 600-second limit")
+            if abs(media["seconds"]-total)>MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS:
+                raise MeasuredVisualQAError(
+                    "Delivered part media clock drifts from source PCM timing")
             offset=0.0
             for slide_id in ids:
                 if slide_id in slide_media:
