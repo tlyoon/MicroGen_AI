@@ -344,13 +344,18 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 if (stage/MANIFEST).exists():
                     from microgen_autonomous_video_parts import _cache_segments
                     _cache_segments(stage,count)
+                    # A valid timed segment cache is not proof the COMPLETE
+                    # MP4 visibly highlights its intended source elements.
+                    # Recheck the independent decoded-video receipt on resume.
+                    from microgen_autonomous_acceptance import _verified_timed_visual
+                    _verified_timed_visual(stage,count)
                 if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
                     quality.check_multipart_receipt(stage)
                 elif media["seconds"] >= 600:
                     from microgen_autonomous_video_parts import verify_receipt
                     verify_receipt(stage)
             return True
-        except (quality.QualityError, OSError, ValueError):
+        except (quality.QualityError, OSError, ValueError, RuntimeError):
             return False
     return False
 
