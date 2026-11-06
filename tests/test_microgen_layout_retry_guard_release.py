@@ -41,6 +41,21 @@ class LayoutRepeatGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(LayoutRepairRepeated,"Refusing another paid"):
                 prevent_repeated_paid_layout_retry(stage)
 
+    def test_page_out_of_bounds_is_also_a_repeat_defect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stage=stage_dir(tmp)
+            guard=LayoutRetryGuard(stage/'slides.tex')
+            error='Slide PDF failed: blank=[], counters=[], out_of_bounds=[13]'
+            guard.reject_duplicate(error,1)
+            with self.assertRaises(LayoutRepairRepeated):
+                guard.reject_duplicate(error,2)
+            prevent_blocked=list(stage.glob('layout_repeat_guard_*.json'))
+            self.assertEqual(len(prevent_blocked),1)
+            self.assertEqual(json.loads(prevent_blocked[0].read_text())['status'],
+                             'UNRESOLVED_IDENTICAL_SLIDE_LAYOUT_REPAIR')
+            with self.assertRaises(LayoutRepairRepeated):
+                prevent_repeated_paid_layout_retry(stage)
+
     def test_changed_tex_allows_another_repair_and_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
             stage=stage_dir(tmp)

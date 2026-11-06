@@ -439,11 +439,9 @@ for attempt in range(1, 5):
                 compile_ok = True
                 break
             last_compile_output = str(error)
-            if "overflow" in last_compile_output.lower():
-                # A repeated identical TeX/error pair cannot improve through
-                # another unchanged cleanup. Save a status-only diagnostic
-                # and stop instead of repeating a PDF-specific repair loop.
-                layout_repeat_guard.reject_duplicate(last_compile_output, attempt)
+            # The same guard covers both LaTeX overflow and PDF page-boundary
+            # errors. Neither can be fixed by repeating an unchanged cleanup.
+            layout_repeat_guard.reject_duplicate(last_compile_output, attempt)
         else:
             print(f"✅ Two-pass LaTeX, counters and overflow checks succeeded: {tex_file}")
             compile_ok = True

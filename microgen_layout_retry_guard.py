@@ -52,12 +52,12 @@ def prevent_repeated_paid_layout_retry(stage: Path) -> None:
             info=json.loads(record_path.read_text(encoding="utf8"))
         except (OSError,ValueError):
             continue
-        if (info.get("status")=="UNRESOLVED_IDENTICAL_LATEX_LAYOUT_REPAIR"
+        if (info.get("status")=="UNRESOLVED_IDENTICAL_SLIDE_LAYOUT_REPAIR"
             and info.get("source_pdf_sha256")==context["source_pdf_sha256"]
             and info.get("producer_sha256")==context["producer_sha256"]
             and info.get("latex_content_sha256")==tex_digest):
             raise LayoutRepairRepeated(
-                "Previously verified identical LaTeX overflow for the same "
+                "Previously verified identical slide-layout failure for the same "
                 "source, TeX and producer code. Refusing another paid Gemini "
                 "generation loop; change the global structural reflow code or "
                 f"source and then retry. Diagnostic: {record_path.name}")
@@ -79,7 +79,7 @@ class LayoutRetryGuard:
             return
         context=_stage_identity(self.tex_file.parent)
         record={
-            "status":"UNRESOLVED_IDENTICAL_LATEX_LAYOUT_REPAIR",
+            "status":"UNRESOLVED_IDENTICAL_SLIDE_LAYOUT_REPAIR",
             "source_preserving_reflow_tried":True,
             **context,
             "latex_content_sha256":tex_digest,
@@ -97,7 +97,7 @@ class LayoutRetryGuard:
             with diagnostic_path.open("x",encoding="utf8") as out:
                 json.dump(record,out,indent=2)
         raise LayoutRepairRepeated(
-            "Identical LaTeX layout overflow recurred on unchanged TeX after "
+            "Identical slide-layout quality failure recurred on unchanged TeX after "
             f"attempts {prior} and {attempt}. Stop this PDF's repair loop. "
             f"See {filename}; improve the global reflow algorithm before "
             "retrying with a changed producer revision.")
