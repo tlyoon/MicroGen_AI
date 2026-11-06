@@ -4,15 +4,16 @@ Project scope: original Gemini-API MicroGen_AI, not MicroGen_AI_Web.
 
 ## Verified gap
 
-The current gen_video_v22.py renders a static slide PNG for the complete slide WAV.
-Previously accepted private lectures therefore do not establish narration-synchronized
-within-slide highlighting. Do not infer timing from a proportional word-count
+The historical static `gen_video_v22.py` renderer previously repeated one slide PNG
+for its complete WAV. Optional PCM-timed overlay rendering and independent
+decoded-video QA have since been merged. Previously accepted **static** lectures
+still do not establish narration-synchronized within-slide highlighting. Do not infer timing from a proportional word-count
 division of the whole-slide WAV, or reinterpret old private acceptance receipts
 as evidence of this missing feature.
 
 ## Input manifest
 
-The new, unmerged microgen_timed_highlight_contract.py module validates
+The merged microgen_timed_highlight_contract.py module validates
 .microgen_timed_highlights.json in an isolated stage folder.
 
 - schema_version: 1
@@ -89,19 +90,28 @@ Fail-closed acoustic checks and decoded-video synchronization must still run.
    model-independent verification of bounding boxes, slide/order identity,
    source hashes and non-invented mathematical statements. Do not repeatedly
    tune the planner against one Serway PDF.
-2. Independently decode the complete MP4 before, during and after each cue,
-   verifying highlight transitions, correct targeted regions and bounded
-   drift using a SHA-bound synchronization receipt. The synthetic probe is
-   useful regression evidence, not a real lecture acceptance receipt.
-3. Enforce the synchronization receipt at a separate publication-readiness
-   gate, without retroactively reclassifying existing static-video technical
-   acceptance, altering other scientific/audio gates or granting rights.
-4. Complete a private end-to-end multi-source acceptance campaign after
-   the general source-mapping and timing verification stages are ready.
+2. The merged short-video decoded-frame verifier (#285) and final private
+   acceptance gate (#287) now verify PCM-grounded active highlights when the
+   measured-cue manifest is present. The current review change additionally
+   audits **existing** long-lecture delivery parts against individual slide
+   source boxes using *part-local* PCM timings and independent part receipts.
+   New >=600s highlighted-video candidate production remains fail-closed
+   until it can stage all parts and validate them **before** replacing good
+   existing media. Independent boundary/drift and actual PCM playback QA
+   across all parts are still required for complete release readiness.
+3. Reuse these independent checks for a private, real-source HP lecture and
+   verify the complete chain end-to-end. This does not automatically grant
+   phonetic, mathematical, scientific or publication approval.
+4. Run 2–3 different source sections once the generalized semantic mapping
+   and transactional multipart production path have passed acceptance.
 
-Device: Dell-115 only for the current validation contract. If unavailable,
-preserve this as a GitHub draft, report unverified code accurately and
-continue other independent authorized work. Do not repeat failed Serway 8.2
-PDF-specific repairs.
+**Controlling owner device policy (25 Oct 2026, reconfirmed 6 Nov):** all
+original `MicroGen_AI` local development, media testing and QA must run on
+**HP only**. Dell-115 belongs exclusively to `MicroGen_AI_Web`; Yoga6 and
+Zenbook are excluded. Historical Dell-115 tests are evidence, but not
+HP-compliant local acceptance. GitHub-hosted CI is permitted. If HP is
+offline, preserve unverified local milestones and use authorized hosted CI
+without switching machines. Do not repeat failed Serway 8.2 PDF-specific
+repairs or authorize external publication without separate rights.
 
 Release tracker: https://github.com/tlyoon/MicroGen_AI/issues/278
