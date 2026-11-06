@@ -83,6 +83,38 @@ This is a measured-cue *producer* and **not** an independent guarantee that
 the Gemini voice actually spoke each phoneme at the expected point.
 Fail-closed acoustic checks and decoded-video synchronization must still run.
 
+## New long-lecture production transaction (HP-only development)
+
+The timed renderer now uses `microgen_timed_long_transaction.py` for a
+new full-lecture archive of >=600 seconds. It reuses the existing
+whole-slide grouping planner, source-and-PCM chunk validator, keyed MP4
+segment cache, strict <600-second part verifier, and independent visual
+QA from already-merged PRs #284, #285, #286, #287 and #288.
+
+The stage is a private same-volume directory. All verified inputs and
+source-bound cache media are linked, not rewritten. Every candidate part is
+constructed there, verified for source slide order, H264/AAC, PCM duration
+(<=1-second drift), and independently decoded active/inactive highlights
+at part-local cue timestamps. Only when **every** candidate part and the
+combined archive pass does exclusive no-replace installation create
+`slides.mp4`, all `slides_part_*.mp4`, the autonomous part receipt and
+the independent visual receipt. Failed verification cannot install a
+receipt; exceptions during installation roll back only this invocation's
+new files. Preexisting accepted media or partial outputs are protected.
+Complete already-accepted long lectures can be reused after verification.
+A change to the transaction implementation invalidates timed-stage
+resume fingerprints. No new local models, ASR, or external publication.
+
+A transaction journal is fsync-persisted before the first final hard link.
+After an abrupt process termination, the next run revalidates all source
+hashes and the expected output hashes. If all outputs are present it
+independently verifies and retains the accepted delivery. If installation
+was incomplete, it removes **only identical journaled partial files** before
+restarting clean generation. Any source drift, forged journal, or unrelated
+changed video prevents automatic cleanup; the original files are protected.
+The private combined archive can be >=600 seconds; **delivered** MP4 parts
+must each be strictly under 600 seconds.
+
 ## Remaining development milestones
 
 1. Add a general source-grounded semantic mapping mechanism for narration
@@ -90,18 +122,14 @@ Fail-closed acoustic checks and decoded-video synchronization must still run.
    model-independent verification of bounding boxes, slide/order identity,
    source hashes and non-invented mathematical statements. Do not repeatedly
    tune the planner against one Serway PDF.
-2. The merged short-video decoded-frame verifier (#285) and final private
-   acceptance gate (#287) now verify PCM-grounded active highlights when the
-   measured-cue manifest is present. The current review change additionally
-   audits **existing** long-lecture delivery parts against individual slide
-   source boxes using *part-local* PCM timings and independent part receipts.
-   New >=600s highlighted-video candidate production remains fail-closed
-   until it can stage all parts and validate them **before** replacing good
-   existing media. Independent boundary/drift and actual PCM playback QA
-   across all parts are still required for complete release readiness.
-3. Reuse these independent checks for a private, real-source HP lecture and
-   verify the complete chain end-to-end. This does not automatically grant
-   phonetic, mathematical, scientific or publication approval.
+2. Validate a new >=600-second real-encoded candidate end-to-end on HP,
+   including forced interruption and verified recovery. Synthetic test
+   fixtures, even with independent visual QA, cannot certify actual
+   long-duration audio or cross-part synchronization.
+3. Reuse independent acoustic/scientific and visual checks for a fresh
+   private, real-source HP lecture and verify the complete pipeline.
+   This does not automatically certify phonemes, mathematics, scientific
+   semantics or copyright publication permission.
 4. Run 2–3 different source sections once the generalized semantic mapping
    and transactional multipart production path have passed acceptance.
 
