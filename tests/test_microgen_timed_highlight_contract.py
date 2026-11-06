@@ -10,7 +10,8 @@ import fitz
 import pytest
 
 from microgen_timed_highlight_contract import (
-    MANIFEST, HighlightContractError, inspect_timed_highlights, _hash,
+    MANIFEST, HighlightContractError, inspect_timed_highlights,
+    ffmpeg_highlight_filter, _hash,
 )
 
 
@@ -172,3 +173,28 @@ def test_absent_manifest_fails_closed() -> None:
         (lecture / MANIFEST).unlink()
         with pytest.raises(HighlightContractError, match="Missing"):
             inspect_timed_highlights(lecture)
+
+
+def test_measured_timing_generates_dynamic_ffmpeg_overlays() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        lecture = stage(Path(tmp))
+        validated = inspect_timed_highlights(lecture)
+        graph = ffmpeg_highlight_filter(validated, 1)
+        assert "scale=1920:1080" in graph
+        assert "pad=1920:1080" in graph
+        assert graph.count("drawbox=") == 4
+        assert "gte(t,0.000000)*lt(t,0.600000)" in graph
+        assert "gte(t,0.600000)*lt(t,1.400000)" in graph
+        assert "yellow@0.95" in graph
+
+
+def test_render_filter_does_not_accept_a_fake_receipt() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        lecture = stage(Path(tmp))
+        verified = inspect_timed_highlights(lecture)
+        with pytest.raises(HighlightContractError):
+            ffmpeg_highlight_filter({"status": "PRIVATE_RELEASE_PASSED"}, 1)
+        with pytest.raises(HighlightContractError):
+            ffmpeg_highlight_filter(verified, 3)
+        with pytest.raises(HighlightContractError):
+            ffmpeg_highlight_filter(verified, 1, width=0)
