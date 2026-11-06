@@ -42,7 +42,8 @@ def _hash(path: Path) -> str:
 
 def _require(stage: Path, name: str) -> Path:
     target = stage / name
-    if target.is_symlink() or not target.is_file():
+    if (target.is_symlink() or target.parent.is_symlink()
+            or not target.is_file() or stage.resolve() not in target.resolve().parents):
         raise HighlightContractError(f"Missing or unsafe highlight asset: {name}")
     return target
 
@@ -114,16 +115,22 @@ def inspect_timed_highlights(stage: Path) -> dict:
         sidecar = json.loads(script.read_text(encoding="utf8"))
     except (UnicodeDecodeError, ValueError) as exc:
         raise HighlightContractError("Unreadable narration sidecar") from exc
+    if not isinstance(sidecar, dict):
+        raise HighlightContractError("Invalid narration sidecar object")
     narration = sidecar.get("slides", [])
     slide_rows = data.get("slides", [])
     if (not isinstance(narration, list)
+            or any(not isinstance(x, dict) for x in narration)
             or [x.get("slide") for x in narration] != list(range(1, count + 1))
             or not isinstance(slide_rows, list)
+            or any(not isinstance(x, dict) for x in slide_rows)
             or [x.get("slide") for x in slide_rows] != list(range(1, count + 1))):
         raise HighlightContractError("Missing or reordered narrated slide cues")
 
     result = []
     for slide_no, row in enumerate(slide_rows, 1):
+        if not isinstance(row, dict):
+            raise HighlightContractError("Invalid slide cue row")
         pdf_file = _require(stage, f"slide{slide_no}.pdf")
         wav_file = _require(stage, f"slide{slide_no}.wav")
         if (row.get("slide_pdf_sha256") != _hash(pdf_file)
