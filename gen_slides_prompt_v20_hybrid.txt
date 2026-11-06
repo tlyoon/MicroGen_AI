@@ -260,6 +260,10 @@ For important equations:
 - Explain meaning through concise nearby text: what the equation relates, what varies, what remains fixed, what a sign/coefficient means, or what can be inferred, ONLY when supported by FilteredContent.
 - Do not surround an important equation with dense prose.
 - If several equations form a reasoning chain, allocate enough slides/stages for the learner to follow the chain.
+- For a long equality chain or worked numerical substitution, do NOT put the entire chain on one overwide display-math line. Use source-equivalent line breaks with amsmath aligned/align*, or separate frames for consecutive equalities, maintaining the exact same equation order.
+- Each resulting equation line MUST fit within the Beamer text width. Place the long numeric substitution on its own aligned row or frame instead of shrinking an entire dense slide.
+- Preserve every original sign, coefficient, exponent, unit, subscript, denominator, equality, and final result. Never shorten an expression, round a source number, omit a term, alter square-root grouping or crop an equation just to satisfy layout.
+- Before emitting slides.tex, check especially long square-root/fraction expressions and worked examples: separate conceptual text, mathematical steps and figures into source-ordered, readable frames when necessary. All slides still require compilable LaTeX and the same automatic page-boundary and overflow acceptance.
 
 TECHNICAL BRIDGE RULE
 If the source jumps from one important expression to another and the transition is non-obvious:
