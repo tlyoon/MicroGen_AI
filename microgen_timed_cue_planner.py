@@ -1,0 +1,246 @@
+"""Conservative, fully offline proposal of source-grounded narration element cues.
+
+A cue is accepted only when an ordered narration fragment can be associated
+with actual PDF text. Ambiguous slide content fails closed; never fabricate
+cue rectangles or use proportional audio timing.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from collections import Counter
+from pathlib import Path
+
+PLAN_FILE = ".microgen_timed_cue_plan.json"
+STOP = frozenset("""a an and are as at be been by can do does for from had has have
+he her here in into is it its may of on or our per than that the their
+there these they this those to via was were when where which while who will
+with within would we you your one two three four five six seven eight nine
+first second third into through about all each energy example consider
+concept system model physical therefore represents represents""".split())
+WORD = re.compile(r"[^\W\d_][\w-]*", re.UNICODE)
+SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+class CuePlanningError(RuntimeError):
+    """No sufficiently grounded, complete, bounded cue plan could be made."""
+
+
+def sha(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1048576), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def normalized(text: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKC", text).casefold()
+                   if c.isalnum())
+
+
+def salient(text: str) -> set[str]:
+    return {word.casefold().strip("-") for word in WORD.findall(text)
+            if len(word) >= 4 and word.casefold() not in STOP}
+
+
+def speech_units(text: str) -> list[str]:
+    from microgen_flash_tts import _split_tts_text
+    stripped = re.sub(r"\s+", " ", text).strip()
+    if not stripped:
+        raise CuePlanningError("Empty source narration")
+    fragments = []
+    for sentence in SENTENCE.split(stripped):
+        fragments.extend(_split_tts_text(sentence, max_chars=390))
+    fragments = [x.strip() for x in fragments if x.strip()]
+    if not fragments or normalized(" ".join(fragments)) != normalized(stripped):
+        raise CuePlanningError("Narration splitting lost source content")
+    # Very brief fragments are not independently synthesizeable.
+    result = []
+    for fragment in fragments:
+        if len(fragment) < 18 and result:
+            result[-1] += " " + fragment
+        else:
+            result.append(fragment)
+    if len(result) >= 2 and len(result[0]) < 18:
+        result[1] = result[0] + " " + result[1]
+        del result[0]
+    return result
+
+
+def prepare_slide_pages(stage: Path) -> list[Path]:
+    """One source-preserving, byte-stable page extraction before opt-in TTS.
+
+    This closes the existing pipeline dependency: ordinary slide slicing runs
+    after TTS, but measured element cues require verified page PDFs earlier.
+    Existing valid pages are never overwritten; a mismatched page fails closed.
+    """
+    import fitz
+    import io
+    import os
+    from PyPDF2 import PdfReader, PdfWriter
+
+    stage=Path(stage)
+    slide_deck=stage/"slides.pdf"
+    if slide_deck.is_symlink() or not slide_deck.is_file():
+        raise CuePlanningError("No verified slide deck to slice")
+    inserted=[]
+    try:
+        with fitz.open(str(slide_deck)) as full:
+            if not 1<=full.page_count<=200:
+                raise CuePlanningError("Invalid PDF page count")
+            reader=PdfReader(str(slide_deck))
+            if len(reader.pages)!=full.page_count:
+                raise CuePlanningError("PDF page count discrepancy")
+            targets=[]
+            for page_index in range(full.page_count):
+                target=stage/f"slide{page_index+1}.pdf"
+                if target.is_symlink():
+                    raise CuePlanningError("Unsafe existing slide PDF symlink")
+                if target.exists():
+                    if not target.is_file():
+                        raise CuePlanningError("Unsafe existing slide PDF")
+                    with fitz.open(str(target)) as old:
+                        if (old.page_count!=1 or
+                            normalized(old[0].get_text())!=
+                            normalized(full[page_index].get_text())):
+                            raise CuePlanningError(
+                                "Existing sliced slide differs from source deck")
+                    targets.append(target)
+                    continue
+                # Original established PyPDF2 slicing format, not a separate
+                # downstream page renderer.
+                writer=PdfWriter()
+                writer.add_page(reader.pages[page_index])
+                stream=io.BytesIO()
+                writer.write(stream)
+                payload=stream.getvalue()
+                with fitz.open(stream=payload,filetype="pdf") as check:
+                    if (check.page_count!=1 or
+                        normalized(check[0].get_text())!=
+                        normalized(full[page_index].get_text())):
+                        raise CuePlanningError("Source PDF page extraction altered text")
+                # Exclusive create avoids overwrite after a concurrent run.
+                with target.open("xb") as handle:
+                    handle.write(payload)
+                inserted.append(target)
+                targets.append(target)
+        return targets
+    except Exception:
+        # Remove only pages created by this call; leave all previous data.
+        for target in reversed(inserted):
+            target.unlink(missing_ok=True)
+        raise
+
+
+def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
+    """Do not write any source file; caller may save verified proposal itself."""
+    import fitz
+    stage = Path(stage)
+    pdf = stage / "slides.pdf"
+    narration_path = stage / "script_tts.json"
+    if any(p.is_symlink() or not p.is_file() for p in (pdf, narration_path)):
+        raise CuePlanningError("Slide PDF and narration sidecar required")
+    try:
+        source = json.loads(narration_path.read_text(encoding="utf8"))["slides"]
+        if not isinstance(source, list):
+            raise ValueError("Not a list")
+        with fitz.open(pdf) as doc:
+            if len(source) != doc.page_count or not 1 <= len(source) <= 200:
+                raise CuePlanningError("Narration/PDF page counts differ")
+            inventory = []
+            total_cues = 0
+            for slide_no, (row, page) in enumerate(zip(source, doc), 1):
+                if not isinstance(row, dict) or row.get("slide") != slide_no:
+                    raise CuePlanningError("Narration slide order changed")
+                one = stage / f"slide{slide_no}.pdf"
+                if one.is_symlink() or not one.is_file():
+                    raise CuePlanningError("Source PDF page has not been sliced")
+                with fitz.open(one) as single:
+                    if (single.page_count != 1 or
+                            normalized(single[0].get_text()) != normalized(page.get_text())):
+                        raise CuePlanningError("Numbered PDF differs from source deck")
+                speech = str(row.get("tts_text") or row.get("narration") or "")
+                texts = speech_units(speech)
+                blocks = []
+                for block in page.get_text("blocks"):
+                    label = str(block[4]).strip()
+                    if (len(label) < 3 or not salient(label)
+                        or re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", label)):
+                        continue
+                    box = list(map(float, block[:4]))
+                    if (box[0] < -0.5 or box[1] < -0.5 or
+                            box[2] > page.rect.width + 0.5 or
+                            box[3] > page.rect.height + 0.5):
+                        continue
+                    blocks.append((box, label[:350], salient(label)))
+                if not blocks:
+                    raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                used = set()
+                cues = []
+                for cue_number, spoken in enumerate(texts, 1):
+                    terms = salient(spoken)
+                    if not terms:
+                        raise CuePlanningError(f"Slide {slide_no}: narration has no anchored terms")
+                    scored = []
+                    for block_number, (box, label, tokens) in enumerate(blocks):
+                        shared = terms & tokens
+                        # Rare, technical overlap matters more than stop words.
+                        score = len(shared) / max(1, min(6, len(terms)))
+                        score += 0.02 * len(shared)
+                        if block_number in used:
+                            score -= 0.25
+                        scored.append((score, len(shared), block_number))
+                    score, overlap, winner = max(scored)
+                    if overlap < 2 or score < 0.32:
+                        raise CuePlanningError(
+                            f"Slide {slide_no} cue {cue_number}: insufficient "
+                            "narration-to-PDF text overlap; cannot invent mapping")
+                    used.add(winner)
+                    box, label, _ = blocks[winner]
+                    cues.append({
+                        "element_id": f"s{slide_no}_e{cue_number}",
+                        "pdf_text": label, "spoken_text": spoken,
+                        "pdf_bbox": box,
+                    })
+                total_cues += len(cues)
+                if total_cues > max_cues:
+                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
+                inventory.append({
+                    "slide": slide_no, "slide_pdf_sha256": sha(one),
+                    "cues": cues,
+                })
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError,
+            KeyError, IndexError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, CuePlanningError):
+            raise
+        raise CuePlanningError("Unreadable PDF or source narration") from exc
+    return {
+        "schema_version": 1, "planning_method": "source_pdf_overlap_conservative",
+        "slides_pdf_sha256": sha(pdf),
+        "script_tts_sha256": sha(narration_path),
+        "slides": inventory, "total_cues": total_cues,
+        "publication_allowed": False,
+        "semantic_mapping_certified": False,
+        "speech_phonemes_aligned": False,
+    }
+
+def write_verified_plan(stage: Path) -> Path:
+    """Store a new, fully checked proposal; never replace an existing plan."""
+    stage=Path(stage)
+    target=stage/PLAN_FILE
+    if target.exists() or target.is_symlink():
+        raise CuePlanningError("Existing source-cue plan must be preserved")
+    plan=propose_plan(stage)
+    # Verify all mapping claims before publishing the plan to the TTS stage.
+    from microgen_timed_cue_tts import _verified_plan
+    with target.open("x",encoding="utf8") as handle:
+        json.dump(plan,handle,ensure_ascii=False,indent=2)
+    try:
+        _verified_plan(stage)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    return target

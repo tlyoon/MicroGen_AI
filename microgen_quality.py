@@ -548,6 +548,22 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     inputs = list(dependencies.get(name, ("source.pdf",)))
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+    if name == "tts":
+        from microgen_timed_cue_planner import PLAN_FILE
+        # Preserve compatibility with minimal offline/regression stages that
+        # contain only the legacy TTS entrypoint. Fingerprint optional code
+        # modules when actually staged; never require fabricated files.
+        for candidate in ("microgen_flash_tts.py",
+                          "microgen_timed_cue_tts.py",
+                          "microgen_timed_cue_planner.py"):
+            if (stage/candidate).is_file():
+                inputs.append(candidate)
+        if (stage/PLAN_FILE).exists():
+            inputs.extend(["slides.pdf",PLAN_FILE])
+            inputs += sorted(p.name for p in stage.glob("slide*.pdf"))
+        pairs_mode=os.environ.get("MICROGEN_TIMED_CUES","0")
+        if pairs_mode not in ("0","1"):
+            raise QualityError("Invalid timed-cue opt-in mode")
     if name == "acoustic_qa":
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
@@ -592,6 +608,10 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         path = stage / item
         require_file(path)
         pairs.append((item, sha256(path)))
+    # Changing the TTS opt-in mode must invalidate a saved static-audio
+    # checkpoint; an old whole-slide WAV is not measured cue evidence.
+    if name == "tts":
+        pairs.append(("_timed_cues_mode",os.environ.get("MICROGEN_TIMED_CUES","0")))
     # Changing TTS voice or speed invalidates audio, not upstream narration.
     if name in {"tts", "video", "published"}:
         pairs.append(("_voice", os.environ.get("MICROVID_TTS_VOICE", "en-US-Chirp-HD-F")))

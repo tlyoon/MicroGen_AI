@@ -452,7 +452,25 @@ def main() -> None:
             f"Reviewed pronunciation lexicon mismatch: {rule_drift[:5]}"
         )
     if selected_provider == "gemini":
-        _run_flash_batch(items)
+        # Measured element highlighting is opt-in until end-to-end lecture
+        # synchronization has an independent automated acceptance receipt.
+        # A supplied source-bound plan is itself an explicit opt-in.
+        from microgen_timed_cue_planner import (
+            PLAN_FILE, prepare_slide_pages, write_verified_plan,
+        )
+        timed_enabled=(os.environ.get("MICROGEN_TIMED_CUES") == "1" or
+                       Path(PLAN_FILE).is_file())
+        if timed_enabled:
+            prepare_slide_pages(Path.cwd())
+            if not Path(PLAN_FILE).is_file():
+                write_verified_plan(Path.cwd())
+            from microgen_timed_cue_tts import produce_measured_cue_audio
+            measured=produce_measured_cue_audio(Path.cwd())
+            print(f"[TTS] Verified {measured['cue_count']} source-grounded "
+                  f"PCM cues across {measured['slide_count']} slides; "
+                  "independent visual synchronization QA still required.")
+        else:
+            _run_flash_batch(items)
         return
     from microgen_quality import sha256, check_wavs
     from microgen_tts_provenance import (
