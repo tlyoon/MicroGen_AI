@@ -124,7 +124,8 @@ def _render_pdf_page(pdf: Path, png: Path) -> None:
         doc.close()
 
 
-def _make_segment(pdf: Path, audio: Path, output: Path) -> None:
+def _make_segment(pdf: Path, audio: Path, output: Path, *,
+                  highlight_filter: str | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="microvid_v7_segment_") as tmp:
         staging = Path(tmp)
         image = staging / "slide.png"
@@ -134,12 +135,16 @@ def _make_segment(pdf: Path, audio: Path, output: Path) -> None:
         shutil.copy2(audio, staged_audio)
         with wave.open(str(staged_audio), "rb") as wav_file:
             audio_duration = wav_file.getnframes() / float(wav_file.getframerate())
+        static_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=white"
+        # Ten video frames per second resolve cue boundaries at <=100 ms.
+        # Existing static-only stages retain their earlier 2 fps behavior.
+        fps = "10" if highlight_filter else "2"
         _run_ffmpeg(
             [
-                "-y", "-loop", "1", "-framerate", "2", "-i", str(image),
+                "-y", "-loop", "1", "-framerate", fps, "-i", str(image),
                 "-i", str(staged_audio), "-t", f"{audio_duration:.6f}",
-                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=white",
-                "-r", "2", "-c:v", "libx264", "-tune", "stillimage", "-preset", "veryfast",
+                "-vf", highlight_filter or static_filter,
+                "-r", fps, "-c:v", "libx264", "-tune", "stillimage", "-preset", "veryfast",
                 "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", str(staged_output),
             ],
             f"Building media segment for {pdf.name}",
@@ -176,18 +181,34 @@ def main() -> None:
 
     # Segment cache is input-bound and persisted across interrupted runs.
     # Never destroy the existing good MP4 just because a new attempt started.
-    import hashlib
     import json
     from microgen_quality import check_video, check_wavs, sha256
-    cache = Path(".microgen_video_cache")
+    from microgen_timed_highlight_contract import (
+        MANIFEST, inspect_timed_highlights, ffmpeg_highlight_filter,
+        video_segment_cache_key,
+    )
+    # Opt-in only for measured PCM cues. An invalid manifest must fail
+    # before any media cache is reused or mutated; legacy runs stay static.
+    timed = inspect_timed_highlights(Path.cwd()) if Path(MANIFEST).exists() else None
+    if timed is not None:
+        if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
+            raise RuntimeError("Legacy multipart renderer cannot verify measured "
+                               "element highlights; use the autonomous part pipeline")
+        print(f"[video] independently validated PCM element timing for "
+              f"{timed['slide_count']} slides; visual QA still pending",flush=True)
+    # Preserve previously accepted static MP4 fragments when a measured-cue
+    # manifest arrives later. Timed segments live in a separate hash-bound
+    # cache and cannot overwrite the old whole-slide static cache.
+    cache = (Path(".microgen_video_cache") if timed is None else
+             Path(f".microgen_video_cache_timed_{timed['manifest_sha256'][:12]}"))
     cache.mkdir(exist_ok=True)
     segments = []
     for index, (pdf, wav) in enumerate(zip(pdfs, wavs), start=1):
         segment = cache / f"slide{index}.mp4"
         meta = cache / f"slide{index}.json"
-        key = hashlib.sha256(
-            f"{sha256(pdf)}:{sha256(wav)}:gen_video_v22_cache_v2".encode()
-        ).hexdigest()
+        key = video_segment_cache_key(
+            pdf,wav,timed["manifest_sha256"] if timed is not None else None
+        )
         reusable = False
         if segment.is_file() and meta.is_file():
             try:
@@ -200,7 +221,11 @@ def main() -> None:
         if not reusable:
             temporary = cache / f"slide{index}.candidate.mp4"
             temporary.unlink(missing_ok=True)
-            _make_segment(pdf, wav, temporary)
+            if timed is None:
+                _make_segment(pdf, wav, temporary)
+            else:
+                _make_segment(pdf, wav, temporary,
+                              highlight_filter=ffmpeg_highlight_filter(timed,index))
             check_video(temporary)
             temporary.replace(segment)
             meta_tmp = meta.with_suffix(".json.tmp")

@@ -29,21 +29,38 @@ def _keys(stage: Path, count: int) -> dict:
     names=["source.pdf","slides.pdf","slides.mp4","script_tts.json"]
     names += [f"slide{i}.pdf" for i in range(1,count+1)]
     names += [f"slide{i}.wav" for i in range(1,count+1)]
+    from microgen_timed_highlight_contract import MANIFEST,inspect_timed_highlights
+    if (stage/MANIFEST).exists():
+        evidence=inspect_timed_highlights(stage)
+        if evidence["slide_count"]!=count:
+            raise AutoPartsError("Timed highlight slide count mismatch")
+        names.append(MANIFEST)
+        rows=json.loads((stage/MANIFEST).read_text(encoding="utf8"))["slides"]
+        names += [cue["audio_chunk"] for row in rows for cue in row["cues"]]
     return {name:sha256(stage/name) for name in names}
 
 
 def _cache_segments(stage: Path, count: int) -> list[Path]:
+    from microgen_timed_highlight_contract import (
+        MANIFEST,inspect_timed_highlights,video_segment_cache_key,
+    )
+    timed=(inspect_timed_highlights(stage) if (stage/MANIFEST).exists()
+           else None)
+    if timed is not None and timed["slide_count"]!=count:
+        raise AutoPartsError("Highlight timing slide count mismatch")
     result=[]
-    cache=stage/".microgen_video_cache"
+    cache=(stage/".microgen_video_cache" if timed is None else
+           stage/f".microgen_video_cache_timed_{timed['manifest_sha256'][:12]}")
     for i in range(1,count+1):
         path=cache/f"slide{i}.mp4"
         meta=cache/f"slide{i}.json"
         if not path.is_file() or path.is_symlink() or not meta.is_file() or meta.is_symlink():
             raise AutoPartsError("Missing or unsafe source-bound per-slide video cache")
         actual=json.loads(meta.read_text(encoding="utf8"))
-        key=hashlib.sha256(
-            f"{sha256(stage/f'slide{i}.pdf')}:{sha256(stage/f'slide{i}.wav')}:gen_video_v22_cache_v2".encode()
-        ).hexdigest()
+        key=video_segment_cache_key(
+            stage/f"slide{i}.pdf",stage/f"slide{i}.wav",
+            timed["manifest_sha256"] if timed is not None else None,
+        )
         if actual.get("key")!=key or actual.get("sha256")!=sha256(path):
             raise AutoPartsError("Per-slide video cache is stale or spoofed")
         check_video(path)
