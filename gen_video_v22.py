@@ -196,6 +196,35 @@ def main() -> None:
                                "element highlights; use the autonomous part pipeline")
         print(f"[video] independently validated PCM element timing for "
               f"{timed['slide_count']} slides; visual QA still pending",flush=True)
+        # First recover an interrupted transaction, using its immutable
+        # source/part hashes. A forged or altered output is never removed.
+        from microgen_timed_long_transaction import (
+            JOURNAL as LONG_JOURNAL,recover_timed_long)
+        from microgen_runtime_preflight import find_h264_ffmpeg
+        if Path(LONG_JOURNAL).exists() or Path(LONG_JOURNAL).is_symlink():
+            decoder=os.environ.get("MICROVID_FFMPEG") or find_h264_ffmpeg()
+            if not decoder:
+                raise RuntimeError("Cannot safely recover timed long media without FFmpeg")
+            outcome=recover_timed_long(Path.cwd(),ffmpeg=Path(decoder))
+            if outcome=="completed_verified_transaction":
+                print("[video] recovered complete source-bound timed lecture",flush=True)
+                return
+            print(f"[video] {outcome}; restarting clean candidate",flush=True)
+        # Avoid needlessly regenerating an already accepted long lecture, or
+        # producing any candidate where a prior static/incomplete file exists.
+        from microgen_quality import check_wavs as _timed_wavs
+        if _timed_wavs(Path.cwd(),len(wavs))["total_seconds"]>=600:
+            if OUTPUT_FILE.exists() or OUTPUT_FILE.is_symlink():
+                from microgen_autonomous_video_parts import verify_receipt as _parts_ok
+                from microgen_measured_highlight_video_qa import verify_receipt as _visual_ok
+                from microgen_runtime_preflight import find_h264_ffmpeg
+                decoder=os.environ.get("MICROVID_FFMPEG") or find_h264_ffmpeg()
+                if not decoder:
+                    raise RuntimeError("Cannot verify previously delivered long highlights")
+                _parts_ok(Path.cwd())
+                _visual_ok(Path.cwd(),ffmpeg=Path(decoder))
+                print("[video] reused independently accepted long lecture",flush=True)
+                return
     # Preserve previously accepted static MP4 fragments when a measured-cue
     # manifest arrives later. Timed segments live in a separate hash-bound
     # cache and cannot overwrite the old whole-slide static cache.
@@ -242,7 +271,21 @@ def main() -> None:
     candidate.unlink(missing_ok=True)
     _concat(segments, candidate)
     checked = check_wavs(Path.cwd(), len(wavs))
-    check_video(candidate, expected_seconds=checked["total_seconds"])
+    candidate_media=check_video(candidate, expected_seconds=checked["total_seconds"])
+    if timed is not None and candidate_media["seconds"]>=600:
+        # Verify every <600s part and the complete source-bound QA receipt
+        # in private scratch BEFORE installing any final media output.
+        from microgen_timed_long_transaction import promote_timed_long
+        from microgen_runtime_preflight import find_h264_ffmpeg
+        decoder=os.environ.get("MICROVID_FFMPEG") or find_h264_ffmpeg()
+        if not decoder:
+            raise RuntimeError("Verified FFmpeg required for timed long media QA")
+        result=promote_timed_long(
+            Path.cwd(),segments,candidate,_concat,ffmpeg=Path(decoder))
+        candidate.unlink(missing_ok=True)
+        print(f"[video] independently accepted {result['parts']} new "
+              "timed long-video parts; no prior media overwritten",flush=True)
+        return
     if timed is not None:
         # Re-decode the actual candidate, not a producer-declared overlay.
         # A failed highlight cannot replace an existing accepted MP4.

@@ -603,6 +603,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                 inputs.append(VISUAL_RECEIPT)
             if (stage/"microgen_measured_highlight_video_qa.py").is_file():
                 inputs.append("microgen_measured_highlight_video_qa.py")
+            # Changing the transaction verifier must invalidate a previously
+            # timed-video resume/acceptance key, but do not require this new
+            # module in historical minimal/static test fixtures.
+            if (stage/"microgen_timed_long_transaction.py").is_file():
+                inputs.append("microgen_timed_long_transaction.py")
             if inspected["slide_count"]<1:
                 raise QualityError("Invalid source-bound highlight slide count")
     if name == "published":
