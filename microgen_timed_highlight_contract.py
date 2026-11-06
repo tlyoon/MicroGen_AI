@@ -240,3 +240,53 @@ def inspect_timed_highlights(stage: Path) -> dict:
         "spoken_word_to_element_alignment_verified": False,
         "publication_allowed": False,
     }
+
+
+def ffmpeg_highlight_filter(
+    verified: dict, slide_number: int, *,
+    width: int = 1920, height: int = 1080,
+) -> str:
+    """Build a deterministic visible overlay for independently measured cues.
+
+    This is a rendering primitive, NOT a proof that the final encoded MP4
+    contains those highlights or that TTS speech matches each chunk's label.
+    An independent video-frame acceptance check is still required.
+    """
+    if (verified.get("status") != "SOURCE_AND_PCM_TIMING_STRUCTURALLY_VERIFIED"
+            or type(slide_number) is not int
+            or not 320 <= width <= 4096 or not 240 <= height <= 2160):
+        raise HighlightContractError("Unverified highlight timing or output size")
+    slides = verified.get("slides", [])
+    if not isinstance(slides, list) or not 1 <= slide_number <= len(slides):
+        raise HighlightContractError("Invalid highlighted slide number")
+    entry = slides[slide_number - 1]
+    if entry["slide"] != slide_number:
+        raise HighlightContractError("Highlight slide order changed")
+    source_w, source_h = entry["page_width"], entry["page_height"]
+    if not source_w > 0 or not source_h > 0:
+        raise HighlightContractError("Invalid PDF page coordinates")
+    zoom = min(width / source_w, height / source_h)
+    pad_x, pad_y = (width - zoom * source_w) / 2, (height - zoom * source_h) / 2
+    graph = [
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease",
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=white",
+    ]
+    for cue in entry["elements"]:
+        x0, y0, x1, y1 = cue["pdf_bbox"]
+        x = max(0, int(round(pad_x + x0 * zoom)))
+        y = max(0, int(round(pad_y + y0 * zoom)))
+        w = min(width - x, max(2, int(round((x1 - x0) * zoom))))
+        h = min(height - y, max(2, int(round((y1 - y0) * zoom))))
+        start = float(cue["start_seconds"])
+        end = float(cue["end_seconds"])
+        if w < 2 or h < 2 or not 0 <= start < end <= entry["duration_seconds"] + 0.001:
+            raise HighlightContractError("Invalid visual highlight bounds")
+        time_gate = f"gte(t,{start:.6f})*lt(t,{end:.6f})"
+        # Both an illuminated region and a border are required so the active
+        # item remains visible against bright and dark textbook diagrams.
+        for color, thickness in (("yellow@0.22", "fill"), ("yellow@0.95", "3")):
+            graph.append(
+                f"drawbox=x={x}:y={y}:w={w}:h={h}:"
+                f"color={color}:t={thickness}:enable='{time_gate}'"
+            )
+    return ",".join(graph)
