@@ -6,6 +6,7 @@ PR209 ROI-difference QA and current source/PCM verification.
 import json
 import os
 import shutil
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -84,3 +85,27 @@ def test_changed_cue_audio_invalidates_previous_visual_receipt(
     chunk.write_bytes(raw)
     with pytest.raises(Exception):
         verify_receipt(s,ffmpeg=local_ffmpeg)
+
+
+@pytest.mark.skipif(os.environ.get("MICROGEN_MEDIA_INTEGRATION_TEST")!="1",
+                    reason="Opt-in actual media safety regression")
+def test_bad_timed_candidate_does_not_replace_previous_static_video(
+        tmp_path,monkeypatch,local_ffmpeg):
+    from microgen_quality import sha256
+    stage_dir=stage(tmp_path)
+    manifest=stage_dir/".microgen_timed_highlights.json"
+    source=manifest.read_bytes()
+    manifest.unlink()
+    monkeypatch.setenv("MICROVID_FFMPEG",str(local_ffmpeg))
+    monkeypatch.chdir(stage_dir)
+    render()
+    original=sha256(stage_dir/"slides.mp4")
+    manifest.write_bytes(source)
+    static_filter=("scale=1920:1080:force_original_aspect_ratio=decrease,"
+                   "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=white")
+    with patch("microgen_timed_highlight_contract.ffmpeg_highlight_filter",
+               return_value=static_filter):
+        with pytest.raises(MeasuredVisualQAError,match="no independently visible"):
+            render()
+    assert sha256(stage_dir/"slides.mp4")==original
+    assert not (stage_dir/RECEIPT).exists()
