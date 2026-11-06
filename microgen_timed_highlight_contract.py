@@ -153,6 +153,15 @@ def inspect_timed_highlights(stage: Path) -> dict:
                     raise HighlightContractError("Missing or excessive element cues")
                 seen_ids = set()
                 position = 0
+                # A cue must also cover its exact source TTS text in order.
+                # Full spoken-script coverage is structural, not proof of
+                # phonetic word timing or decoded video synchronization.
+                full_spoken = _equivalent_text(str(
+                    narration[slide_no - 1].get("tts_text") or
+                    narration[slide_no - 1].get("narration") or ""))
+                spoken_position = 0
+                if not full_spoken:
+                    raise HighlightContractError("Missing narrated source text")
                 samples_hash = hashlib.sha256()
                 try:
                     with wave.open(str(wav_file), "rb") as whole:
@@ -177,6 +186,15 @@ def inspect_timed_highlights(stage: Path) -> dict:
                                    for v in rect)):
                         raise HighlightContractError("Invalid or duplicate PDF element")
                     seen_ids.add(element)
+                    spoken_fragment = cue.get("spoken_text")
+                    if not isinstance(spoken_fragment, str):
+                        raise HighlightContractError("Missing measured cue narration text")
+                    fragment = _equivalent_text(spoken_fragment)
+                    if not fragment or not full_spoken.startswith(
+                            fragment, spoken_position):
+                        raise HighlightContractError(
+                            "Cue narration does not follow the complete source script")
+                    spoken_position += len(fragment)
                     x0, y0, x1, y1 = map(float, rect)
                     if (x0 < box.x0 or y0 < box.y0 or x1 > box.x1 or y1 > box.y1
                             or x1 <= x0 or y1 <= y0):
@@ -219,6 +237,8 @@ def inspect_timed_highlights(stage: Path) -> dict:
                         "end_seconds": (position + frames) / params[2],
                     })
                     position += frames
+                if spoken_position != len(full_spoken):
+                    raise HighlightContractError("Highlight cues omit narrated source text")
                 if position != total_frames or samples_hash.hexdigest() != whole_digest:
                     raise HighlightContractError(
                         f"Slide {slide_no} cue chunks do not reconstruct WAV exactly")
