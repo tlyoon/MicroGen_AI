@@ -26,6 +26,9 @@ RECEIPT = ".microgen_visual_highlight_qa.json"
 SIZE = (640, 360)
 MIN_SAMPLE_CUE_SECONDS = 0.45
 MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE = 8.5
+# The generic media probe allows up to 4% runtime drift. That is too loose
+# for a timed highlight cue audit, so independently bound each part clock.
+MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS = 1.0
 
 
 class MeasuredVisualQAError(RuntimeError):
@@ -67,13 +70,21 @@ def _frame(ffmpeg: Path, video: Path, when: float) -> Image.Image:
 
 
 def _inputs(stage: Path, count: int, *,
-            video_override: Path | None = None) -> dict[str,str]:
+            video_override: Path | None = None,
+            verified_parts: list[dict] | None = None) -> dict[str,str]:
     source=["slides.pdf","script_tts.json","slides.mp4",MANIFEST]
     source += [f"slide{i}.pdf" for i in range(1,count+1)]
     source += [f"slide{i}.wav" for i in range(1,count+1)]
     manifest=json.loads((stage/MANIFEST).read_text(encoding="utf8"))
     source += [cue["audio_chunk"] for entry in manifest["slides"]
                for cue in entry["cues"]]
+    if verified_parts is not None:
+        # Hash the source-bound part inventory and *every* delivered MP4.
+        # The old single-MP4 receipt shape remains byte-for-byte unchanged.
+        source.append(".microgen_autonomous_parts.json")
+        source += [part["file"] for part in verified_parts]
+    if len(source)!=len(set(source)):
+        raise MeasuredVisualQAError("Ambiguous or duplicated media input")
     return {name:sha256(video_override if (name=="slides.mp4" and
                                               video_override is not None)
                         else stage/name) for name in source}
@@ -102,9 +113,50 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
     video=check_video(video_path,expected_seconds=expected)
     if not math.isfinite(video["seconds"]) or video["seconds"]<=0:
         raise MeasuredVisualQAError("Invalid decoded full-video duration")
+
+    # Source-bound whole-slide parts are already checked for ordering, hashes,
+    # complete slide coverage, durations and immutable cache provenance by
+    # the established autonomous multipart verifier. Reuse that contract.
+    part_inventory=None
+    slide_media={}
     if video["seconds"] >= 600:
-        raise MeasuredVisualQAError(
-            "Timed media over 600 seconds needs independent per-part frame QA")
+        if video_override is not None:
+            raise MeasuredVisualQAError(
+                "Long candidate needs independently verified staged video parts")
+        from microgen_autonomous_video_parts import verify_receipt as verify_parts
+        parts=verify_parts(stage)["parts"]
+        if not 2<=len(parts)<=100:
+            raise MeasuredVisualQAError("Long lecture needs multiple verified parts")
+        part_inventory=[]
+        for part in parts:
+            ids=part["slides"]
+            name=part["file"]
+            path=stage/name
+            if path.is_symlink() or not path.is_file():
+                raise MeasuredVisualQAError("Missing or unsafe ordered video part")
+            total=sum(slides[i-1]["duration_seconds"] for i in ids)
+            if total<=0 or total>=600:
+                raise MeasuredVisualQAError("Unsafe source-derived part duration")
+            media=check_video(path,expected_seconds=total)
+            if media["seconds"]>=600:
+                raise MeasuredVisualQAError("Delivered part exceeds 600-second limit")
+            if abs(media["seconds"]-total)>MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS:
+                raise MeasuredVisualQAError(
+                    "Delivered part media clock drifts from source PCM timing")
+            offset=0.0
+            for slide_id in ids:
+                if slide_id in slide_media:
+                    raise MeasuredVisualQAError("Duplicate slide in highlighted parts")
+                slide_media[slide_id]=(path,offset,total)
+                offset+=slides[slide_id-1]["duration_seconds"]
+            part_inventory.append({"file":name,"slides":list(ids)})
+        if sorted(slide_media)!=list(range(1,count+1)):
+            raise MeasuredVisualQAError("Highlight parts omit source slides")
+    else:
+        offset=0.0
+        for slide_id,row in enumerate(slides,1):
+            slide_media[slide_id]=(video_path,offset,expected)
+            offset+=row["duration_seconds"]
     checks=[]
     elapsed=0.0
     with fitz.open(str(stage/"slides.pdf")) as doc:
@@ -125,11 +177,12 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                 center=(cue["start_seconds"]+cue["end_seconds"])/2
                 cue_centers.append(center)
             snapshots={}
+            current_video,video_offset,video_limit=slide_media[slide]
             for i,center in enumerate(cue_centers):
-                at=elapsed+center
-                if at<0 or at>=expected:
-                    raise MeasuredVisualQAError("Invalid global cue timestamp")
-                snapshots[i]=_frame(ffmpeg,video_path,at)
+                at=video_offset+center
+                if at<0 or at>=video_limit:
+                    raise MeasuredVisualQAError("Invalid part-local cue timestamp")
+                snapshots[i]=_frame(ffmpeg,current_video,at)
             for i,cue in enumerate(elements):
                 roi=_pixel_box(page,cue)
                 active_inside,frame_mae=frame_difference_metrics(
@@ -147,7 +200,7 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                         raise MeasuredVisualQAError(
                             f"Slide {slide} element {i+1}: highlight "
                             "remained present outside its PCM cue")
-                checks.append({
+                check={
                     "slide":slide,"element_id":cue["element_id"],
                     "global_center_seconds":round(elapsed+cue_centers[i],6),
                     "active_roi_mae":round(active_inside,3),
@@ -156,21 +209,30 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                         round(inactive_inside,3) if inactive_inside is not None else None),
                     "active_localized":True,
                     "off_control_checked":inactive_inside is not None,
-                })
+                }
+                if part_inventory is not None:
+                    check["deliverable_video"]=current_video.name
+                    check["part_center_seconds"]=round(
+                        video_offset+cue_centers[i],6)
+                checks.append(check)
             elapsed+=row["duration_seconds"]
     if len(checks)!=sum(len(x["elements"]) for x in slides):
         raise MeasuredVisualQAError("Not all source-grounded cues checked")
-    return {
+    report={
         "status":"SOURCE_PCM_TIMED_VISUAL_HIGHLIGHTS_INDEPENDENTLY_CHECKED",
         "slide_count":count,"cue_count":len(checks),
         "checked_cues":checks,
         "source_and_video_sha256":_inputs(
-            stage,count,video_override=video_path),
+            stage,count,video_override=video_path,
+            verified_parts=part_inventory),
         "visual_highlight_rendering_verified":True,
         "spoken_word_to_element_alignment_verified":False,
         "academic_correctness_verified":False,
         "publication_allowed":False,
     }
+    if part_inventory is not None:
+        report["verified_delivery_parts"]=part_inventory
+    return report
 
 
 def audit_stage(stage: Path, *, ffmpeg: Path) -> dict:
@@ -180,7 +242,9 @@ def audit_stage(stage: Path, *, ffmpeg: Path) -> dict:
     if target.exists() or target.is_symlink():
         return verify_receipt(stage,ffmpeg=ffmpeg)
     data=inspect_visual_timing(stage,ffmpeg=ffmpeg)
-    if _inputs(stage,data["slide_count"])!=data["source_and_video_sha256"]:
+    if _inputs(stage,data["slide_count"],
+               verified_parts=data.get("verified_delivery_parts"))!=(
+                   data["source_and_video_sha256"]):
         raise MeasuredVisualQAError("Source or encoded output changed during QA")
     with target.open("x",encoding="utf8") as out:
         json.dump(data,out,ensure_ascii=False,indent=2)
