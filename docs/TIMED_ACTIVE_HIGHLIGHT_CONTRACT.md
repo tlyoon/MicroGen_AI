@@ -33,25 +33,36 @@ ordered sample-for-sample reconstruction of the whole WAV, SHA hashes, visible
 PDF-text containment, script-text coverage in order, rectangle bounds and
 symlink/path security. It does not use Whisper or ASR.
 
-The returned FFmpeg drawbox filter is time-gated to measured PCM frame intervals.
-It is a rendering primitive only. The current validator deliberately reports
+The FFmpeg drawbox filter is time-gated to measured PCM frame intervals.
+The optional production path in gen_video_v22.py now renders measured cues at
+10 fps when a fully validated manifest exists. The legacy static renderer
+remains the default without a manifest. Timed fragments use a separate
+manifest-hash-bound cache; video-part and private acceptance inputs include
+the cue-chunk SHA hashes. Legacy multipart delivery is blocked for timed cues
+until it has equivalent verification.
+
+Dell-115 synthetic FFmpeg testing independently decoded the first and second
+cue intervals and confirmed a visible yellow highlight switched between the
+two source-grounded text regions. This verifies the overlay primitive on a
+controlled example. It does NOT prove cue generation or synchronization on
+a real lecture. The validator deliberately reports
 visual_highlight_rendering_verified=false and
-spoken_word_to_element_alignment_verified=false. Its result does not grant
-publication rights.
+spoken_word_to_element_alignment_verified=false. No new rights are granted.
 
 ## Remaining development milestones
 
 1. Integrate the element-by-element TTS producer and PCM concatenation into
-   the existing Gemini Flash-Lite pipeline with consistent voice and bounded retries.
+   the existing Gemini Flash-Lite pipeline with consistent voice and bounded
+   retries. Preserve the voice, pronunciation and independent acoustic gates.
    Do not add local models or unnecessary Google Cloud TTS dependence.
-2. Wire the optional FFmpeg timed-overlay renderer into production and bind
-   segment cache hashes, multipart receipts and acceptance snapshots to the cue
-   manifest and its audio chunks. Existing static caches must never count as
-   highlighted-video evidence.
-3. Decode actual video frames before, during and after each cue, verify visual
-   highlight transitions and bounded drift, and produce a separate SHA-bound
-   synchronization receipt only after successful tests.
-4. Keep the scientific, math, figure, pronunciation, <600-second video and rights
+2. Independently decode actual MP4 frames before, during and after each cue,
+   verifying the correct highlighted source region, temporal accuracy and drift
+   with a SHA-bound synchronization receipt. The synthetic integration probe
+   must be extended to an entire real lecture, not treated as that receipt.
+3. Require that synchronization receipt at the final publication-readiness gate
+   when the feature becomes mandatory. Do not retroactively reinterpret the
+   existing private technical acceptance for old static lectures.
+4. Keep scientific, math, figure, pronunciation, <600-second video and rights
    gates independently enforced; no fabricated coverage claims or publication.
 
 Device: Dell-115 only for the current validation contract. If unavailable,

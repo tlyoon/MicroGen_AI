@@ -338,6 +338,12 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 wav = quality.check_wavs(stage, count)
                 media = quality.check_video(
                     stage / "slides.mp4", expected_seconds=wav["total_seconds"])
+                # A newly supplied cue manifest invalidates an old static
+                # output. All timed-cache entries must pass the new key.
+                from microgen_timed_highlight_contract import MANIFEST
+                if (stage/MANIFEST).exists():
+                    from microgen_autonomous_video_parts import _cache_segments
+                    _cache_segments(stage,count)
                 if os.environ.get("MICROGEN_MULTIPART", "0") == "1":
                     quality.check_multipart_receipt(stage)
                 elif media["seconds"] >= 600:

@@ -46,6 +46,14 @@ def _snap(stage:Path, count:int)->dict[str,str]:
     if (stage/".microgen_multipart_receipt.json").is_file():
         names.append(".microgen_multipart_receipt.json")
         names += sorted(x.name for x in stage.glob("slides_part_*.mp4") if x.is_file())
+    from microgen_timed_highlight_contract import MANIFEST,inspect_timed_highlights
+    if (stage/MANIFEST).exists():
+        timings=inspect_timed_highlights(stage)
+        if timings["slide_count"]!=count:
+            raise AutonomousAcceptanceError("Timed source-cue count mismatch")
+        names.append(MANIFEST)
+        rows=json.loads((stage/MANIFEST).read_text(encoding="utf8"))["slides"]
+        names += [cue["audio_chunk"] for row in rows for cue in row["cues"]]
     if len(names)!=len(set(names)):
         raise AutonomousAcceptanceError("Duplicate or ambiguous acceptance assets")
     return {name:sha256(stage/name) for name in names}

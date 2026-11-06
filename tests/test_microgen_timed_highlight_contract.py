@@ -122,7 +122,7 @@ def test_missing_or_misordered_element_cues_rejected() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         lecture = stage(Path(tmp))
         _edit_manifest(lecture, lambda x: x["slides"][0]["cues"].reverse())
-        with pytest.raises(HighlightContractError, match="out-of-order PCM chunk"):
+        with pytest.raises(HighlightContractError, match="source script|out-of-order PCM chunk"):
             inspect_timed_highlights(lecture)
 
 

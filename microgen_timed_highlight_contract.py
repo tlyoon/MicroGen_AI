@@ -262,6 +262,21 @@ def inspect_timed_highlights(stage: Path) -> dict:
     }
 
 
+def video_segment_cache_key(pdf: Path, wav: Path,
+                            manifest_sha256: str | None = None) -> str:
+    """Preserve all legacy keys, isolate measured-highlight render outputs."""
+    legacy = hashlib.sha256(
+        f"{_hash(pdf)}:{_hash(wav)}:gen_video_v22_cache_v2".encode()
+    ).hexdigest()
+    if manifest_sha256 is None:
+        return legacy
+    if not re.fullmatch(r"[0-9a-f]{64}", manifest_sha256):
+        raise HighlightContractError("Invalid bound highlight manifest digest")
+    return hashlib.sha256(
+        f"{legacy}:{manifest_sha256}:timed_highlight_render_v1".encode()
+    ).hexdigest()
+
+
 def ffmpeg_highlight_filter(
     verified: dict, slide_number: int, *,
     width: int = 1920, height: int = 1080,

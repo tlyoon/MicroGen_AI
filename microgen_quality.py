@@ -533,7 +533,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                         "microgen_tts_evidence.py"),
         "slide_slicing": ("slides.pdf", "slice_pdf_v21.py"),
         "video": ("slides.pdf", "gen_video_v22.py",
-                  "microgen_autonomous_video_parts.py"),
+                  "microgen_autonomous_video_parts.py",
+                  "microgen_timed_highlight_contract.py"),
         "acceptance": ("source.pdf", "slides.pdf", "slides.tex",
                        "script.txt", "script_tts.json", "slides.mp4",
                        ".microgen_autonomous_science_qa.json",
@@ -571,6 +572,16 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         if (stage / ".microgen_multipart_receipt.json").is_file() and name == "published":
             inputs.append(".microgen_multipart_receipt.json")
             inputs += sorted(p.name for p in stage.glob("slides_part_*.mp4"))
+    if name in {"video","acceptance","published"}:
+        from microgen_timed_highlight_contract import MANIFEST,inspect_timed_highlights
+        if (stage/MANIFEST).exists():
+            inspected=inspect_timed_highlights(stage)
+            inputs.append(MANIFEST)
+            raw=json.loads((stage/MANIFEST).read_text(encoding="utf8"))
+            inputs += [cue["audio_chunk"]
+                       for row in raw["slides"] for cue in row["cues"]]
+            if inspected["slide_count"]<1:
+                raise QualityError("Invalid source-bound highlight slide count")
     if name == "published":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
         for review_name in ("figure_composition_receipt.json", "figure_review_approval.json"):
