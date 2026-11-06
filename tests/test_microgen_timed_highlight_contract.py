@@ -54,6 +54,7 @@ def stage(root: Path) -> Path:
             cues.append({
                 "element_id": f"s{slide_no}e{i}",
                 "pdf_text": label,
+                "spoken_text": label + ".",
                 "pdf_bbox": [30, y0, 210, y1],
                 "audio_chunk": name,
                 "audio_chunk_sha256": _hash(chunk_file),
@@ -198,3 +199,20 @@ def test_render_filter_does_not_accept_a_fake_receipt() -> None:
             ffmpeg_highlight_filter(verified, 3)
         with pytest.raises(HighlightContractError):
             ffmpeg_highlight_filter(verified, 1, width=0)
+
+
+def test_fabricated_or_omitted_spoken_cue_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        lecture = stage(Path(tmp))
+        _edit_manifest(lecture, lambda x: x["slides"][0]["cues"][0].update({
+            "spoken_text": "An unsupported numerical claim."
+        }))
+        with pytest.raises(HighlightContractError, match="does not follow"):
+            inspect_timed_highlights(lecture)
+    with tempfile.TemporaryDirectory() as tmp:
+        lecture = stage(Path(tmp))
+        _edit_manifest(lecture, lambda x: x["slides"][0]["cues"][1].update({
+            "spoken_text": ""
+        }))
+        with pytest.raises(HighlightContractError):
+            inspect_timed_highlights(lecture)
