@@ -4,12 +4,16 @@ import re
 import fix_latex
 from microgen_quality import QualityError, check_graphics, check_slide_pdf, check_latex_overflow, try_local_latex_repair
 from microgen_slide_reflow import repair_layout
+from microgen_layout_retry_guard import LayoutRetryGuard, prevent_repeated_paid_layout_retry
 from microgen_missing_source_figure_candidates import check_graphics_with_source_candidates
 import subprocess, os
 from google import genai
 from dotenv import load_dotenv
 from gemini_lane import gemini_lane
 from gemini_keys import call_with_client_failover, create_gemini_client, get_gemini_api_keys
+
+# Reject identical source/TeX/layout failures before another paid model call.
+prevent_repeated_paid_layout_retry(Path.cwd())
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -396,6 +400,7 @@ check_graphics_with_source_candidates(Path(tex_file))  # preserve source candida
 clean_pause_in_place(tex_file)
 compile_ok = False
 last_compile_output = ""
+layout_repeat_guard = LayoutRetryGuard(Path(tex_file))
 for attempt in range(1, 5):
     # Repair passes may reintroduce blank paragraphs inside equation/align
     # environments. Strictly normalize before each compile attempt.
@@ -434,6 +439,9 @@ for attempt in range(1, 5):
                 compile_ok = True
                 break
             last_compile_output = str(error)
+            # The same guard covers both LaTeX overflow and PDF page-boundary
+            # errors. Neither can be fixed by repeating an unchanged cleanup.
+            layout_repeat_guard.reject_duplicate(last_compile_output, attempt)
         else:
             print(f"✅ Two-pass LaTeX, counters and overflow checks succeeded: {tex_file}")
             compile_ok = True
