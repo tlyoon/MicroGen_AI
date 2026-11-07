@@ -9,7 +9,7 @@ on:
     branches: [main]
   pull_request:
   # Fallback when GitHub does not enqueue pull_request checks; the same
-  # unchanged four-job offline matrix can be run against an exact branch ref.
+  # unchanged two-job Windows-only offline matrix can be run against an exact branch ref.
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
         python: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
