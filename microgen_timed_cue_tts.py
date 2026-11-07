@@ -39,7 +39,11 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
         if (not isinstance(plan, dict)
                 or plan.get("schema_version") != 1
                 or plan.get("publication_allowed") is not False
-                or plan.get("planning_method") != "source_pdf_overlap_conservative"):
+                or plan.get("semantic_mapping_certified", False) is not False
+                or plan.get("planning_method") not in {
+                    "source_pdf_overlap_conservative",
+                    "source_pdf_grounded_semantic_screen",
+                }):
             raise CueTTSError("Unsupported or untrusted cue plan")
         pdf = stage / "slides.pdf"
         script = stage / "script_tts.json"
@@ -54,6 +58,7 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                     or len(rows) != count or len(narration) != count):
                 raise CueTTSError("Cue plan does not cover all slides")
             all_fragments = []
+            semantic_used = False
             for slide_no, (row, source_row) in enumerate(zip(rows,narration), 1):
                 if (not isinstance(row, dict) or not isinstance(source_row, dict)
                         or row.get("slide") != slide_no
@@ -93,11 +98,21 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             box=fitz.Rect(coords)
                         except (ValueError,TypeError) as exc:
                             raise CueTTSError("Invalid cue bbox") from exc
+                        extracted = _equivalent_text(page.get_textbox(box))
                         if (box.is_empty or box.is_infinite or
                             not page.rect.contains(box) or
-                            _equivalent_text(label) not in
-                            _equivalent_text(page.get_textbox(box))):
+                            _equivalent_text(label) not in extracted):
                             raise CueTTSError("Element not grounded in source PDF")
+                        if "semantic_source_quote" in cue:
+                            from microgen_cue_semantic_mapping import compact, numbers
+                            quote = cue["semantic_source_quote"]
+                            if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"
+                                    or not isinstance(quote,str)
+                                    or not 8 <= len(quote) <= 200
+                                    or len(compact(quote)) < 8 or compact(quote) not in extracted
+                                    or not numbers(spoken).issubset(numbers(label))):
+                                raise CueTTSError("Semantic claim lacks exact PDF evidence")
+                            semantic_used = True
                         fragments.append(spoken)
                     original=str(source_row.get("tts_text") or
                                  source_row.get("narration") or "")
@@ -106,6 +121,9 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                     all_fragments.extend(fragments)
             if len(all_fragments) != plan.get("total_cues"):
                 raise CueTTSError("Cue inventory mismatch")
+            if (semantic_used != (plan["planning_method"] ==
+                                  "source_pdf_grounded_semantic_screen")):
+                raise CueTTSError("Semantic cue provenance does not match planning method")
             if not 1 <= len(all_fragments) <= MAX_CUES:
                 raise CueTTSError("Global cue batch is too large for single voice")
     except (KeyError, TypeError, IndexError, ValueError, OSError, json.JSONDecodeError) as exc:
