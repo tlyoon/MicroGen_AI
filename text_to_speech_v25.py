@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import io
 import hashlib
 import wave
 import json
@@ -22,6 +23,9 @@ VOICE_NAME = os.environ.get("MICROVID_TTS_VOICE", "en-US-Chirp-HD-F")
 LANGUAGE_CODE = os.environ.get("MICROVID_TTS_LANGUAGE", "en-US")
 SPEAKING_RATE = float(os.environ.get("MICROVID_TTS_SPEAKING_RATE", "0.8"))
 LOCATION = os.environ.get("MICROVID_TTS_LOCATION", "global")
+GEMINI_TTS_MODEL = os.environ.get("MICROGEN_TTS_MODEL", "gemini-3.8-flash-lite-tts")
+GEMINI_TTS_VOICE = os.environ.get("MICROGEN_TTS_VOICE", "Kore")
+TTS_PROVIDER = os.environ.get("MICROGEN_TTS_PROVIDER", "gemini").lower()
 
 
 def _microvid_config_dir() -> Path:
@@ -64,9 +68,10 @@ def _load_runtime_environment() -> None:
     env_path = config_dir / ".env"
     if env_path.is_file():
         load_dotenv(dotenv_path=env_path, override=False)
-    cred = _google_cloud_credential_path(config_dir)
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred)
-    print(f"Using shared Microvid Google Cloud credentials from: {cred}")
+    # Gemini API is the default; Google Cloud credentials are needed only on its path.
+    if TTS_PROVIDER == "google_cloud":
+        cred = _google_cloud_credential_path(config_dir)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred)
 
 
 def normalize_scientific_speech(text: str) -> str:
@@ -144,6 +149,56 @@ def _google_synthesize(text: str, output: Path) -> str:
     return "google_cloud_chirp3"
 
 
+def _gemini_synthesize(text: str, output: Path) -> str:
+    """Gemini 3.8 Flash-Lite TTS: one speaker, same voice for every slide."""
+    from gemini_keys import call_with_client_failover, create_gemini_client
+    if GEMINI_TTS_MODEL not in {"gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"}:
+        raise ValueError("Unsupported Gemini TTS model")
+    response = call_with_client_failover(
+        create_gemini_client,
+        lambda client: client.models.generate_content(
+            model=GEMINI_TTS_MODEL,
+            contents=[{"role": "user", "parts": [{"text": text}]}],
+            config={"response_modalities": ["AUDIO"],
+                    "speech_config": {"voice_config": {"voice": GEMINI_TTS_VOICE}}},
+        ),
+        label="MicroGen Gemini TTS",
+    )
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        for part in getattr(getattr(candidate, "content", None), "parts", None) or []:
+            inline = getattr(part, "inline_data", None)
+            data = getattr(inline, "data", None) if inline else None
+            if not data:
+                continue
+            if isinstance(data, str):
+                import base64
+                data = base64.b64decode(data)
+            data = bytes(data)
+            try:
+                with wave.open(io.BytesIO(data), "rb") as wav:
+                    if wav.getnframes() > 0 and wav.getframerate() > 0:
+                        output.write_bytes(data)
+                        return "gemini_flash_tts"
+            except (wave.Error, EOFError):
+                pass
+            # Raw linear PCM is also a valid SDK audio response.
+            mime = str(getattr(inline, "mime_type", "") or "")
+            if "audio/l16" not in mime.lower() and "audio/pcm" not in mime.lower():
+                raise RuntimeError("Gemini TTS returned unsupported audio format: " + mime)
+            match = re.search(r"rate=(\d+)", mime, flags=re.I)
+            sample_rate = int(match.group(1)) if match else 24000
+            if not data or len(data) % 2:
+                raise RuntimeError("Gemini TTS returned invalid PCM")
+            with wave.open(str(output), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(sample_rate)
+                wav.writeframes(data)
+            return "gemini_flash_tts"
+    raise RuntimeError("Gemini TTS returned no audio")
+
+
 def _sapi_synthesize(text: str, output: Path) -> str:
     if os.name != "nt":
         raise RuntimeError("SAPI fallback requires Windows.")
@@ -163,16 +218,27 @@ def _sapi_synthesize(text: str, output: Path) -> str:
 def synthesize(text: str, output: Path) -> str:
     spoken = normalize_scientific_speech(text)
     output.parent.mkdir(parents=True, exist_ok=True)
+    if TTS_PROVIDER not in {"gemini", "google_cloud"}:
+        raise ValueError("MICROGEN_TTS_PROVIDER must be gemini or google_cloud")
+    primary = _gemini_synthesize if TTS_PROVIDER == "gemini" else _google_synthesize
     try:
-        return _google_synthesize(spoken, output)
+        return primary(spoken, output)
     except Exception as primary_exc:
-        if os.environ.get("MICROVID_TTS_FALLBACK", "disabled").lower() != "sapi":
+        fallback = os.environ.get("MICROVID_TTS_FALLBACK", "disabled").lower()
+        if fallback == "google_cloud" and TTS_PROVIDER == "gemini":
+            _load_google_fallback_credentials()
+            return _google_synthesize(spoken, output)
+        if fallback != "sapi":
             raise
         warnings.warn(f"Primary TTS failed ({primary_exc}); using SAPI fallback.", RuntimeWarning, stacklevel=2)
-        try:
-            return _sapi_synthesize(spoken, output)
-        except Exception as fallback_exc:
-            raise RuntimeError(f"Primary TTS failed: {primary_exc}; fallback TTS also failed: {fallback_exc}") from fallback_exc
+        return _sapi_synthesize(spoken, output)
+
+
+def _load_google_fallback_credentials() -> None:
+    if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(
+            _google_cloud_credential_path(_microvid_config_dir())
+        )
 
 
 def _legacy_script_slides(path: Path) -> list[str]:
@@ -226,8 +292,10 @@ def main() -> None:
         output = Path(f"slide{idx}.wav")
         meta = cache / f"slide{idx}.json"
         key = hashlib.sha256(json.dumps(
-            [normalize_scientific_speech(text), VOICE_NAME, LANGUAGE_CODE,
-             SPEAKING_RATE, LOCATION, "microgen-tts-v2"],
+            [normalize_scientific_speech(text), TTS_PROVIDER,
+             GEMINI_TTS_MODEL, GEMINI_TTS_VOICE, VOICE_NAME, LANGUAGE_CODE,
+             SPEAKING_RATE, LOCATION, os.environ.get("MICROVID_TTS_FALLBACK", "disabled"),
+             "microgen-tts-v3"],
             ensure_ascii=False, sort_keys=True,
         ).encode("utf-8")).hexdigest()
         provider = None

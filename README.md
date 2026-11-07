@@ -2,7 +2,7 @@
 
 MicroGen_AI is an AI-assisted educational media generation toolkit developed for producing source-grounded teaching materials from a textbook or course PDF. The current package combines the strongest parts of the earlier v6/v7 workflow with the improved pedagogical and media-generation ideas developed in the newer `pri` pipeline.
 
-The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, Google Cloud text-to-speech audio, per-slide PDF/WAV assets, and a final narrated MP4 video.
+The main workflow converts a `source.pdf` into extracted textbook figures, LaTeX Beamer slides, slide-by-slide narration, Gemini Flash-Lite text-to-speech audio (Google Cloud optional fallback), per-slide PDF/WAV assets, and a final narrated MP4 video.
 
 ## Design goals
 
@@ -166,7 +166,7 @@ Defaults can be overridden globally with `MICROGEN_LLM_MODEL` or per stage with 
 
 ## Multi-PC Gemini coordination
 
-When several computers generate subchapters against the same Gemini project, do not let the Gemini-heavy stages run independently. MicroGen_AI now includes `gemini_lane.py`, a cooperative FIFO lane that serializes figure mapping, slide generation, and narration across participating machines while still allowing Docling extraction, LaTeX compilation, Google Cloud TTS, PDF slicing, and FFmpeg work to proceed independently.
+When several computers generate subchapters against the same Gemini project, do not let the Gemini-heavy stages run independently. MicroGen_AI now includes `gemini_lane.py`, a cooperative FIFO lane that serializes figure mapping, slide generation, and narration across participating machines while still allowing Docling extraction, LaTeX compilation, TTS, PDF slicing, and FFmpeg work to proceed independently.
 
 Enable the lane by setting the same synced directory on every worker, for example on machines that share the same Google Drive mount:
 
@@ -210,12 +210,17 @@ By default MicroGen_AI reads shared API configuration from:
 %LOCALAPPDATA%\Microvid\
 ```
 
-The default files are:
+The Gemini API default reads `%LOCALAPPDATA%\Microvid\.env`.
+Google Cloud credentials (`%LOCALAPPDATA%\Microvid\google_cloud_credentials.json`)
+are only needed when the Google Cloud TTS backend or fallback is explicitly selected.
 
-```text
-%LOCALAPPDATA%\Microvid\.env
-%LOCALAPPDATA%\Microvid\google_cloud_credentials.json
-```
+The default narration voice uses `gemini-3.8-flash-lite-tts` with `Kore`.
+You may select `MICROGEN_TTS_MODEL=gemini-3.8-flash-tts`, or
+`MICROGEN_TTS_PROVIDER=google_cloud` for troubleshooting.
+To permit the Google Cloud fallback after a Gemini failure set
+`MICROVID_TTS_FALLBACK=google_cloud`. A fallback can change the voice;
+the existing cross-slide provider-consistency check deliberately rejects
+mixed providers, requiring a whole-lecture regeneration with one provider.
 
 A minimal `.env` is:
 
