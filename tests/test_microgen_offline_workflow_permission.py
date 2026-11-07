@@ -8,9 +8,11 @@ class OfflineWorkflowPermissions(unittest.TestCase):
   self.assertIn("permissions:\n  contents: read",text)
   self.assertIn("persist-credentials: false",text)
   self.assertNotIn("contents: write",text)
- def test_all_platforms_and_budget(self):
+ def test_windows_only_platform_and_budget(self):
   text=(Path(__file__).resolve().parents[1]/".github/workflows/microgen-offline-tests.yml").read_text()
-  self.assertIn('os: [ubuntu-latest, windows-latest]',text)
+  self.assertIn('os: [windows-latest]',text)
+  self.assertNotIn('ubuntu-latest',text)
+  self.assertNotIn('linux-',text)
   self.assertIn('python: ["3.11", "3.12"]',text)
   self.assertIn("timeout-minutes: 15",text)
   self.assertIn("python -m unittest discover -s tests -v",text)

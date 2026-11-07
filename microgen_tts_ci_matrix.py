@@ -1,13 +1,13 @@
-"""Validate a GitHub Actions four-job matrix snapshot without claiming its origin."""
+"""Validate a Windows-only GitHub Actions CI snapshot without claiming its origin."""
 from __future__ import annotations
 import argparse,json,re
 from pathlib import Path
-EXPECTED={f"unit ({os}, {py})" for os in ("windows-latest","ubuntu-latest") for py in ("3.11","3.12")}
+EXPECTED={f"unit (windows-latest, {py})" for py in ("3.11","3.12")}
 class MatrixAuditError(ValueError):pass
 
 def validate_ci_matrix(jobs:list[dict])->dict:
-    if not isinstance(jobs,list) or len(jobs)!=4:
-        raise MatrixAuditError("Expected exactly four independent matrix jobs")
+    if not isinstance(jobs,list) or len(jobs)!=len(EXPECTED):
+        raise MatrixAuditError("Expected exactly two independent Windows matrix jobs")
     seen=set();blocking=[]
     for job in jobs:
         if not isinstance(job,dict) or not isinstance(job.get("name"),str):

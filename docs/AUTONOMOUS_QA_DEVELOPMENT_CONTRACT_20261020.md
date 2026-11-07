@@ -4,7 +4,9 @@
 > [Release Closure Development Contract](RELEASE_CLOSURE_DEVELOPMENT_CONTRACT_20261107.md).
 > All future work must follow its finite G1–G4 closure gates, live-main
 > verification, cross-session failure ledger, no-repeated-fix-loop rules,
-> scope freeze and HP-only policy. This 20 October document remains binding
+> scope freeze, HP-only device policy and **Windows-only execution/CI acceptance**.
+> Ubuntu/Linux/macOS validation is out of scope and cannot block release. This
+> 20 October document remains binding
 > for substantive autonomous QA safeguards, but its historical Dell-115-only
 > device sentence and open-ended process language are superseded. Do not
 > interpret this amendment as waiving science, phonetic, visual, source

@@ -1,1 +1,3 @@
+**CURRENT OWNER OVERRIDE (7 November 2026): Windows-only acceptance.** The historical four-job Windows/Ubuntu criterion described below is superseded. The active workflow and `microgen_tts_ci_matrix.py` now require only the two Windows `unit` jobs (Python 3.11 and 3.12); no Linux/Ubuntu job is required or release-blocking.
+
 PR #86 — Verify exact four GitHub Actions job identities and their completed/success state before claiming matrix CI passed. Distinguish missing/partial/failed Windows or Ubuntu matrix jobs from a single successful local run or empty combined status. The parser only checks integrity of a supplied GitHub API snapshot; authentication of its origin remains the caller's responsibility. No paid API or original lesson file modifications.

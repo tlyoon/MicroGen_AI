@@ -1,1 +1,3 @@
+**CURRENT OWNER OVERRIDE (7 November 2026): Windows-only execution and CI.** Historical Ubuntu requirements below are superseded; only Windows-latest Python 3.11 and 3.12 checks remain required. Preserve read-only permissions, nonpersistent credentials and 15-minute job timeouts.
+
 PR #87 — Harden existing, already-running GitHub Actions offline regression matrix: read-only contents permission, never persist checkout credentials, bounded 15-minute jobs. Preserve Windows/Ubuntu Python 3.11 and 3.12 tests, no Google API authentication or production media. This is not a replacement for CI verification; changes to the workflow must be validated by an actual new GitHub Actions run.

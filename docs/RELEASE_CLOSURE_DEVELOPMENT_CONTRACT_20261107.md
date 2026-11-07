@@ -30,8 +30,16 @@ not an ever-growing quantity of code, checks, PRs, or repair attempts.
 - **Device isolation:** original MicroGen_AI development, real-media production,
   local QA and validation run on **HP only**. Dell-115 is for MicroGen_AI_Web;
   do not transfer these two repositories' runtime, contracts or machine rules.
-  GitHub-hosted CI is allowed. Do not use Yoga6/Zenbook for this work.
-  The older Dell-only statements in historical contracts/issues are obsolete.
+  GitHub-hosted CI is allowed **on Windows runners only**. Windows is the sole
+  supported development, validation and execution platform; Linux/Ubuntu and
+  macOS are explicitly out of scope. Neither an Ubuntu/Linux CI result nor
+  compatibility with those platforms is a release acceptance requirement.
+  Do not use Yoga6/Zenbook for this work. The older Dell-only statements in
+  historical contracts/issues are obsolete.
+- **CI contract:** the sole required hosted acceptance matrix is **Windows-latest
+  with Python 3.11 and 3.12** (two jobs). The Windows-only CI validator must
+  reject missing, failed, duplicate or non-Windows jobs. Historical 4-job
+  Windows/Ubuntu evidence is archival and not a new mandatory requirement.
 - **Architecture:** existing Python + Gemini API design; reuse rather than
   replace working modules. No local language models, Whisper, or unsolicited
   migration to a different agent/browser/provider system.
@@ -67,7 +75,7 @@ failure proves it is indispensable to one of these gates.
 
 | Gate | Acceptance condition | Required evidence |
 |---|---|---|
-| **G1 — Code integration** | Required modules and approved PRs (including pending semantic-cue work, if validated) are integrated into one coherent pinned main/release candidate. No duplicate implementations, uncommitted production changes or obsolete provider/device settings. | Exact Git SHA, main/PR comparison, focused and repository-wide regression results, hosted CI result or explicitly documented CI unavailability. |
+| **G1 — Code integration** | Required modules and approved PRs (including pending semantic-cue work, if validated) are integrated into one coherent pinned main/release candidate. No duplicate implementations, uncommitted production changes or obsolete provider/device settings. | Exact Git SHA, main/PR comparison, focused and repository-wide regression results, hosted **Windows-only** CI result (supported Python versions) or explicitly documented CI unavailability; Ubuntu/Linux CI is never a blocker. |
 | **G2 — Fresh full lecture** | A newly generated **real-source** textbook subsection proceeds through source/figure extraction, mappings, slides, science-grounded narration, authorized Gemini Flash-Lite TTS, independent acoustic QA, measured element highlighting, video, and autonomous private acceptance. The output is not a historical reconstructed/static lesson. | Full stage checkpoint; verified original source hashes; receipts for science, figures, audio/voice, acoustic, decoded visual cues and A/V; all parts <600 s where applicable; final private acceptance receipt. |
 | **G3 — Repeatability and recovery** | Two **additional, distinct real-source subsections** pass the same mandatory acceptance, without per-PDF code tailoring. Include at least one genuinely long (>=600 s combined) source-bound candidate with verified sub-600 s parts, and one bounded interruption/resume/fault-injection proof of transaction recovery on real media. | 3/3 independent section pass/fail matrix and SHA-bound receipts, stage histories, timing/part evidence, proven no-overwrite rollback/resume. |
 | **G4 — Freeze and private release** | No release-critical failures remain; versioned code and frozen default settings pass repeatable offline/CI and real-case checks, and the owner-independent private technical release is reproducible on HP. | Final acceptance matrix against a pinned commit, failure ledger, release tag/version, runbook, private artifacts, and a closed release tracker. No claim of public distribution approval. |
