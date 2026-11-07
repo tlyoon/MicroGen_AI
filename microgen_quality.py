@@ -555,7 +555,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         # modules when actually staged; never require fabricated files.
         for candidate in ("microgen_flash_tts.py",
                           "microgen_timed_cue_tts.py",
-                          "microgen_timed_cue_planner.py"):
+                          "microgen_timed_cue_planner.py",
+                          "microgen_cue_semantic_mapping.py"):
             if (stage/candidate).is_file():
                 inputs.append(candidate)
         if (stage/PLAN_FILE).exists():
@@ -624,6 +625,10 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     # checkpoint; an old whole-slide WAV is not measured cue evidence.
     if name == "tts":
         pairs.append(("_timed_cues_mode",os.environ.get("MICROGEN_TIMED_CUES","0")))
+        pairs.append(("_timed_semantic_assist",
+                      os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST","0")))
+        pairs.append(("_timed_semantic_max_slides",
+                      os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES","4")))
     # Changing TTS voice or speed invalidates audio, not upstream narration.
     if name in {"tts", "video", "published"}:
         pairs.append(("_voice", os.environ.get("MICROVID_TTS_VOICE", "en-US-Chirp-HD-F")))
