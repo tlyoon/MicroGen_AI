@@ -1,13 +1,15 @@
-"""Conservative, fully offline proposal of source-grounded narration element cues.
+"""Source-grounded narration element cues with optional bounded semantic screen.
 
-A cue is accepted only when an ordered narration fragment can be associated
-with actual PDF text. Ambiguous slide content fails closed; never fabricate
-cue rectangles or use proportional audio timing.
+The default remains strictly offline and lexical. Only explicit Gemini opt-in
+can propose anchors for paraphrases. The existing PDF bbox/text, source hash,
+numerical claim, cue order and downstream TTS validation remain authoritative.
+Semantic entailment is NOT certified; no publication or phoneme claim.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -135,10 +137,19 @@ def prepare_slide_pages(stage: Path) -> list[Path]:
         raise
 
 
-def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
+def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) -> dict:
     """Do not write any source file; caller may save verified proposal itself."""
     import fitz
     stage = Path(stage)
+    # Explicit opt-in prevents hidden billed requests during legacy/offline runs.
+    # Tests may inject a non-billing resolver for deterministic validation.
+    if semantic_resolver is None and os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST") == "1":
+        from microgen_cue_semantic_mapping import propose_with_gemini
+        semantic_resolver = propose_with_gemini
+    semantic_limit = int(os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "4"))
+    if not 1 <= semantic_limit <= 40:
+        raise CuePlanningError("Invalid bounded semantic slide budget")
+    semantic_slides = 0
     pdf = stage / "slides.pdf"
     narration_path = stage / "script_tts.json"
     if any(p.is_symlink() or not p.is_file() for p in (pdf, narration_path)):
@@ -164,6 +175,8 @@ def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
                         raise CuePlanningError("Numbered PDF differs from source deck")
                 speech = str(row.get("tts_text") or row.get("narration") or "")
                 texts = speech_units(speech)
+                if total_cues + len(texts) > max_cues:
+                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 blocks = []
                 for block in page.get_text("blocks"):
                     label = str(block[4]).strip()
@@ -179,10 +192,11 @@ def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
                 used = set()
-                cues = []
+                cues = [None] * len(texts)
+                unresolved = []
                 for cue_number, spoken in enumerate(texts, 1):
                     terms = salient(spoken)
-                    if not terms:
+                    if not terms and semantic_resolver is None:
                         raise CuePlanningError(f"Slide {slide_no}: narration has no anchored terms")
                     scored = []
                     for block_number, (box, label, tokens) in enumerate(blocks):
@@ -194,17 +208,50 @@ def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
                             score -= 0.25
                         scored.append((score, len(shared), block_number))
                     score, overlap, winner = max(scored)
-                    if overlap < 2 or score < 0.32:
-                        raise CuePlanningError(
-                            f"Slide {slide_no} cue {cue_number}: insufficient "
-                            "narration-to-PDF text overlap; cannot invent mapping")
+                    if not terms or overlap < 2 or score < 0.32:
+                        unresolved.append((cue_number, spoken))
+                        continue
                     used.add(winner)
                     box, label, _ = blocks[winner]
-                    cues.append({
+                    cues[cue_number-1] = {
                         "element_id": f"s{slide_no}_e{cue_number}",
                         "pdf_text": label, "spoken_text": spoken,
                         "pdf_bbox": box,
-                    })
+                    }
+                if unresolved:
+                    if semantic_resolver is None:
+                        raise CuePlanningError(
+                            f"Slide {slide_no} cue {unresolved[0][0]}: insufficient "
+                            "narration-to-PDF text overlap; cannot invent mapping")
+                    semantic_slides += 1
+                    if semantic_slides > semantic_limit:
+                        raise CuePlanningError("Bounded semantic slide budget exceeded")
+                    from microgen_cue_semantic_mapping import (
+                        validate_matches, SemanticMappingError,
+                    )
+                    try:
+                        choices = semantic_resolver(slide_no, unresolved, blocks)
+                        verified = validate_matches(choices, unresolved, blocks)
+                    except (SemanticMappingError, ValueError, KeyError) as exc:
+                        raise CuePlanningError(
+                            f"Slide {slide_no}: untrusted semantic proposal: {exc}") from exc
+                    except Exception as exc:
+                        # Distinguish a failed external model/key request from
+                        # bad source PDF content. Never retry an unchanged PDF
+                        # as a 'LaTeX fix' for a Gemini service outage.
+                        raise CuePlanningError(
+                            f"Slide {slide_no}: semantic service unavailable "
+                            f"({type(exc).__name__}); no plan published") from exc
+                    for number, spoken in unresolved:
+                        index, quote = verified[number]
+                        box, label, _ = blocks[index]
+                        cues[number-1] = {
+                            "element_id": f"s{slide_no}_e{number}",
+                            "pdf_text": label, "spoken_text": spoken,
+                            "pdf_bbox": box, "semantic_source_quote": quote,
+                        }
+                if any(cue is None for cue in cues):
+                    raise CuePlanningError("Incomplete cue proposal")
                 total_cues += len(cues)
                 if total_cues > max_cues:
                     raise CuePlanningError("Cue inventory exceeds one global voice batch")
@@ -218,22 +265,26 @@ def propose_plan(stage: Path, *, max_cues: int = 120) -> dict:
             raise
         raise CuePlanningError("Unreadable PDF or source narration") from exc
     return {
-        "schema_version": 1, "planning_method": "source_pdf_overlap_conservative",
+        "schema_version": 1, "planning_method": (
+            "source_pdf_grounded_semantic_screen" if semantic_slides
+            else "source_pdf_overlap_conservative"
+        ),
         "slides_pdf_sha256": sha(pdf),
         "script_tts_sha256": sha(narration_path),
         "slides": inventory, "total_cues": total_cues,
         "publication_allowed": False,
         "semantic_mapping_certified": False,
+        "semantic_assist_applied": bool(semantic_slides),
         "speech_phonemes_aligned": False,
     }
 
-def write_verified_plan(stage: Path) -> Path:
+def write_verified_plan(stage: Path, *, semantic_resolver=None) -> Path:
     """Store a new, fully checked proposal; never replace an existing plan."""
     stage=Path(stage)
     target=stage/PLAN_FILE
     if target.exists() or target.is_symlink():
         raise CuePlanningError("Existing source-cue plan must be preserved")
-    plan=propose_plan(stage)
+    plan=propose_plan(stage, semantic_resolver=semantic_resolver)
     # Verify all mapping claims before publishing the plan to the TTS stage.
     from microgen_timed_cue_tts import _verified_plan
     with target.open("x",encoding="utf8") as handle:

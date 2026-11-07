@@ -143,3 +143,31 @@ without switching machines. Do not repeat failed Serway 8.2 PDF-specific
 repairs or authorize external publication without separate rights.
 
 Release tracker: https://github.com/tlyoon/MicroGen_AI/issues/278
+
+## Bounded semantic paraphrase cue mapping (7 November 2026)
+
+The conservative lexical PDF-block matcher is still the default. It can
+correctly refuse a fluent paraphrase that shares too few words with the
+visible slide. This is NOT a reason to retry the same source PDF indefinitely.
+
+On an already authorized *Gemini API* timed-cue production run, a bounded
+alternative may be explicitly enabled with:
+
+```powershell
+$env:MICROGEN_TIMED_CUES = '1'
+$env:MICROGEN_TIMED_SEMANTIC_ASSIST = '1'
+$env:MICROGEN_TIMED_SEMANTIC_MAX_SLIDES = '4'
+```
+
+At most one Gemini 3.8 Flash proposal request is issued per unresolved slide,
+and at most four slides are screened by default. No paid request occurs in
+offline planning, legacy mode or when the opt-in is absent. A model may only
+select an actual extracted slide-PDF text block and supply a direct quote
+present inside that block. Independent code checks every choice, bounding
+rectangle, source slide hash, narration order and numerical literal; unknown
+or forged claims fail closed. The proposal is accepted by the *existing*
+timed-cue TTS stage without copying figures or modifying any source files.
+The verified plan is explicitly marked as model-screened, **not semantically
+certified**. All science, acoustic, decoded-video, and publication restrictions
+remain. Exceeding the request budget stops the transaction; it does not
+silently retry or loosen the matching requirement.
