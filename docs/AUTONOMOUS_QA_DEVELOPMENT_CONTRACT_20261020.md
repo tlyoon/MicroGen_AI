@@ -1,5 +1,15 @@
 # MicroGen_AI Development & QA Contract — Autonomous Progression (2026-10-20)
 
+> **Controlling development-procedure renewal, effective 7 November 2026:**
+> [Release Closure Development Contract](RELEASE_CLOSURE_DEVELOPMENT_CONTRACT_20261107.md).
+> All future work must follow its finite G1–G4 closure gates, live-main
+> verification, cross-session failure ledger, no-repeated-fix-loop rules,
+> scope freeze and HP-only policy. This 20 October document remains binding
+> for substantive autonomous QA safeguards, but its historical Dell-115-only
+> device sentence and open-ended process language are superseded. Do not
+> interpret this amendment as waiving science, phonetic, visual, source
+> integrity, duration, rights or provider-authorization requirements.
+
 **Status: authoritative for current MicroGen_AI TTS development and QA, superseding any earlier mandatory manual-approval instructions for this pipeline.** This is the *original* MicroGen_AI project, not MicroGen_AI_Web.
 
 ## User-directed policy
