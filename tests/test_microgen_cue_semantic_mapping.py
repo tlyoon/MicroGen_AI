@@ -180,3 +180,36 @@ def test_service_failure_classified_not_misreported_as_bad_pdf(tmp_path):
     with pytest.raises(CuePlanningError, match="semantic service unavailable"):
         write_verified_plan(stage, semantic_resolver=unavailable)
     assert not (stage / PLAN_FILE).exists()
+
+def test_budget_preflight_checks_whole_deck_before_any_semantic_request(tmp_path, monkeypatch):
+    """A doomed paid campaign must not consume even its first semantic call."""
+    monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "1")
+    stage = paraphrase_fixture(tmp_path)
+    calls = []
+    def model(*args):
+        calls.append(args)
+        raise AssertionError("A preknown over-budget lecture must never call Gemini")
+    with pytest.raises(
+        CuePlanningError,
+        match=r"budget exceeded in offline preflight: required=2 allowed=1",
+    ):
+        propose_plan(stage, semantic_resolver=model)
+    assert calls == []
+    assert not (stage / PLAN_FILE).exists()
+
+
+def test_sufficiently_budgeted_semantic_preflight_does_not_change_narration(
+        tmp_path, monkeypatch):
+    monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "2")
+    stage = paraphrase_fixture(tmp_path)
+    original = (stage / "script_tts.json").read_bytes()
+    called = []
+    def resolver(slide, missing, blocks):
+        called.append(slide)
+        return safe_resolver(slide, missing, blocks)
+    plan = write_verified_plan(stage, semantic_resolver=resolver)
+    data = json.loads(plan.read_text(encoding="utf8"))
+    assert called == [1, 2]
+    assert data["total_cues"] == 4
+    assert (stage / "script_tts.json").read_bytes() == original
+    assert data["publication_allowed"] is False

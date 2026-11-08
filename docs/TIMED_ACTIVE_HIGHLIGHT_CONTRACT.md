@@ -178,8 +178,19 @@ script and exact PCM timing remain mandatory. Model proposals remain
 publication conditions are unchanged.
 
 The existing maximum of four *semantic-assisted slides per campaign* is
-**not** retroactively raised by group support. The terminal Serway 2.4 run
-requires eight assisted slides under its frozen setting, so this feature
-alone does **not** make G2 pass and cannot justify a repeat source run.
-Any new model-bearing acceptance campaign requires separately frozen scope
-and authorization, not automatic retries.
+**not** retroactively raised by group support. Before making even one
+semantic Gemini request, the planner performs a read-only, source-hash
+preserving **whole-lecture admission preflight**. It uses the *same*
+source-text block extractor and lexical matcher as the actual planner to
+count slides requiring semantic assistance. If demand exceeds the frozen
+budget it reports exact required/allowed counts and slide IDs **without
+calling any model or creating a partial plan**. This prevents a predictable
+late, charged failure; it does not claim to infer semantic correctness or
+automatically authorize a higher API/cost budget.
+
+The terminal Serway 2.4 run requires eight assisted slides under its frozen
+four-slide setting, so this feature alone does **not** make G2 pass and
+cannot justify a repeat source run. A newly scoped real-source campaign
+requires a separately frozen budget, cost/rights authorization and all
+scientific, acoustic, independent visual and release gates. Existing
+terminal retries remain exhausted; no automatic restart.

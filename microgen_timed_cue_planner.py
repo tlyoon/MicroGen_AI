@@ -137,6 +137,111 @@ def prepare_slide_pages(stage: Path) -> list[Path]:
         raise
 
 
+
+def _pdf_text_blocks(page) -> list[tuple]:
+    """One shared immutable source-block extraction for actual planning and preflight."""
+    blocks = []
+    for block in page.get_text("blocks"):
+        label = str(block[4]).strip()
+        if (len(label) < 3 or not salient(label)
+                or re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", label)):
+            continue
+        box = list(map(float, block[:4]))
+        if (box[0] < -0.5 or box[1] < -0.5
+                or box[2] > page.rect.width + 0.5
+                or box[3] > page.rect.height + 0.5):
+            continue
+        blocks.append((box, label[:350], salient(label)))
+    return blocks
+
+
+def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
+                   *, allow_unanchored: bool) -> tuple[list, list[tuple]]:
+    """Identical matching logic for private full-lecture admission and cue planning."""
+    used = set()
+    cues = [None] * len(texts)
+    unresolved = []
+    for cue_number, spoken in enumerate(texts, 1):
+        terms = salient(spoken)
+        if not terms and not allow_unanchored:
+            raise CuePlanningError(f"Slide {slide_no}: narration has no anchored terms")
+        scored = []
+        for block_number, (box, label, tokens) in enumerate(blocks):
+            shared = terms & tokens
+            score = len(shared) / max(1, min(6, len(terms)))
+            score += 0.02 * len(shared)
+            if block_number in used:
+                score -= 0.25
+            scored.append((score, len(shared), block_number))
+        score, overlap, winner = max(scored)
+        if not terms or overlap < 2 or score < 0.32:
+            unresolved.append((cue_number, spoken))
+            continue
+        used.add(winner)
+        box, label, _ = blocks[winner]
+        cues[cue_number - 1] = {
+            "element_id": f"s{slide_no}_e{cue_number}",
+            "pdf_text": label, "spoken_text": spoken,
+            "pdf_bbox": box,
+        }
+    return cues, unresolved
+
+
+def _require_budget_preflight(stage: Path, *, semantic_limit: int,
+                              max_cues: int) -> None:
+    """Before *any* semantic API request inspect the entire frozen lecture.
+
+    An unaffordable known number of slides is not recoverable by key rotation.
+    Reusing the same lexical matcher avoids stale divergent admission rules.
+    No model calls, files written, narration edits, or budget increases occur.
+    """
+    import fitz
+    pdf = stage / "slides.pdf"
+    script = stage / "script_tts.json"
+    if any(p.is_symlink() or not p.is_file() for p in (pdf, script)):
+        raise CuePlanningError("Slide PDF and narration sidecar required")
+    try:
+        source = json.loads(script.read_text(encoding="utf8"))["slides"]
+        with fitz.open(pdf) as doc:
+            if not isinstance(source, list) or len(source) != doc.page_count:
+                raise CuePlanningError("Narration/PDF page counts differ")
+            assisted_slides = []
+            cues_seen = 0
+            for slide_no, (row, page) in enumerate(zip(source, doc), 1):
+                if not isinstance(row, dict) or row.get("slide") != slide_no:
+                    raise CuePlanningError("Narration slide order changed")
+                one = stage / f"slide{slide_no}.pdf"
+                if one.is_symlink() or not one.is_file():
+                    raise CuePlanningError("Source PDF page has not been sliced")
+                with fitz.open(one) as single:
+                    if single.page_count != 1 or (
+                            normalized(single[0].get_text()) !=
+                            normalized(page.get_text())):
+                        raise CuePlanningError("Numbered PDF differs from source deck")
+                texts = speech_units(str(row.get("tts_text") or
+                                         row.get("narration") or ""))
+                cues_seen += len(texts)
+                if cues_seen > max_cues:
+                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
+                blocks = _pdf_text_blocks(page)
+                if not blocks:
+                    raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                _, unresolved = _lexical_match(
+                    slide_no, texts, blocks, allow_unanchored=True)
+                if unresolved:
+                    assisted_slides.append(slide_no)
+            if len(assisted_slides) > semantic_limit:
+                raise CuePlanningError(
+                    "Bounded semantic slide budget exceeded in offline preflight: "
+                    f"required={len(assisted_slides)} allowed={semantic_limit} "
+                    f"slides={assisted_slides}; no semantic requests made")
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError,
+            KeyError, IndexError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, CuePlanningError):
+            raise
+        raise CuePlanningError("Semantic admission preflight cannot verify source") from exc
+
+
 def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) -> dict:
     """Do not write any source file; caller may save verified proposal itself."""
     import fitz
@@ -149,6 +254,11 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
     semantic_limit = int(os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "4"))
     if not 1 <= semantic_limit <= 40:
         raise CuePlanningError("Invalid bounded semantic slide budget")
+    # An entire lecture may need >budget slides even when the first assisted
+    # slide is easy. Refuse before incurring a doomed sequence of model calls.
+    if semantic_resolver is not None:
+        _require_budget_preflight(
+            stage, semantic_limit=semantic_limit, max_cues=max_cues)
     semantic_slides = 0
     pdf = stage / "slides.pdf"
     narration_path = stage / "script_tts.json"
@@ -177,47 +287,12 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                 texts = speech_units(speech)
                 if total_cues + len(texts) > max_cues:
                     raise CuePlanningError("Cue inventory exceeds one global voice batch")
-                blocks = []
-                for block in page.get_text("blocks"):
-                    label = str(block[4]).strip()
-                    if (len(label) < 3 or not salient(label)
-                        or re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", label)):
-                        continue
-                    box = list(map(float, block[:4]))
-                    if (box[0] < -0.5 or box[1] < -0.5 or
-                            box[2] > page.rect.width + 0.5 or
-                            box[3] > page.rect.height + 0.5):
-                        continue
-                    blocks.append((box, label[:350], salient(label)))
+                blocks = _pdf_text_blocks(page)
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
-                used = set()
-                cues = [None] * len(texts)
-                unresolved = []
-                for cue_number, spoken in enumerate(texts, 1):
-                    terms = salient(spoken)
-                    if not terms and semantic_resolver is None:
-                        raise CuePlanningError(f"Slide {slide_no}: narration has no anchored terms")
-                    scored = []
-                    for block_number, (box, label, tokens) in enumerate(blocks):
-                        shared = terms & tokens
-                        # Rare, technical overlap matters more than stop words.
-                        score = len(shared) / max(1, min(6, len(terms)))
-                        score += 0.02 * len(shared)
-                        if block_number in used:
-                            score -= 0.25
-                        scored.append((score, len(shared), block_number))
-                    score, overlap, winner = max(scored)
-                    if not terms or overlap < 2 or score < 0.32:
-                        unresolved.append((cue_number, spoken))
-                        continue
-                    used.add(winner)
-                    box, label, _ = blocks[winner]
-                    cues[cue_number-1] = {
-                        "element_id": f"s{slide_no}_e{cue_number}",
-                        "pdf_text": label, "spoken_text": spoken,
-                        "pdf_bbox": box,
-                    }
+                cues, unresolved = _lexical_match(
+                    slide_no, texts, blocks,
+                    allow_unanchored=semantic_resolver is not None)
                 if unresolved:
                     if semantic_resolver is None:
                         raise CuePlanningError(
