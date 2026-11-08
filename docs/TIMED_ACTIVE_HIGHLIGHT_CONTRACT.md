@@ -161,13 +161,25 @@ $env:MICROGEN_TIMED_SEMANTIC_MAX_SLIDES = '4'
 
 At most one Gemini 3.8 Flash proposal request is issued per unresolved slide,
 and at most four slides are screened by default. No paid request occurs in
-offline planning, legacy mode or when the opt-in is absent. A model may only
-select an actual extracted slide-PDF text block and supply a direct quote
-present inside that block. Independent code checks every choice, bounding
-rectangle, source slide hash, narration order and numerical literal; unknown
-or forged claims fail closed. The proposal is accepted by the *existing*
-timed-cue TTS stage without copying figures or modifying any source files.
-The verified plan is explicitly marked as model-screened, **not semantically
-certified**. All science, acoustic, decoded-video, and publication restrictions
-remain. Exceeding the request budget stops the transaction; it does not
-silently retry or loosen the matching requirement.
+offline planning, legacy mode or when the opt-in is absent.
+
+**Proposed grouped-cue extension (8 November 2026; subject to branch and
+real-source acceptance):** one spoken narration cue may refer to a contiguous,
+ordered group of 2–5 *real visible PDF text blocks*, rather than falsely
+selecting just one from a multi-element enumeration. Each block needs a
+separate verbatim source quote; the planner records and independently checks
+each exact text box, its original PDF text, numerical claims, combined bounds
+and immutable source hashes. The renderer draws a time-gated highlight around
+each member of the group, not a large invented encompassing element, and the
+independent decoded-frame QA checks **every** highlighted region. All original
+single-block cues retain their previous format and validation. Complete spoken
+script and exact PCM timing remain mandatory. Model proposals remain
+**not semantically certified**, and the SCIENCE, acoustic, decoded-video and
+publication conditions are unchanged.
+
+The existing maximum of four *semantic-assisted slides per campaign* is
+**not** retroactively raised by group support. The terminal Serway 2.4 run
+requires eight assisted slides under its frozen setting, so this feature
+alone does **not** make G2 pass and cannot justify a repeat source run.
+Any new model-bearing acceptance campaign requires separately frozen scope
+and authorization, not automatic retries.

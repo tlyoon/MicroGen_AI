@@ -103,7 +103,59 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             not page.rect.contains(box) or
                             _equivalent_text(label) not in extracted):
                             raise CueTTSError("Element not grounded in source PDF")
-                        if "semantic_source_quote" in cue:
+                        if "pdf_bboxes" in cue:
+                            from microgen_cue_semantic_mapping import (
+                                compact, numbers, MAX_GROUP_BLOCKS,
+                            )
+                            regions = cue["pdf_bboxes"]
+                            labels = cue.get("pdf_texts")
+                            quotes = cue.get("semantic_source_quotes")
+                            if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"
+                                    or "semantic_source_quote" in cue
+                                    or not isinstance(regions,list)
+                                    or not isinstance(labels,list)
+                                    or not isinstance(quotes,list)
+                                    or not 2 <= len(regions) <= MAX_GROUP_BLOCKS
+                                    or len(regions) != len(labels)
+                                    or len(labels) != len(quotes)):
+                                raise CueTTSError("Unsafe multi-element cue provenance")
+                            # Do not accept an arbitrary union rectangle:
+                            # every selected region must contain its own
+                            # quoted, exact PDF text and preserve its location.
+                            checked=[]
+                            for region, item_text, quote in zip(regions, labels, quotes):
+                                if (not isinstance(region,list) or len(region)!=4
+                                        or any(type(v) not in (int,float) for v in region)
+                                        or not isinstance(item_text,str)
+                                        or not 8 <= len(item_text) <= 350
+                                        or not isinstance(quote,str)
+                                        or not 8 <= len(quote) <= 200):
+                                    raise CueTTSError("Malformed source element group")
+                                try:
+                                    region_box=fitz.Rect(region)
+                                except (ValueError,TypeError) as exc:
+                                    raise CueTTSError("Invalid group rectangle") from exc
+                                raw=_equivalent_text(page.get_textbox(region_box))
+                                if (region_box.is_empty or region_box.is_infinite
+                                        or not page.rect.contains(region_box)
+                                        or _equivalent_text(item_text) not in raw
+                                        or len(compact(quote)) < 8
+                                        or compact(quote) not in compact(item_text)):
+                                    raise CueTTSError("Multi-element quote not PDF grounded")
+                                checked.append(region_box)
+                            union=checked[0]
+                            for region_box in checked[1:]:
+                                union |= region_box
+                            if (any(abs(a-b)>0.01 for a,b in zip(union,box))
+                                    or union.width*union.height >
+                                    page.rect.width*page.rect.height*0.40
+                                    or not numbers(spoken).issubset(
+                                        numbers(" ".join(labels)))):
+                                raise CueTTSError("Group bounds or numerical claim unverified")
+                            semantic_used = True
+                        elif "semantic_source_quotes" in cue or "pdf_texts" in cue:
+                            raise CueTTSError("Unpaired multi-element provenance")
+                        elif "semantic_source_quote" in cue:
                             from microgen_cue_semantic_mapping import compact, numbers
                             quote = cue["semantic_source_quote"]
                             if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"

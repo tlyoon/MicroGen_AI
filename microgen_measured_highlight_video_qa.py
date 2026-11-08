@@ -184,22 +184,34 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                     raise MeasuredVisualQAError("Invalid part-local cue timestamp")
                 snapshots[i]=_frame(ffmpeg,current_video,at)
             for i,cue in enumerate(elements):
-                roi=_pixel_box(page,cue)
-                active_inside,frame_mae=frame_difference_metrics(
-                    reference,snapshots[i],roi)
-                if not figure_change_visible(active_inside,frame_mae):
-                    raise MeasuredVisualQAError(
-                        f"Slide {slide} element {i+1}: no independently "
-                        "visible localized highlight in decoded MP4")
-                inactive_inside=None
-                if len(elements)>1:
-                    candidate=(i+1)%len(elements)
-                    inactive_inside,_=frame_difference_metrics(
-                        reference,snapshots[candidate],roi)
-                    if inactive_inside>MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE:
+                regions=cue.get("pdf_bboxes",[cue["pdf_bbox"]])
+                if not isinstance(regions,list) or not regions:
+                    raise MeasuredVisualQAError("Missing grouped highlight regions")
+                rois=[_pixel_box(page,{"pdf_bbox":region}) for region in regions]
+                active_scores=[]
+                frame_scores=[]
+                inactive_scores=[]
+                for roi in rois:
+                    active,frame_mae=frame_difference_metrics(
+                        reference,snapshots[i],roi)
+                    if not figure_change_visible(active,frame_mae):
                         raise MeasuredVisualQAError(
-                            f"Slide {slide} element {i+1}: highlight "
-                            "remained present outside its PCM cue")
+                            f"Slide {slide} element {i+1}: one PDF source region "
+                            "has no independently visible decoded highlight")
+                    active_scores.append(active)
+                    frame_scores.append(frame_mae)
+                    if len(elements)>1:
+                        candidate=(i+1)%len(elements)
+                        inactive,_=frame_difference_metrics(
+                            reference,snapshots[candidate],roi)
+                        if inactive>MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE:
+                            raise MeasuredVisualQAError(
+                                f"Slide {slide} element {i+1}: one grouped "
+                                "source region remained highlighted outside its PCM cue")
+                        inactive_scores.append(inactive)
+                active_inside=min(active_scores)
+                frame_mae=max(frame_scores)
+                inactive_inside=max(inactive_scores) if inactive_scores else None
                 check={
                     "slide":slide,"element_id":cue["element_id"],
                     "global_center_seconds":round(elapsed+cue_centers[i],6),
@@ -210,6 +222,8 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                     "active_localized":True,
                     "off_control_checked":inactive_inside is not None,
                 }
+                if len(rois)>1:
+                    check["verified_group_regions"]=len(rois)
                 if part_inventory is not None:
                     check["deliverable_video"]=current_video.name
                     check["part_center_seconds"]=round(

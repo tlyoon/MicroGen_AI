@@ -243,12 +243,42 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                             f"Slide {slide_no}: semantic service unavailable "
                             f"({type(exc).__name__}); no plan published") from exc
                     for number, spoken in unresolved:
-                        index, quote = verified[number]
-                        box, label, _ = blocks[index]
+                        indices, quotes = verified[number]
+                        if len(indices) == 1:
+                            box, label, _ = blocks[indices[0]]
+                            cues[number-1] = {
+                                "element_id": f"s{slide_no}_e{number}",
+                                "pdf_text": label, "spoken_text": spoken,
+                                "pdf_bbox": box, "semantic_source_quote": quotes[0],
+                            }
+                            continue
+                        # A spoken list may refer to several *adjacent* real
+                        # PDF elements. Keep every actual region and quote,
+                        # not a fabricated single-source element.
+                        regions = [blocks[index][0] for index in indices]
+                        x0 = min(box[0] for box in regions)
+                        y0 = min(box[1] for box in regions)
+                        x1 = max(box[2] for box in regions)
+                        y1 = max(box[3] for box in regions)
+                        union = [x0, y0, x1, y1]
+                        if (x1 <= x0 or y1 <= y0 or
+                                (x1 - x0) * (y1 - y0) >
+                                page.rect.width * page.rect.height * 0.40):
+                            raise CuePlanningError(
+                                f"Slide {slide_no}: unsafe multi-element region")
+                        group_text = page.get_textbox(fitz.Rect(union)).strip()
+                        if (not 8 <= len(group_text) <= 400 or
+                                any(normalized(blocks[index][1]) not in
+                                    normalized(group_text) for index in indices)):
+                            raise CuePlanningError(
+                                f"Slide {slide_no}: multi-element text not fully visible")
                         cues[number-1] = {
                             "element_id": f"s{slide_no}_e{number}",
-                            "pdf_text": label, "spoken_text": spoken,
-                            "pdf_bbox": box, "semantic_source_quote": quote,
+                            "spoken_text": spoken,
+                            "pdf_text": group_text, "pdf_bbox": union,
+                            "pdf_bboxes": regions,
+                            "pdf_texts": [blocks[index][1] for index in indices],
+                            "semantic_source_quotes": list(quotes),
                         }
                 if any(cue is None for cue in cues):
                     raise CuePlanningError("Incomplete cue proposal")

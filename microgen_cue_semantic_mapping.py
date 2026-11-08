@@ -1,14 +1,17 @@
-"""Bounded Gemini screen for narration paraphrases against actual slide text.
+"""Bounded, source-bound semantic mapping for spoken cues to PDF text elements.
 
-A model can only select an enumerated, immutable PDF text block and cite
-verbatim text within it. This never certifies semantic entailment, equations,
-phonemes, or publication. No call is made without explicit opt-in by the caller.
+One spoken cue may refer to several *adjacent* visible elements. A multi-block
+proposal is only a candidate: the independent PDF, text, numeric, and decoded
+highlight verifiers must still pass. A model never certifies meaning, phonemes,
+rights, or publication.
 """
 from __future__ import annotations
 
 import json
 import re
 import unicodedata
+
+MAX_GROUP_BLOCKS = 5
 
 
 class SemanticMappingError(RuntimeError):
@@ -24,27 +27,47 @@ def numbers(text: str) -> set[str]:
 
 
 def validate_matches(matches: object, missing: list[tuple[int, str]],
-                     blocks: list[tuple]) -> dict[int, tuple[int, str]]:
-    """Treat model output as untrusted; only source-present quotes are legal."""
+                     blocks: list[tuple]) -> dict[int, tuple[tuple[int, ...], tuple[str, ...]]]:
+    """Validate ALL cue proposals against original immutable PDF text blocks.
+
+    Supports legacy single-block rows and strict, ordered, contiguous groups
+    of at most five blocks. Each selected block needs its own verbatim quote.
+    Never substitute a fabricated text region or omit an unresolved cue.
+    """
     if not isinstance(matches, list) or len(matches) != len(missing):
         raise SemanticMappingError("Semantic proposal must cover all unresolved cues")
     needed = dict(missing)
     verified = {}
     for row in matches:
-        if not isinstance(row, dict) or set(row) != {"cue", "block", "quote"}:
+        if not isinstance(row, dict):
+            raise SemanticMappingError("Invalid semantic proposal row")
+        fields = set(row)
+        if fields == {"cue", "block", "quote"}:
+            chosen, quotes = [row["block"]], [row["quote"]]
+        elif fields == {"cue", "blocks", "quotes"}:
+            chosen, quotes = row["blocks"], row["quotes"]
+            if (not isinstance(chosen, list) or not isinstance(quotes, list)
+                    or not 2 <= len(chosen) <= MAX_GROUP_BLOCKS
+                    or len(chosen) != len(quotes)):
+                raise SemanticMappingError("Unsafe or incomplete multi-element group")
+        else:
             raise SemanticMappingError("Unexpected semantic proposal fields")
-        cue, block, quote = row["cue"], row["block"], row["quote"]
-        if (type(cue) is not int or cue not in needed or cue in verified
-                or type(block) is not int or not 1 <= block <= len(blocks)
-                or not isinstance(quote, str) or not 8 <= len(quote) <= 200):
-            raise SemanticMappingError("Invalid semantic cue/block/quote")
-        label = blocks[block - 1][1]
-        if len(compact(quote)) < 8 or compact(quote) not in compact(label):
+        cue = row["cue"]
+        if type(cue) is not int or cue not in needed or cue in verified:
+            raise SemanticMappingError("Invalid or repeated semantic cue")
+        if (not chosen or any(type(x) is not int or not 1 <= x <= len(blocks)
+                               for x in chosen)
+                or chosen != list(range(chosen[0], chosen[0] + len(chosen)))):
+            raise SemanticMappingError("Multi-element blocks must be adjacent and ordered")
+        if any(not isinstance(q, str) or not 8 <= len(q) <= 200 or
+               len(compact(q)) < 8 or
+               compact(q) not in compact(blocks[b - 1][1])
+               for b, q in zip(chosen, quotes)):
             raise SemanticMappingError("Quoted evidence not present in rendered PDF text")
-        spoken_numbers = numbers(needed[cue])
-        if not spoken_numbers.issubset(numbers(label)):
-            raise SemanticMappingError("Numerical claim not anchored to selected source block")
-        verified[cue] = (block - 1, quote)
+        labels = " ".join(blocks[b - 1][1] for b in chosen)
+        if not numbers(needed[cue]).issubset(numbers(labels)):
+            raise SemanticMappingError("Numerical claim not anchored to selected source blocks")
+        verified[cue] = (tuple(b - 1 for b in chosen), tuple(quotes))
     if set(verified) != set(needed):
         raise SemanticMappingError("Missing or duplicated semantic cue")
     return verified
@@ -60,15 +83,25 @@ def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
         raise SemanticMappingError("Unsafe semantic proposal size")
     _load_gemini_keys_from_microvid()
     prompt = {
-        "task": ("For each spoken narration cue choose exactly one visible slide "
-                 "PDF text block that supports its meaning. Paraphrases are allowed. "
-                 "If any cue cannot be grounded, return an empty matches list. "
-                 "Never infer or invent a PDF block or numerical claim. "
-                 "Quote at least eight characters verbatim from the selected block."),
+        "task": (
+            "For EVERY spoken narration cue choose either a single visible slide PDF "
+            "text block or an ordered, consecutive group of 2 to 5 visible text blocks "
+            "supporting the cue. A spoken enumeration of several labels needs a group, "
+            "not one arbitrary label. Paraphrases may be proposed but are NOT certified. "
+            "Return one result per unresolved cue and cite each selected block with "
+            "8 or more verbatim characters. If ANY cue cannot be grounded, return "
+            "an empty matches list. Never invent labels, blocks, numbers or quotes."
+        ),
         "slide": slide,
         "unresolved_cues": [{"cue": n, "spoken": text[:600]} for n, text in missing],
         "source_blocks": [{"block": i, "text": row[1]} for i, row in enumerate(blocks, 1)],
-        "output_contract": {"matches": [{"cue": 1, "block": 1, "quote": "exact visible text"}]},
+        "output_contract": {
+            "single_element": {"cue": 1, "block": 1, "quote": "exact visible text"},
+            "multi_element": {
+                "cue": 2, "blocks": [2, 3],
+                "quotes": ["exact text from block 2", "exact text from block 3"],
+            },
+        },
     }
     response = call_with_client_failover(
         create_gemini_client,
