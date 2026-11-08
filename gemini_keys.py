@@ -178,6 +178,13 @@ def call_with_key_failover(
         1,
         _env_int("MICROGEN_GEMINI_TRANSIENT_RETRIES_PER_KEY", 2),
     )
+    if retries < 0:
+        raise ValueError("MICROGEN_GEMINI_MAX_RETRIES must not be negative")
+    # A same-key retry budget of zero means ONE request on each configured
+    # key, not "never try another key".  Previously the default transient
+    # threshold of two made the first HTTP 503/504 abort before rotation.
+    # Preserve the historical threshold when that many attempts are allowed.
+    effective_rotation_threshold = min(transient_retries_per_key, retries + 1)
     last_key_error: BaseException | None = None
     billing_failed_keys = 0
 
@@ -206,7 +213,7 @@ def call_with_key_failover(
 
                 if (
                     key_index < len(keys)
-                    and transient_failures >= transient_retries_per_key
+                    and transient_failures >= effective_rotation_threshold
                 ):
                     print(
                         f"[Gemini keys] {label}: key #{key_index} had "
