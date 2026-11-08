@@ -148,6 +148,47 @@ work on other gates proceeds; G4 cannot pass if any mandatory gate is blocked.
   where safe. Never waive science, pronunciation, integrity or copyright
   checks to manufacture progress.
 
+### Permanent known-blocker recovery policy (8 November 2026)
+
+A historical incident or a ChatGPT discussion is **not** an executable
+recovery. Mark a known blocker as permanently prevented only when its
+production path reproduces the failure under an offline regression and
+enforces the bounded corrective behavior under Windows CI.
+
+Reuse the existing `gemini_keys.py` failover and `microgen_batch.py`
+checkpoint/driver; do not install a competing self-modifying agent:
+
+- **503/504 recovery:** the configured same-key retry budget and transient
+  rotation threshold must be jointly consistent. Zero same-key retries
+  allows **one request on each authorized configured key**, not unlimited
+  retries and not a premature failure before key #2. The provider's
+  billing-circuit and authorization policy remain unchanged.
+- **Deterministic source/semantic rejection:** if a child stage exits with
+  an independently recognizable source-cue, pronunciation preflight, or
+  timed highlight contract error, do not replay unchanged inputs merely
+  to consume `--stage-retries`. Persist a `DETERMINISTIC_HOLD` only when
+  a complete relevant dependency fingerprint and batch-runner code hash
+  can be recorded. On resume, skip an identical rejected stage before
+  any model request; a changed relevant code/input or newly authorized
+  timed semantic budget releases the hold.
+- **Unknown or transient failure:** retain the existing finite retry/
+  checkpoint process; unknown causes must never be silently declared
+  recovered. Ignore old error lines when classifying a new attempt.
+- **Legacy compatibility:** a timed semantic budget change must not
+  invalidate an unrelated accepted static-TTS dependency fingerprint.
+  Never change previous source, accepted WAV, or MP4 artifacts to force
+  recovery.
+- **Required replay evidence:** before integrating a recovery change,
+  verify at least real historical 503/504 key-rotation configuration,
+  safe stopping when all keys fail, deterministic source/QC non-retry,
+  checkpoint hold on unchanged inputs, release after genuine input/code
+  changes, and a preserved unknown-transient retry path.
+
+This mechanism is bounded orchestration, not a promise that a novel
+scientific/semantic failure or general provider outage can be repaired
+autonomously. It does not change the requirement for actual G2/G3
+real-lecture acceptance or grant publication rights.
+
 ## 6. Change-control and scope freeze
 
 A proposed enhancement is admissible only if the release tracker records:

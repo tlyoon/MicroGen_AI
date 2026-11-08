@@ -212,3 +212,76 @@ def test_invalid_preferred_key_does_not_call_provider():
         with unittest.TestCase().assertRaises(ValueError):
             gemini_keys.call_with_key_failover(
                 lambda key: (_ for _ in ()).throw(RuntimeError("should not invoke")))
+
+
+class HistoricalKeyRotationReplayTests(unittest.TestCase):
+    """Offline replay of the real G2 timeout/retry-policy mismatch."""
+
+    @staticmethod
+    def env(**extra):
+        values = {
+            "GEMINI_API_KEY_1": "first",
+            "GEMINI_API_KEY_2": "second",
+            "MICROGEN_GEMINI_MAX_RETRIES": "0",
+            "MICROGEN_GEMINI_TRANSIENT_RETRIES_PER_KEY": "2",
+            "MICROGEN_GEMINI_SDK_RETRY_ATTEMPTS": "1",
+            "MICROGEN_GEMINI_BACKOFF_BASE_SECONDS": "0",
+            "MICROGEN_GEMINI_BACKOFF_MAX_SECONDS": "0",
+        }
+        values.update(extra)
+        return values
+
+    def test_zero_same_key_retries_rotates_on_first_504_without_second_attempt(self):
+        calls = []
+        class Deadline504(Exception):
+            code = 504
+            def __str__(self):
+                return "DEADLINE_EXCEEDED"
+        def operation(key):
+            calls.append(key)
+            if key == "first":
+                raise Deadline504()
+            return "recovered"
+        with patch.dict(os.environ, self.env(), clear=True):
+            result = gemini_keys.call_with_key_failover(operation)
+        self.assertEqual(result, "recovered")
+        self.assertEqual(calls, ["first", "second"])
+
+    def test_zero_same_key_retries_rotates_on_first_503(self):
+        calls = []
+        def operation(key):
+            calls.append(key)
+            if key == "first":
+                raise FakeTransientError()
+            return "recovered"
+        with patch.dict(os.environ, self.env(), clear=True):
+            result = gemini_keys.call_with_key_failover(operation)
+        self.assertEqual(result, "recovered")
+        self.assertEqual(calls, ["first", "second"])
+
+    def test_all_keys_transient_and_zero_retries_stops_without_looping(self):
+        calls = []
+        def operation(key):
+            calls.append(key)
+            raise FakeTransientError()
+        with patch.dict(os.environ, self.env(), clear=True):
+            with self.assertRaises(FakeTransientError):
+                gemini_keys.call_with_key_failover(operation)
+        self.assertEqual(calls, ["first", "second"])
+
+    def test_nontransient_fails_without_key_rotation(self):
+        calls = []
+        def operation(key):
+            calls.append(key)
+            raise ValueError("unsafe semantic proposal")
+        with patch.dict(os.environ, self.env(), clear=True):
+            with self.assertRaisesRegex(ValueError, "unsafe semantic"):
+                gemini_keys.call_with_key_failover(operation)
+        self.assertEqual(calls, ["first"])
+
+    def test_unconfigured_negative_retry_budget_rejected_without_network_calls(self):
+        calls = []
+        with patch.dict(os.environ, self.env(MICROGEN_GEMINI_MAX_RETRIES="-1"), clear=True):
+            with self.assertRaisesRegex(ValueError, "must not be negative"):
+                gemini_keys.call_with_key_failover(lambda key: calls.append(key))
+        self.assertEqual(calls, [])
