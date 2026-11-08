@@ -117,6 +117,7 @@ def test_semantic_mode_and_resolver_code_change_invalidate_tts_cache(tmp_path, m
         "microgen_cue_semantic_mapping.py",
     ):
         (stage / filename).write_text("code version 1", encoding="utf8")
+    monkeypatch.setenv("MICROGEN_TIMED_CUES", "1")
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST", "0")
     baseline = dependency_fingerprint(stage, "tts")
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST", "1")

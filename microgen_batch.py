@@ -393,6 +393,33 @@ def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path)
     save_checkpoint(checkpoint_path, cp)
 
 
+def unchanged_failure_hold(cp: dict, stage_name: str, stage: Path) -> bool:
+    """Prevent identical source/QA failures from being replayed after restart.
+
+    Only hold an independently classified deterministic failure whose prior
+    *exact* dependency fingerprint is available and still matches. Transient
+    provider failures and unknown fingerprints retain bounded recovery paths.
+    """
+    record = cp.get("last_error")
+    if not isinstance(record, dict):
+        return False
+    if (record.get("stage") != stage_name
+            or record.get("recovery_disposition") != "DETERMINISTIC_HOLD"):
+        return False
+    previous = record.get("input_fingerprint")
+    runner = record.get("recovery_runner_sha256")
+    if (not isinstance(previous, str) or len(previous) != 64
+            or not isinstance(runner, str) or len(runner) != 64):
+        return False
+    try:
+        # A changed runner algorithm or changed stage dependency is meaningful
+        # new evidence and may authorize a new bounded attempt.
+        return (quality.sha256(stage / "microgen_batch.py") == runner
+                and quality.dependency_fingerprint(stage, stage_name) == previous)
+    except (OSError, ValueError, quality.QualityError):
+        return False
+
+
 def wait_for_gemini_circuit(lease=None) -> None:
     """Pause while the shared billing/capacity circuit is open.
 
@@ -635,6 +662,32 @@ def _run_leased_stage(command: list[str], *, cwd: Path, log, lease,
             _close_windows_kill_job(windows_job)
 
 
+def _deterministic_stage_failure(log_path: Path, attempt_offset: int) -> str | None:
+    """Recognize a few already validated, non-retryable stage failures.
+
+    Inspect only THIS attempt, never old lines from a resumed checkpoint.
+    A model-output/source QA rejection must not consume a second paid stage
+    retry while the code, PDF and narration remain unchanged. Unknown
+    failures keep the established bounded stage retry behavior.
+    """
+    import re
+    try:
+        with log_path.open("rb") as stream:
+            stream.seek(attempt_offset)
+            output = stream.read(1024 * 1024)
+    except OSError:
+        return None
+    # Require a traceback's exception-class summary, not an arbitrary
+    # occurrence in user/source text. Never expose private log content.
+    match = re.search(
+        rb"(?:^|[\r\n])[ \t]*(?:[A-Za-z_][\w.]*\.)?"
+        rb"(CuePlanningError|SemanticMappingError|"
+        rb"PronunciationPreflightError|HighlightContractError):[ \t]",
+        output,
+    )
+    return match.group(1).decode("ascii") if match else None
+
+
 def run_subprocess(
     python_exe: str,
     script: str,
@@ -653,6 +706,7 @@ def run_subprocess(
         if gemini_stage:
             wait_for_gemini_circuit(lease)
         with log_path.open("a", encoding="utf-8", errors="replace") as log:
+            attempt_offset = log.tell()
             log.write(f"\n===== {label} :: {script} :: attempt {attempt + 1} =====\n")
             log.flush()
             stage_timeout = float(os.environ.get("MICROGEN_STAGE_TIMEOUT_SECONDS", "7200"))
@@ -681,6 +735,12 @@ def run_subprocess(
                 wait_for_gemini_circuit(lease)
                 continue
 
+        deterministic = _deterministic_stage_failure(log_path, attempt_offset)
+        if deterministic is not None:
+            raise RuntimeError(
+                f"{label} failed with non-retryable {deterministic} after "
+                f"{attempt + 1} attempt(s); no unchanged-stage replay"
+            )
         if attempt >= retries:
             raise RuntimeError(f"{label} failed after {attempt + 1} attempt(s)")
         attempt += 1
@@ -940,6 +1000,13 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
             print(f"[{subchapter}] recovered exact-source scientific QA receipt",flush=True)
             continue
 
+        if unchanged_failure_hold(cp, stage_name, stage):
+            raise RuntimeError(
+                f"{stage_name} has a verified unchanged deterministic-failure "
+                "checkpoint; no repeated stage attempts. Change and verify "
+                "the source, relevant code, or authorized configuration "
+                "before a new bounded campaign."
+            )
         invalidate_from(cp, stage_name)
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
@@ -969,12 +1036,24 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 _science_qa_update_upstream_fingerprints(cp, stage, dest)
             mark_complete(cp, checkpoint_path, stage_name, stage)
         except Exception as exc:
-            cp["last_error"] = {
+            failure = {
                 "stage": stage_name,
                 "type": type(exc).__name__,
                 "message": str(exc),
                 "utc": utc_now(),
             }
+            # Only fingerprint independently identified deterministic QA
+            # rejections. An external outage is not a permanent source hold.
+            if "failed with non-retryable " in str(exc):
+                try:
+                    failure["input_fingerprint"] = quality.dependency_fingerprint(
+                        stage, stage_name)
+                    failure["recovery_runner_sha256"] = quality.sha256(
+                        stage / "microgen_batch.py")
+                    failure["recovery_disposition"] = "DETERMINISTIC_HOLD"
+                except (OSError, ValueError, quality.QualityError):
+                    failure["recovery_disposition"] = "UNVERIFIED_INPUTS"
+            cp["last_error"] = failure
             save_checkpoint(checkpoint_path, cp)
             raise
 
