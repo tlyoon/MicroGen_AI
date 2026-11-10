@@ -168,13 +168,23 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
         scored = []
         for block_number, (box, label, tokens) in enumerate(blocks):
             shared = terms & tokens
-            score = len(shared) / max(1, min(6, len(terms)))
-            score += 0.02 * len(shared)
-            if block_number in used:
-                score -= 0.25
-            scored.append((score, len(shared), block_number))
-        score, overlap, winner = max(scored)
-        if not terms or overlap < 2 or score < 0.32:
+            evidence = len(shared) / max(1, min(6, len(terms)))
+            evidence += 0.02 * len(shared)
+            # Reuse is a presentation preference, NOT a reason to discard
+            # independently sufficient source-text evidence. A later spoken
+            # cue may genuinely refer to the same visible element again.
+            preference = evidence - (0.25 if block_number in used else 0.0)
+            scored.append((preference, evidence, len(shared), block_number))
+        _, evidence, overlap, winner = max(scored)
+        if not terms or overlap < 2 or evidence < 0.32:
+            # The presentation preference can otherwise select an unsupported
+            # unused element over the actual, previously highlighted element.
+            # Fall back only to the same conservative lexical threshold; do
+            # not infer semantics or relax the two-term evidence requirement.
+            _, evidence, overlap, winner = max(
+                scored, key=lambda candidate: (candidate[1], candidate[2],
+                                               candidate[0]))
+        if not terms or overlap < 2 or evidence < 0.32:
             unresolved.append((cue_number, spoken))
             continue
         used.add(winner)
