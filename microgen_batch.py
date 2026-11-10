@@ -388,6 +388,11 @@ def invalidate_from(cp: dict, stage_name: str) -> None:
 def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path) -> None:
     cp.setdefault("completed", {})[stage_name] = utc_now()
     cp.setdefault("dependency_fingerprints", {})[stage_name] = quality.dependency_fingerprint(stage, stage_name)
+    # Atomic checkpoint update: completed output can no longer be mistaken
+    # for an unresolved external submission after a normal return.
+    if (isinstance(cp.get("inflight_provider_stage"), dict)
+            and cp["inflight_provider_stage"].get("stage") == stage_name):
+        cp.pop("inflight_provider_stage")
     cp["last_error"] = None
     cp["updated_utc"] = utc_now()
     save_checkpoint(checkpoint_path, cp)
@@ -904,6 +909,26 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     dest = destination_for(args.source_root, subchapter)
     offline_mapping = bool(getattr(args, "offline_figure_mapping", False))
     log_path = args.work_root / f"{subchapter}.log"
+    pending = cp.get("inflight_provider_stage")
+    if pending is not None:
+        # A crash after a provider Send but before the stage receipt cannot
+        # safely be interpreted as an unused attempt. Preserve originals,
+        # fail before ANY further model request, and never reset the budget.
+        if (isinstance(pending, dict)
+                and pending.get("stage") == "science_qa"
+                and stage_valid(stage, "science_qa", dest)):
+            # Science QA has its own independently source-attested receipt;
+            # recover that exact saved result without another Gemini call.
+            _science_qa_update_upstream_fingerprints(cp, stage, dest)
+            mark_complete(cp, checkpoint_path, "science_qa", stage)
+            print(f"[{subchapter}] recovered independently verified science "
+                  "receipt after interrupted provider stage", flush=True)
+        else:
+            raise RuntimeError(
+                "AMBIGUOUS_PROVIDER_STAGE_HOLD: a previous provider stage may "
+                "have submitted a request before interruption; preserve the "
+                "checkpoint and do not replay an unaccounted paid request"
+            )
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
     bounded = getattr(args, "stop_after", None) is not None
@@ -1017,6 +1042,18 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
+                if (getattr(args, "bounded_provider_scope_verified", False)
+                        and stage_name in (GEMINI_STAGES | {"tts"})):
+                    # Record the *possibility* of a billed external effect
+                    # before launching the child. A kill/crash during Send
+                    # cannot silently reset the original finite campaign.
+                    cp["inflight_provider_stage"] = {
+                        "stage": stage_name,
+                        "created_utc": utc_now(),
+                        "source_sha256": quality.sha256(stage / "source.pdf"),
+                        "runner_sha256": quality.sha256(stage / "microgen_batch.py"),
+                    }
+                    save_checkpoint(checkpoint_path, cp)
                 run_subprocess(
                     py,
                     script,
@@ -1191,6 +1228,7 @@ def main() -> int:
                     raise SystemExit(str(exc)) from exc
                 print(f"[batch] provider-scope={authorization['status']}; "
                       "private campaign only; no publication", flush=True)
+                args.bounded_provider_scope_verified = True
             elif not args.authorize_provider_usage:
                 raise SystemExit(
                     "No standing scope for additional targets: never "

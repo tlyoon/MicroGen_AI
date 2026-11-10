@@ -211,5 +211,76 @@ class StandingBoundedCampaignTests(unittest.TestCase):
             dispatch.assert_not_called()
 
 
+class InterruptedProviderStageReplayTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.stage = self.root / "work" / "2.5"
+        self.stage.mkdir(parents=True)
+        (self.stage / "source.pdf").write_bytes(b"fixture PDF")
+        (self.stage / "microgen_batch.py").write_text(
+            "verified frozen runner", encoding="utf-8")
+        self.checkpoint = self.stage / ".microgen_checkpoint.json"
+
+    def test_real_batch_marks_possibly_paid_stage_before_child_and_never_replays(self):
+        from types import SimpleNamespace
+        cp = {
+            "completed": {"figure_extraction": "verified"},
+            "dependency_fingerprints": {"figure_extraction": "same"},
+        }
+        args = SimpleNamespace(
+            repo=self.root, source_root=self.root, work_root=self.root / "work",
+            source_wait=0, commit="a" * 40, multipart=False,
+            stop_after="figure_mapping", rebuild_unverified=False,
+            figure_extraction_only=False, stage_retries=0,
+            main_py=sys.executable, docling_py=sys.executable,
+            bounded_provider_scope_verified=True,
+        )
+        sends = []
+
+        def simulate_possible_send(*_args, **_kwargs):
+            saved = json.loads(self.checkpoint.read_text(encoding="utf-8"))
+            self.assertEqual(saved["inflight_provider_stage"]["stage"],
+                             "figure_mapping")
+            self.assertFalse(
+                saved.get("completed", {}).get("figure_mapping"))
+            sends.append("request_may_have_started")
+            raise RuntimeError("process lost after possible Gemini Send")
+
+        with patch.object(batch, "prepare_stage",
+                          return_value=(self.stage, cp, self.checkpoint)), \
+             patch.object(batch, "destination_for",
+                          return_value=self.root / "source"), \
+             patch.object(batch.quality, "dependency_fingerprint",
+                          return_value="same"), \
+             patch.object(batch, "stage_valid", return_value=True), \
+             patch.object(batch, "run_subprocess",
+                          side_effect=simulate_possible_send):
+            with self.assertRaisesRegex(RuntimeError, "possible Gemini Send"):
+                batch.process_one(args, "2.5", [])
+            self.assertEqual(sends, ["request_may_have_started"])
+            # Simulate a fresh process loading the saved durable state.
+            retained = json.loads(self.checkpoint.read_text(encoding="utf-8"))
+            self.assertEqual(retained["last_error"]["stage"], "figure_mapping")
+            with patch.object(batch, "prepare_stage",
+                              return_value=(self.stage, retained, self.checkpoint)):
+                with self.assertRaisesRegex(
+                        RuntimeError, "AMBIGUOUS_PROVIDER_STAGE_HOLD"):
+                    batch.process_one(args, "2.5", [])
+            self.assertEqual(sends, ["request_may_have_started"])
+
+    def test_complete_stage_clears_earlier_durable_inflight_claim(self):
+        cp = {"completed": {}, "inflight_provider_stage": {
+            "stage": "slides", "created_utc": "earlier"}}
+        with patch.object(batch.quality, "dependency_fingerprint",
+                          return_value="verified"):
+            batch.mark_complete(cp, self.checkpoint, "slides", self.stage)
+        saved = json.loads(self.checkpoint.read_text(encoding="utf-8"))
+        self.assertNotIn("inflight_provider_stage", saved)
+        self.assertTrue(saved["completed"].get("slides"))
+        self.assertEqual(saved["dependency_fingerprints"]["slides"], "verified")
+
+
 if __name__ == "__main__":
     unittest.main()

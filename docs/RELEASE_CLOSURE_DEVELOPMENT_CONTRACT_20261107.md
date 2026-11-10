@@ -54,6 +54,19 @@ campaign is inferred. Existing unbounded production/explicit publication
 permissions remain separate. Do not retroactively assume a previous
 figure-mapping-only authorization also covers new paid slides or TTS.
 
+**Ambiguous-send crash protection:** For this scoped autonomous mode, before
+launching any provider-bearing child stage, the normal batch runner atomically
+records `inflight_provider_stage` with stage name, source SHA and code SHA
+in the existing checkpoint. A verified successful completion clears that
+marker in the same checkpoint save. An interrupted stage with an uncertain
+model/TTS call cannot be replayed on the next invocation merely because the
+original process died or a new chat began; it must fail closed and preserve
+evidence. An independently verified existing science-QA result may be
+recovered without a new Send, using its original source-bound receipt.
+Known transient failures are automatically handled within the original
+single run and its already permitted key rotation/retry budget. This adds
+**no human approval gate** and does not mistake a safe stop for recovery.
+
 **Approval boundary is about substantive new authority, not routine work:**
 a newly billed source/provider/campaign beyond an existing permitted scope,
 external publication, destructive overwrite or rights/security override cannot
