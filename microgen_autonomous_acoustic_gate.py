@@ -254,20 +254,78 @@ def _render_same_voice(text:str, destination:Path, expected_record:dict) -> None
     require_structurally_usable_audio(destination)
 
 
+def _classify_review_blocker(report:dict) -> dict:
+    """Categorize *evidence*, not putative audio defects, before auto-repair.
+
+    Input is the existing source-bound independent two-model review. A math
+    source risk or conflicting/absent recognition must never consume the
+    limited same-voice TTS repair budget or be reported as a proven WAV error.
+    This is a pure offline classifier: no model, ASR or TTS requests.
+    """
+    categories={
+        "source_pronunciation_risk":[],
+        "transcriber_disagreement":[],
+        "recognition_unavailable":[],
+        "repair_candidate":[],
+        "other_ambiguous":[],
+    }
+    rows=report.get("slides",[])
+    if not isinstance(rows,list):
+        raise AutonomousAcousticError("Malformed independent acoustic report")
+    flagged=report.get("review_required_slides",[])
+    if (not isinstance(flagged,list) or any(type(n) is not int for n in flagged)
+            or len(set(flagged))!=len(flagged)
+            or any(n<1 or n>len(rows) for n in flagged)):
+        raise AutonomousAcousticError("Invalid acoustic slide identities")
+    for n in flagged:
+        row=rows[n-1]
+        if row.get("slide")!=n:
+            raise AutonomousAcousticError("Acoustic report slide order mismatch")
+        assessment=row.get("assessment")
+        if row.get("source_pronunciation_risks"):
+            categories["source_pronunciation_risk"].append(n)
+        elif assessment=="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE":
+            categories["transcriber_disagreement"].append(n)
+        elif assessment=="REVIEW_REQUIRED_TRANSCRIPTION_UNAVAILABLE":
+            categories["recognition_unavailable"].append(n)
+        elif assessment==REPAIRABLE:
+            categories["repair_candidate"].append(n)
+        else:
+            categories["other_ambiguous"].append(n)
+    if report.get("unavailable_recognizer_passes") or categories["recognition_unavailable"]:
+        reason="INDEPENDENT_RECOGNIZER_UNAVAILABLE"
+    elif categories["source_pronunciation_risk"]:
+        reason="SOURCE_PRONUNCIATION_RISK_HOLD"
+    elif categories["transcriber_disagreement"]:
+        reason="ASR_DISAGREEMENT_HOLD"
+    elif categories["other_ambiguous"]:
+        reason="AMBIGUOUS_ACOUSTIC_EVIDENCE_HOLD"
+    elif len(categories["repair_candidate"])>MAX_REPAIR_SLIDES:
+        reason="REPAIR_CANDIDATE_BUDGET_HOLD"
+    else:
+        reason="BOUNDED_SAME_VOICE_REPAIR_ELIGIBLE"
+    return {
+        "root_cause_family":reason,
+        "review_categories":categories,
+        "safe_auto_repair":reason=="BOUNDED_SAME_VOICE_REPAIR_ELIGIBLE",
+        "max_repair_slides":MAX_REPAIR_SLIDES,
+    }
+
+
 def _repair(stage:Path, report:dict, texts:list[str],
             recognizers:tuple[Callable,Callable], *,
             synthesize:Callable) -> int:
-    """One candidate per affected slide; no mixed providers, no silent overwrites."""
+    """One candidate per *eligible* slide; never rewrite ambiguous audio."""
     from microgen_tts_provenance import wav_characteristics
     numbers=report["review_required_slides"]
     if not numbers:
         return 0
-    if len(numbers)>MAX_REPAIR_SLIDES:
-        raise AutonomousAcousticError("Acoustic errors exceed bounded local repair budget")
-    if any(report["slides"][i-1]["assessment"]!=REPAIRABLE or
-           report["slides"][i-1]["source_pronunciation_risks"]
-           for i in numbers):
-        raise AutonomousAcousticError("Unsafe or ambiguous acoustic error: no automatic rewrite")
+    review=_classify_review_blocker(report)
+    if not review["safe_auto_repair"]:
+        raise AutonomousAcousticError(
+            review["root_cause_family"] +
+            ": independent evidence requires bounded resolution; "
+            "do not rewrite or replay original speech")
     original_manifest=verify_manifest(stage,texts)
     old_records=original_manifest["slides"]
     expected_props={(r["provider"],r["voice_name"],r["sample_rate_hz"])
@@ -377,6 +435,39 @@ def verify_receipt(stage:Path) -> dict:
     return receipt
 
 
+def _hold_unchanged_failed_review(stage:Path, texts:list[str],
+                                  models:tuple[str,str]) -> None:
+    """Do not rebill the same failed source/WAVs under identical reviewers.
+
+    The durable blocked receipt is evidence of an *attempt*, not evidence
+    that any specific WAV is wrong. An updated raw WAV/provenance snapshot or
+    different independently authorized reviewers is a materially new scope.
+    This runs on the normal direct CLI as well as the batch entrypoint.
+    """
+    snapshot=_input_snapshot(stage,len(texts))
+    for old in sorted(stage.glob(".microgen_acoustic_blocked_*.json")):
+        if (old.is_symlink() or not old.is_file()
+                or old.stat().st_size>128_000):
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        try:
+            earlier=json.loads(old.read_text(encoding="utf8"))
+        except (OSError,ValueError):
+            # An unreadable prior record is not a license to retry paid work.
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        if not isinstance(earlier,dict):
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        if (earlier.get("status")=="INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED"
+            and earlier.get("input_snapshot_sha256")==snapshot
+            and earlier.get("recognition_models")==list(models)):
+            raise AutonomousAcousticError(
+                "UNCHANGED_ACOUSTIC_REVIEW_HOLD: source and WAV inputs "
+                "already received an independent blocked review with these "
+                "models; no duplicate paid acoustic submission")
+
+
 def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 models:tuple[str,str]|None=None,
                 synthesize:Callable|None=None) -> dict:
@@ -402,6 +493,9 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     if (len(engines)!=2 or len(models)!=2 or
         not all(models) or models[0]==models[1]):
         raise AutonomousAcousticError("Distinct independent Gemini recognizers required")
+    # Normal CLI and batch both consult the immutable historical failure
+    # BEFORE the first billable recognition request.
+    _hold_unchanged_failed_review(stage,texts,models)
     memo={}
     report=_transcripts(stage,texts,engines,models,memo=memo)
     report=_recheck_disagreements(stage,report,texts,engines,models,memo)
@@ -449,8 +543,15 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
         stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         failed=stage/f".microgen_acoustic_blocked_{signature}_{stamp}.json"
         rows=report.get("slides",[])
+        classification=_classify_review_blocker(report)
         diagnostic={
             "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
+            # Stable, sanitized, automated recurrence classification.
+            # Do not log the expected script or blind ASR transcripts.
+            "root_cause_family":classification["root_cause_family"],
+            "review_categories":classification["review_categories"],
+            "safe_auto_repair":classification["safe_auto_repair"],
+            "max_repair_slides":MAX_REPAIR_SLIDES,
             "input_snapshot_sha256":snap,
             "audit_utc":stamp,
             "qa_code_sha256":digest_file(Path(__file__)),
