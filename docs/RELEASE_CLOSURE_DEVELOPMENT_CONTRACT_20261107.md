@@ -239,6 +239,27 @@ scientific/semantic failure or general provider outage can be repaired
 autonomously. It does not change the requirement for actual G2/G3
 real-lecture acceptance or grant publication rights.
 
+**10 November 2026 mixed acoustic recovery contract (Serway §2.5 replay):**
+The normal `microgen_autonomous_acoustic_gate.py` must classify
+source pronunciation risks, recognizer disagreements, unavailable
+transcription, eligible two-slide same-voice TTS repair and other ambiguous
+evidence **before counting repairable defects or calling TTS**. Never
+describe all flagged slides as confirmed speech errors. Distinct reviewer
+disagreements and mathematical-letter source risks must retain the
+independent acoustic hold; do not promote a screen pass to proved phonetics,
+relax scientific criteria or expand the two-slide repair ceiling.
+The canonical stage must preserve sanitized, SHA-bound category receipts
+without private script/transcript excerpts. A repeated direct CLI or batch
+run with an unchanged WAV/TTS-source snapshot and the same Gemini reviewers
+must stop before any new model request; a new process or chat is not a
+new cost allowance. The standalone source-attested `x axis` and `x of t`
+forms have conservative TTS-only letter-name expansions in
+`text_to_speech_v25.py` and matching risk classifications; regenerated
+WAVs **still need independent review**. Original §2.5 WAVs, previous
+failed review and the spent provider campaign remain preserved. These rules
+must be exercised by source-free regression tests and normal entrypoints,
+not just incident notes or standalone repair scripts.
+
 ## 6. Change-control and scope freeze
 
 A proposed enhancement is admissible only if the release tracker records:

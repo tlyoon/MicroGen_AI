@@ -100,10 +100,21 @@ def normalize_scientific_speech(text: str) -> str:
         "coordinate", "coordinates", "component", "components",
     )
     out = re.sub(
-        r"(?<![A-Za-z])(?P<letter>[xy])\s*[-\u2010-\u2015]\s*"
+        # A spaced 'x axis' is the same coordinate variable as 'x-axis'.
+        # This was missing from the original safe compound spelling rule.
+        r"(?<![A-Za-z])(?P<letter>[xy])(?:\s*[-\u2010-\u2015]\s*|\s+)"
         r"(?P<noun>" + "|".join(math_letter_compounds) + r")\b",
         lambda match: ("why" if match["letter"].lower() == "y" else "ex")
         + " " + match["noun"],
+        out, flags=re.I,
+    )
+    # In physics narration 'position x of t' denotes the coordinate
+    # function x(t), spoken 'ex of tee'. Do not globally replace x, y or t:
+    # other standalone letters and non-mathematical uses remain unchanged.
+    out = re.sub(
+        r"(?<![A-Za-z])(?P<letter>[xy])\s+of\s+(?P<time>t)\b",
+        lambda match: ("why" if match["letter"].lower()=="y" else "ex")
+        + " of tee",
         out, flags=re.I,
     )
     unit_patterns = (

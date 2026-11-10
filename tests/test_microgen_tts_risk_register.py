@@ -68,6 +68,21 @@ class RiskTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertFalse(risk.find_pronunciation_risks(phrase,normalize(phrase)))
 
+    def test_explicit_spoken_math_x_is_still_independent_acoustic_risk(self):
+        source=("A particle moves along the x axis. "
+                "Its position x of t equals two t cubed.")
+        spoken=normalize(source)
+        self.assertIn("ex axis",spoken)
+        self.assertIn("ex of tee",spoken)
+        risks=risk.find_pronunciation_risks(source,spoken)
+        self.assertEqual([x.code for x in risks],
+                         ["math_letter_compound","coordinate_of_time"])
+        self.assertTrue(all(x.automatic_text_correction for x in risks))
+        self.assertEqual([x.expected_spoken for x in risks],
+                         ["ex axis","ex of tee"])
+        # A safer input spelling is not independently verified WAV phonetics.
+        self.assertEqual(len(risks),2)
+
     def test_standalone_mathematical_variable_is_flagged_not_changed(self):
         raw="The variable y approaches zero."
         found=risk.find_pronunciation_risks(raw,normalize(raw))
