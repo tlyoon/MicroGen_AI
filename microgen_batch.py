@@ -895,6 +895,49 @@ def subchapter_ownership(args, subchapter: str):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+def preflight_private_timed_acceptance(stage: Path) -> dict:
+    """Full-lecture, zero-provider-cost admission before accepted G2 TTS.
+
+    Require a real PDF-grounded element plan or evidence that the existing
+    tightly bounded semantic proposal can be requested. This reuses the
+    production planner's exact lexical matcher and semantic budget checker.
+    It never sends prompts, alters scripts/WAVs, publishes a cue plan, or
+    increases the existing Gemini/voice budget.
+    """
+    from microgen_timed_cue_planner import (
+        PLAN_FILE, prepare_slide_pages, propose_plan,
+        _require_budget_preflight, CuePlanningError,
+    )
+    from microgen_timed_cue_tts import _verified_plan
+    stage = Path(stage)
+    pages = prepare_slide_pages(stage)
+    if (stage / PLAN_FILE).exists() or (stage / PLAN_FILE).is_symlink():
+        verified, fragments = _verified_plan(stage)
+        return {"mode": "existing_verified_plan",
+                "pages": len(pages),
+                "cues": verified["total_cues"]}
+    assisted = os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST", "0")
+    if assisted not in ("0", "1"):
+        raise CuePlanningError("Invalid explicit timed semantic assist setting")
+    if assisted == "1":
+        raw = os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "4")
+        try:
+            limit = int(raw)
+        except ValueError as exc:
+            raise CuePlanningError("Invalid bounded semantic slide limit") from exc
+        if not 1 <= limit <= 40:
+            raise CuePlanningError("Invalid bounded semantic slide limit")
+        _require_budget_preflight(stage, semantic_limit=limit,
+                                  max_cues=120)
+        return {"mode": "semantic_budget_admitted",
+                "pages": len(pages), "semantic_max_slides": limit}
+    # The semantic proposal is off; insist the source-grounded lexical
+    # planner covers all slides before starting another provider stage.
+    plan = propose_plan(stage, max_cues=120)
+    return {"mode": "offline_lexical_grounding",
+            "pages": len(pages), "cues": plan["total_cues"]}
+
+
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     if lease is not None:
         lease.assert_held()
@@ -1036,6 +1079,17 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
+            if (getattr(args, "stop_after", None) == "acceptance"
+                    and stage_name in {"science_qa", "tts"}):
+                # A private lecture cannot be accepted with static slide
+                # narration and a fabricated cue timeline. Run the same
+                # source/PDF lexical and bounded semantic budget admission
+                # BEFORE the next billable QA or TTS request. Never silently
+                # raise the semantic limit or synthesize an ungrounded cue.
+                admission = preflight_private_timed_acceptance(stage)
+                print(f"[{subchapter}] mandatory private timed grounding "
+                      f"admitted mode={admission['mode']} "
+                      f"slides={admission['pages']}", flush=True)
             if stage_name == "published":
                 if lease is not None:
                     lease.assert_held()
@@ -1162,6 +1216,15 @@ def main() -> int:
     args.repo = args.repo.resolve()
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
+    if args.stop_after == "acceptance":
+        # Private G2/G3 acceptance MUST include measured, active element
+        # highlighting. The legacy static one-WAV-per-slide mode cannot
+        # satisfy the release contract. Set before provider scope is frozen,
+        # so future checkpoint resumes cannot silently turn this back off.
+        if os.environ.get("MICROGEN_TIMED_CUES") != "1":
+            print("[batch] private acceptance requires source-grounded timed "
+                  "cues; enabling mandatory timed TTS",flush=True)
+        os.environ["MICROGEN_TIMED_CUES"] = "1"
     # Unbounded normal production eventually reaches paid Gemini/TTS stages.
     # Enforce the same explicit provider authorization already required for
     # paid --stop-after campaigns; never silently rely on stored credentials.

@@ -260,6 +260,32 @@ failed review and the spent provider campaign remain preserved. These rules
 must be exercised by source-free regression tests and normal entrypoints,
 not just incident notes or standalone repair scripts.
 
+**10 November 2026 private acceptance timed-cue cost preflight:** The
+real HP Serway §2.5 17-slide deck exposed a separate G2 blocker during an
+offline shadow preflight: pure lexical cues cannot ground slide 1, and the
+independently counted semantic-assisted slides were
+`[1,2,4,10,11,13,14,15,16,17]`, **10 required versus the
+pre-existing maximum 4**. This is not a Gemini outage and cannot be
+repaired by retrying a WAV or increasing budget without a newly bounded
+campaign. The previous TTS path treated measured highlighting as opt-in,
+letting a source-to-acceptance campaign pay for unmeasured static audio that
+can never satisfy G2's mandatory synchronized active highlighting.
+
+For private `microgen_batch.py --stop-after acceptance` campaigns,
+the **normal batch runner** now mandates `MICROGEN_TIMED_CUES=1`
+before freezing provider scope. Once slide and narration evidence exists,
+it runs the canonical offline `prepare_slide_pages` and
+`propose_plan` / `_require_budget_preflight` admission **before**
+both paid scientific QA and TTS (or at TTS if scientific QA was previously
+verified). A verified existing plan is reused without transcription or
+invented mapping. Unsupported lexical grounding or insufficient configured
+semantic budget stops that specific stage with an exact diagnostic,
+preserving originals; no Gemini request is made in the preflight. This
+extends mandatory private G2 acceptance only; previous explicitly
+non-acceptance/static teaching workflows retain their existing option.
+Do not silently raise the 4-slide budget, fabricate cue coordinates, or
+claim timed visual acceptance from this preflight alone.
+
 ## 6. Change-control and scope freeze
 
 A proposed enhancement is admissible only if the release tracker records:
