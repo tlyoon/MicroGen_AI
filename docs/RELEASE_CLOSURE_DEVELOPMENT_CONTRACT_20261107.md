@@ -25,6 +25,43 @@ acceptance on the current frozen code and new real inputs.
 Success is a reproducible source-PDF-to-accepted-private-video workflow,
 not an ever-growing quantity of code, checks, PRs, or repair attempts.
 
+### Standing autonomous development and bounded campaign continuation (10 November 2026)
+
+**No repeated manual approvals for ordinary development.** In the authorized
+HP Windows/API worktree, execute routine reversible code changes, checks,
+source-free validation, regression tests, permitted AI-based academic/technical
+QA and previously approved bounded recovery automatically. Do not ask for
+human approval of each stage, familiar repair, automated QA result, checkpoint
+resume or ordinary implementation step. Keep advancing through all stages
+*within the same finite previously authorized private campaign*. Any
+generalizable remediation must be invoked by the normal production caller,
+protected by historical-failure replay tests, and preserved in the codebase.
+
+The normal `microgen_batch.py` entrypoint now calls
+`microgen_campaign_authorization.authorize_or_resume` for a **single-target,
+bounded, private provider campaign**. Its first launch records the existing
+explicit provider authorization in a private, exclusive local receipt
+`.microgen_bounded_provider_authorization.json`; later identical resumptions
+reuse that verified receipt **without repeating an approval flag or asking the
+owner**. The receipt binds the original source SHA256, exact code SHA, private
+host/paths, fixed endpoint stage, voice/model/environment choices, multipart
+mode, and maximum stage-retry count. The procedure refuses changed source,
+runner, provider, voice, elevated retry allowance or stage scope, malformed
+authorization, an unchanged prior terminal stage failure, or a publication
+request. The existing within-process bounded retries and API key rotation are
+unchanged; no unapproved second source, changed provider or restarted spent
+campaign is inferred. Existing unbounded production/explicit publication
+permissions remain separate. Do not retroactively assume a previous
+figure-mapping-only authorization also covers new paid slides or TTS.
+
+**Approval boundary is about substantive new authority, not routine work:**
+a newly billed source/provider/campaign beyond an existing permitted scope,
+external publication, destructive overwrite or rights/security override cannot
+be authorized by a generic development prompt or silently expanded. In that
+case the automation must stop the *restricted operation*, preserve its evidence
+and continue any independently authorized work; it should not repeatedly ask
+for the same routine approval. A safe stop is not a successful full lecture.
+
 ## 2. Nonnegotiable operating constraints
 
 - **Device isolation:** original MicroGen_AI development, real-media production,

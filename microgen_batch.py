@@ -1164,9 +1164,37 @@ def main() -> int:
             raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
         offline_safe = (args.offline_figure_mapping and
                         args.stop_after in {"figure_mapping", "figure_merge"})
-        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and
-                not args.authorize_provider_usage and not offline_safe):
-            raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
+        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping")
+                and not offline_safe):
+            # A single, previously authorized *bounded* private campaign can
+            # resume from verified checkpoints without another per-stage or
+            # per-session operator approval. The exact original source,
+            # revision, endpoint stage, model settings and retry ceiling
+            # remain frozen. Never infer new paid authorization from a prompt
+            # or silently extend a one-stage campaign to another stage.
+            if len(targets) == 1:
+                from microgen_campaign_authorization import (
+                    authorize_or_resume, BoundedCampaignAuthorizationError)
+                try:
+                    authorization = authorize_or_resume(
+                        repo=args.repo,
+                        source_root=args.source_root,
+                        work_root=args.work_root,
+                        source_file=destination_for(args.source_root, targets[0])
+                                    / "source.pdf",
+                        stop_after=args.stop_after,
+                        stage_retries=args.stage_retries,
+                        multipart=args.multipart,
+                        explicit_authorization=args.authorize_provider_usage,
+                    )
+                except BoundedCampaignAuthorizationError as exc:
+                    raise SystemExit(str(exc)) from exc
+                print(f"[batch] provider-scope={authorization['status']}; "
+                      "private campaign only; no publication", flush=True)
+            elif not args.authorize_provider_usage:
+                raise SystemExit(
+                    "No standing scope for additional targets: never "
+                    "expand a paid campaign without authorization")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
         raise SystemExit(
