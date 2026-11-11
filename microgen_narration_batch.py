@@ -46,6 +46,7 @@ def generate_batched(
     model: str,
     prompt_hash: str = "",
     batch_size: int | None = None,
+    prompt_fingerprint: Callable[[list[dict]], str] | None = None,
 ) -> dict:
     """Generate exact, source-ordered slide narration with durable checkpoints.
 
@@ -72,10 +73,20 @@ def generate_batched(
     source_digest = hashlib.sha256(_canonical(source_blocks)).hexdigest()
     for start in range(0, len(slides), batch_size):
         batch = slides[start:start + batch_size]
+        # The request's *actual* composed prompt, not merely a separate
+        # prompt-template filename, controls cache identity. Otherwise
+        # instructions embedded in the generator can change while an older
+        # response is silently reused. Callback runs before cache lookup.
+        active_prompt = (prompt_fingerprint(batch)
+                         if prompt_fingerprint is not None else prompt_hash)
+        if prompt_fingerprint is not None and (
+                not isinstance(active_prompt, str) or not active_prompt.strip()):
+            raise NarrationBatchError("Empty narration request fingerprint")
         sig = {
-            "schema": 2, "source_sha256": source_digest,
+            "schema": 3 if prompt_fingerprint is not None else 2,
+            "source_sha256": source_digest,
             "slides": batch, "model": model,
-            "prompt_sha256": prompt_hash, "size": batch_size,
+            "prompt_sha256": active_prompt, "size": batch_size,
         }
         key = hashlib.sha256(_canonical(sig)).hexdigest()
         cache_file = cache_dir / f"batch_{start:04d}.json"

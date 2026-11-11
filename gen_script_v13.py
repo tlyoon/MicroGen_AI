@@ -230,6 +230,29 @@ def _compose_prompt(slides: list[dict[str, Any]], source_blocks: list[dict[str, 
     )
 
 
+def _narration_request_fingerprint(
+    batch_slides: list[dict[str, Any]],
+    source_blocks: list[dict[str, Any]],
+) -> str:
+    """Pin a batch cache entry to the *actual* request and generator code.
+
+    The former external-template-only cache identity silently reused old
+    answers after source-anchoring instructions changed inside this module.
+    Hash only the prompt and code, never expose private textbook text in the
+    cache filename or report.
+    """
+    identity = {
+        "request_prompt": _compose_prompt(batch_slides, source_blocks),
+        "generator_sha256": hashlib.sha256(
+            Path(__file__).read_bytes()).hexdigest(),
+        "thinking_level": THINKING_LEVEL,
+        "model": MODEL_NAME,
+    }
+    return hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 def _gemini_compatible_schema(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _gemini_compatible_schema(v) for k, v in value.items() if k not in {"minItems", "maxItems"}}
@@ -365,6 +388,8 @@ def main() -> None:
         cache_dir=Path(".microgen_narration_batches"),
         model=MODEL_NAME,
         prompt_hash=hashlib.sha256(prompt_path.read_bytes()).hexdigest(),
+        prompt_fingerprint=lambda batch: _narration_request_fingerprint(
+            batch, source_blocks),
     )
 
     # Preserve v7 title-card behaviour: the first audio says the displayed title/topic only.

@@ -408,3 +408,41 @@ semantic/TTS/ASR request, old-WAV replacement, copyright publication or G2
 acceptance was made by this offline development campaign. Keep the
 independent acoustic and complete real-media G2 gates blocked until their
 actual private SHA-bound receipts exist.
+
+
+### 11 November 2026 — G2 narration-cache recurrence fix (v5.0)
+
+**Reproduced critical shared integration fault:** The normal
+`gen_script_v13.main` previously passed only the external
+`gen_script_prompt_v8_hybrid.md` SHA to
+`microgen_narration_batch.generate_batched`. The real request also includes
+source-anchoring instructions embedded in the Python generator. Changing
+those instructions therefore failed to invalidate accepted batch caches.
+Read-only HP replay against the actual Serway §2.5 historical 17-slide
+candidate showed **all three** `batch_0000/0008/0016.json` caches matched
+the legacy key, even with the new source-grounding code. Merely rerunning
+narration would have reused old scripts.
+
+**Reusable production resolution:** The active v13 generator now supplies
+a per-batch SHA of its **complete composed request**, actual generator
+source bytes, model and thinking settings to the shared batch helper.
+Changes to the in-code prompt, template, visible slide content, source
+context, figure inventory, or generator implementation invalidate
+previously accepted cached narrations. Unchanged source/prompt resumes the
+old matching result without a Gemini call; the batch helper preserves
+legacy caller compatibility. Normal narration dependency fingerprints
+also track the shared `microgen_narration_batch.py` implementation when
+staged, so a changed cache gateway cannot retain an older completed stage.
+
+**Independent proof boundaries:** Source-free normal-entrypoint tests
+verify cached repeat, changed in-code instruction, thinking-setting change,
+invalid fingerprint fail-closed, and shared-helper checkpoint invalidation.
+The *real private 17-slide cache replay* was read-only: under the corrected
+key **zero** of the three old batches is eligible for reuse. This closes
+the stale-cache engineering blocker but **does not itself generate fresh
+lecture narration**, consume or renew an exhausted provider allowance,
+resolve the remaining five semantic cues, repair any old WAV, clear
+independent academic/acoustic review, or approve G2/release. A fresh
+finite explicitly eligible provider request and original-source
+acceptance evidence remain mandatory. No original private source,
+narration or audio is modified by this offline proof.

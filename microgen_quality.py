@@ -548,6 +548,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     inputs = list(dependencies.get(name, ("source.pdf",)))
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+    if name == "narration" and (stage/"microgen_narration_batch.py").is_file():
+        # The live v13 narrator delegates all resume/cache identities to
+        # this shared helper. Its changes must invalidate a saved narration
+        # stage rather than leave stale responses marked complete.
+        inputs.append("microgen_narration_batch.py")
     if name == "tts":
         from microgen_timed_cue_planner import PLAN_FILE
         # Preserve compatibility with minimal offline/regression stages that
