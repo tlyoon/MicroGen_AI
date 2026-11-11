@@ -651,3 +651,57 @@ authorized campaign produces and independently validates them.
 **Real G2 failure replay:** On a source-bound private HP shadow with original failed source.pdf, slides.tex and mapped figures, the normal graphics entrypoint autonomously recovered the complete Figure 2.7 and validated all FOUR images. Its regular repair_layout then compiled the actual failed presentation in ONE two-pass local candidate: 19-page PDF, zero severe overfull warnings, no math deletion. After reflow, the source-caption receipt remained independently valid with identical SHA. The original failed paid provider stage, source PDF and checkpoint were not altered and no new Gemini calls were made.
 
 **Verification and limits:** Source-free tests include unique/duplicated captions, unsupported styles, insufficient graphic paths, unsafe names, image/receipt/source/crop geometry tampering, no overwrite of existing figure, harmless TeX reflow, changed figure identity, normal graphics re-entry, stage dependency fingerprints and release manifest provenance. Final designation can be CODE_INTEGRATED and REAL_SOURCE_NORMAL_PATH_AUTO_RECOVERY_VERIFIED after full exact-head regression/Windows CI; NOT G2_COMPLETE. The recovered vector figure is source-identical but still requires independently accepted academic/figure, narration, measured cue TTS, acoustic and decoded visual/video QA. Unmapped partial crops from figure extraction must not be declared independently covered unless proved; later release may be blocked by that separate coverage audit. Any new paid campaign requires a new fixed source/code-bound finite scope, never a replay of the terminal spent attempt.
+
+
+### 12 November 2026 — G2 Gemini semantic JSON schema drift: fail-safe normalization
+
+**Exact failed real-source stage:** HP Windows, original Gemini API-based
+MicroGen_AI, Serway §2.5 source SHA256
+`923c1768656433f29ba3a2ba413ea81eb5db9383f81d25873358b58709ae14aa`,
+code SHA `4f1297ee047b2f2b93f8fd8d2700dc278251f50b`,
+private campaign `20261111_HP_G2_CAPTION_VECTOR_RECOVERY_PRIVATE`.
+Source figures, figure merge, slides, fresh 17-slide narration, independent
+scientific QA and four-slide-budget preflight all PASSED. During first
+timed TTS cue-plan proposal, slide 7 semantic model returned parseable JSON
+that was not *exactly* a one-property dict `{"matches":[...]}`.
+The normal `propose_with_gemini` raised `Unexpected model proposal schema`,
+and the finite campaign terminally stopped before a verified cue plan, new
+WAVs, independent audio QA, highlight video or G2 acceptance.
+**The actual Gemini response JSON body was not preserved.** Do not assert
+that a particular response variant was the historical one; that is
+unknown. Existing stage receipt remains terminal; no provider replay.
+
+**Reusable normal-path recovery:** The same production
+`microgen_cue_semantic_mapping.propose_with_gemini` now invokes
+`_parse_semantic_model_response` and `normalize_model_proposal`.
+Within one existing budgeted model reply, without any retry or new key,
+this accepts strictly equivalent JSON arrays, nested `matches` wrappers,
+`result/data/output` wrappers, indexed cue mappings, bounded benign status
+metadata, full JSON code fences, a JSON-encoded JSON body, parsed SDK
+dict/list, explicit alternate `cue_id/cue_number`,
+`block_id/block_index/source_quote`, grouped block IDs and quotes,
+and integer indices written as decimal strings. The prompt states the exact
+required JSON shape. A safe schema-shape diagnostic logs only top-level
+field names/types and never raw textbook narration/model content.
+
+**Mandatory invariants:** The adapter does NOT change narration, source
+PDF, source figures, semantic slide budget or original voice. It
+does NOT synthesize quotes, fill omitted cues, substitute unrelated source
+blocks, rearrange group order or treat empty/error/rejected replies as
+success. The unchanged `validate_matches` independently checks exact
+verbatim PDF quotes, cue coverage, ordered/consecutive groups, visible
+numbers and bounded source regions. The separate independent science,
+acoustic, decoded visual and final acceptance gates remain required.
+
+**Evidence:** Source-free tests exercise the real
+`gen_script`-independent timed-planner entrypoint with injected
+Gemini-equivalent variations, plus negative malformed/error/duplicate,
+fabricated quote and numeral tests. The actual private 17-slide lecture's
+slide 7 has 3 speech cues, one unresolved clause and 5 original PDF blocks.
+A *synthetic alternative-format* proposal using four authentic adjacent
+source blocks passed the normalizer and strict quote verifier **offline**,
+with zero model calls. It is a feasibility example, NOT evidence of what
+Gemini actually returned, independent academic semantic approval, an audio
+pass or a completed video. Previous G2 provider budget is NOT reset.
+G2 stays BLOCKED pending new independently scoped live source/TTS/audio/
+video acceptance; PR remains draft/unmerged.

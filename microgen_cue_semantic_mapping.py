@@ -152,6 +152,159 @@ def validate_matches(matches: object, missing: list[tuple[int, str]],
     return verified
 
 
+def _safe_schema_shape(value: object) -> str:
+    """Only JSON type/key metadata, never a model quote or private PDF text."""
+    if isinstance(value, dict):
+        safe_keys = []
+        for key in sorted(value, key=str)[:8]:
+            label = str(key)
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,31}", label):
+                safe_keys.append(label)
+            else:
+                safe_keys.append("nonstandard_key")
+        return "object_keys=" + ",".join(safe_keys)
+    if isinstance(value, list):
+        return "array_length=" + str(min(len(value), 999))
+    return "type=" + type(value).__name__
+
+
+def _integer_index(value: object) -> int:
+    """Permit unambiguous decimal string IDs; never convert booleans/floats."""
+    if type(value) is int:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]{0,2}", value):
+        return int(value)
+    raise SemanticMappingError("Invalid model semantic cue/block index")
+
+
+def normalize_model_proposal(data: object, missing: list[tuple[int, str]]
+                             ) -> list[dict]:
+    """Normalize bounded *structural* Gemini JSON variations only.
+
+    This is NOT semantic repair or permission to bypass source checks.
+    Every row is still independently checked by validate_matches() against
+    the original slide PDF; guessed/absent quotes, bad signs and numeric
+    claims cannot be made valid by reshaping the JSON.
+    """
+    # A legitimate JSON array and these well-known wrappers carry exactly
+    # the same information. Refuse unexpected extra fields or error states.
+    for _ in range(2):
+        if isinstance(data, dict) and set(data) in (
+                {"matches"}, {"mappings"}, {"result"}, {"data"}, {"output"}):
+            data = next(iter(data.values()))
+            continue
+        break
+    # A strict indexed map is equivalent to an explicit cue row list.
+    if (isinstance(data, dict) and data
+            and all(isinstance(k, str) and re.fullmatch(r"[1-9][0-9]{0,2}", k)
+                    for k in data)):
+        rows = []
+        for key, entry in data.items():
+            if not isinstance(entry, dict) or "cue" in entry:
+                raise SemanticMappingError("Ambiguous semantic keyed-row schema")
+            rows.append({"cue": int(key), **entry})
+        data = rows
+    if isinstance(data, dict):
+        # Some models supply a descriptive top-level status or notes;
+        # explicitly refuse failures and never turn a refusal into matches.
+        safe_meta = {"status", "reason", "notes", "reasoning"}
+        if "matches" in data and set(data).issubset(safe_meta | {"matches"}):
+            status = data.get("status")
+            if status is not None and status not in ("ok", "success", "complete"):
+                raise SemanticMappingError("Model refused semantic mapping")
+            if any(not isinstance(data.get(k), str) or
+                   len(data[k]) > 2000 for k in safe_meta - {"status"}
+                   if k in data):
+                raise SemanticMappingError("Invalid semantic response metadata")
+            data = data["matches"]
+        else:
+            raise SemanticMappingError(
+                "Unexpected model proposal schema (" + _safe_schema_shape(data) + ")"
+            )
+    if not isinstance(data, list) or len(data) != len(missing):
+        raise SemanticMappingError(
+            "Semantic model returned incomplete proposal (" +
+            _safe_schema_shape(data) + ")"
+        )
+    normalized = []
+    allowed_aliases = {
+        "cue_id": "cue", "cue_number": "cue",
+        "block_id": "block", "block_index": "block",
+        "source_quote": "quote",
+        "block_ids": "blocks", "block_indices": "blocks",
+        "source_quotes": "quotes",
+    }
+    for row in data:
+        if not isinstance(row, dict):
+            raise SemanticMappingError("Invalid semantic response row type")
+        translated = {}
+        for key, value in row.items():
+            name = allowed_aliases.get(key, key)
+            if name in translated:
+                raise SemanticMappingError("Ambiguous duplicated semantic field")
+            translated[name] = value
+        if set(translated) not in ({"cue", "block", "quote"},
+                                  {"cue", "blocks", "quotes"}):
+            raise SemanticMappingError("Unsupported semantic response row fields")
+        translated["cue"] = _integer_index(translated["cue"])
+        if "block" in translated:
+            translated["block"] = _integer_index(translated["block"])
+            if not isinstance(translated["quote"], str):
+                raise SemanticMappingError("Invalid source quote")
+        else:
+            if (not isinstance(translated["blocks"], list)
+                    or not isinstance(translated["quotes"], list)):
+                raise SemanticMappingError("Invalid grouped source evidence")
+            translated["blocks"] = [_integer_index(x)
+                                     for x in translated["blocks"]]
+            if any(not isinstance(q, str) for q in translated["quotes"]):
+                raise SemanticMappingError("Invalid source quotes")
+        normalized.append(translated)
+    if {row["cue"] for row in normalized} != {cue for cue, _ in missing}:
+        raise SemanticMappingError("Missing or duplicated semantic model cues")
+    return normalized
+
+
+def _parse_semantic_model_response(response: object,
+                                   missing: list[tuple[int, str]]) -> list[dict]:
+    """Strict JSON body/SDK-parsed response; zero additional provider calls."""
+    raw = getattr(response, "text", None)
+    if raw is None or raw == "":
+        parsed = getattr(response, "parsed", None)
+        if not isinstance(parsed, (dict, list)):
+            raise SemanticMappingError("Empty model semantic response")
+        return normalize_model_proposal(parsed, missing)
+    if not isinstance(raw, str) or len(raw) > 30000:
+        raise SemanticMappingError("Oversized or invalid semantic JSON response")
+    body = raw.strip()
+    # Accept only a full fenced JSON document, not prose mixed with JSON.
+    match = re.fullmatch(r"\x60\x60\x60(?:json)?\s*\n(.*?)\n\x60\x60\x60",
+                         body, flags=re.DOTALL | re.IGNORECASE)
+    if match:
+        body = match.group(1).strip()
+    try:
+        data = json.loads(body)
+        if isinstance(data, str) and len(data) <= 30000 and data.lstrip().startswith(
+                ("{", "[")):
+            data = json.loads(data)
+    except (ValueError, TypeError) as exc:
+        raise SemanticMappingError("Invalid model JSON") from exc
+    normalized = normalize_model_proposal(data, missing)
+    canonical = (
+        isinstance(data, dict) and set(data) == {"matches"}
+        and isinstance(data["matches"], list)
+        and all(isinstance(row, dict)
+                and set(row) in ({"cue", "block", "quote"},
+                                 {"cue", "blocks", "quotes"})
+                for row in data["matches"])
+    )
+    if not canonical:
+        print("[semantic model] accepted equivalent JSON structure "
+              f"{_safe_schema_shape(data)}; original-PDF evidence checks "
+              "still mandatory", flush=True)
+    return normalized
+
+
 def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
                         blocks: list[tuple]) -> list[dict]:
     """At most one authorized model request for one slide; no source mutation."""
@@ -168,8 +321,12 @@ def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
             "supporting the cue. A spoken enumeration of several labels needs a group, "
             "not one arbitrary label. Paraphrases may be proposed but are NOT certified. "
             "Return one result per unresolved cue and cite each selected block with "
-            "8 or more verbatim characters. If ANY cue cannot be grounded, return "
-            "an empty matches list. Never invent labels, blocks, numbers or quotes."
+            "8 or more verbatim characters. The ENTIRE response MUST be one JSON "
+            "object with exactly the key matches holding an array of rows. "
+            "A single-block row has exactly cue, block, quote; a group has exactly "
+            "cue, blocks, quotes. If ANY cue cannot be grounded, return "
+            "{\"matches\": []}. Never include extra keys, markdown, explanations, "
+            "fabricated labels, blocks, numbers or quotes."
         ),
         "slide": slide,
         "unresolved_cues": [{"cue": n, "spoken": text[:600]} for n, text in missing],
@@ -192,13 +349,8 @@ def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
         label=f"MicroGen semantic cue screen slide {slide}",
         max_retries=0,
     )
-    payload = str(getattr(response, "text", "") or "")
-    if len(payload) > 30000:
-        raise SemanticMappingError("Oversized semantic proposal")
-    try:
-        data = json.loads(payload)
-    except (ValueError, TypeError) as exc:
-        raise SemanticMappingError("Invalid model JSON") from exc
-    if not isinstance(data, dict) or set(data) != {"matches"}:
-        raise SemanticMappingError("Unexpected model proposal schema")
-    return data["matches"]
+    # A narrow, deterministic representation adapter handles harmless JSON
+    # wrappers, exact cue-index aliases and parsed SDK objects from THIS
+    # request. It never retries Gemini, rewrites source, or certifies meaning.
+    # The actual original-PDF verifier remains the mandatory postcondition.
+    return _parse_semantic_model_response(response, missing)
