@@ -216,6 +216,35 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
     return cues, unresolved
 
 
+def _require_visible_numeric_evidence(
+    slide_no: int, texts: list[str], blocks: list[tuple],
+) -> None:
+    """Fail early when no PDF text block supports a spoken numeric literal.
+
+    The semantic proposal protocol permits only exact source-PDF text
+    regions; it cannot invent a region containing a calculated result.
+    A mathematically correct derived number that is NOT printed on the
+    slide needs an independent derivation certificate (not implemented)
+    or source-anchored narration revised under a new permitted campaign.
+    This guard makes such a case deterministic *before* spending on a
+    doomed Gemini semantic mapping. It never asserts the calculation wrong.
+    """
+    from microgen_cue_semantic_mapping import numbers
+
+    visible = set().union(*(numbers(label) for _, label, _ in blocks))
+    for cue_no, spoken in enumerate(texts, 1):
+        unavailable = numbers(spoken) - visible
+        if unavailable:
+            raise CuePlanningError(
+                f"Slide {slide_no} cue {cue_no}: "
+                "UNATTESTED_VISIBLE_NUMERIC_CUE: spoken numeric value has "
+                "no matching literal in extractable PDF text elements; "
+                "source-grounded narration or an independently verified "
+                "mathematical derivation is "
+                "required before semantic mapping; no semantic calls made"
+            )
+
+
 def _require_budget_preflight(stage: Path, *, semantic_limit: int,
                               max_cues: int) -> None:
     """Before *any* semantic API request inspect the entire frozen lecture.
@@ -255,6 +284,7 @@ def _require_budget_preflight(stage: Path, *, semantic_limit: int,
                 blocks = _pdf_text_blocks(page)
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                _require_visible_numeric_evidence(slide_no, texts, blocks)
                 _, unresolved = _lexical_match(
                     slide_no, texts, blocks, allow_unanchored=True)
                 if unresolved:
@@ -319,6 +349,7 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                 blocks = _pdf_text_blocks(page)
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                _require_visible_numeric_evidence(slide_no, texts, blocks)
                 cues, unresolved = _lexical_match(
                     slide_no, texts, blocks,
                     allow_unanchored=semantic_resolver is not None)

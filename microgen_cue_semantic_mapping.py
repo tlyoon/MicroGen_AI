@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from decimal import Decimal
 
 MAX_GROUP_BLOCKS = 5
 
@@ -23,7 +24,15 @@ def compact(text: str) -> str:
 
 
 def numbers(text: str) -> set[str]:
-    return set(re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])", text))
+    """Extract exact decimal values, including adjacent formula coefficients.
+
+    PDF extraction often renders 5 t squared as '5t2': the coefficient 5
+    is still visible mathematical text, not a missing source number.
+    Treat numerically equal 2 and 2.0 alike; NEVER infer a computed value
+    absent from the printed expression.
+    """
+    tokens = re.findall(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", text)
+    return {format(Decimal(token).normalize(), "f") for token in tokens}
 
 
 def validate_matches(matches: object, missing: list[tuple[int, str]],

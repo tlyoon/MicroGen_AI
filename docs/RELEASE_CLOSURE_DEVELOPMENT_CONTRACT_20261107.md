@@ -446,3 +446,66 @@ independent academic/acoustic review, or approve G2/release. A fresh
 finite explicitly eligible provider request and original-source
 acceptance evidence remain mandatory. No original private source,
 narration or audio is modified by this offline proof.
+
+
+### 11 November 2026 — new G2 real-source attempt and semantic numeric-evidence fail-closed remedy
+
+**Actual newly authorized scope:** A single fresh, private, HP-only Serway
+section 2.5 campaign, source SHA256
+`923c1768656433f29ba3a2ba413ea81eb5db9383f81d25873358b58709ae14aa`,
+run from exact tested code SHA `5b5b1a28d2cfaa43a72c2509d0e05c7d57d217a1`
+in `%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261111_HP_G2_SOURCE_ANCHORED_PRIVATE`.
+Frozen `--stop-after acceptance`, one subchapter, `--stage-retries 0`,
+`MICROGEN_TIMED_CUES=1`, semantic assistance budget **4 slides**, Gemini
+formal TTS, no Cloud fallback, no publication. Its new, exclusive authorization
+receipt remains frozen. The prior spent November 10 provider campaign, old
+WAVs, and terminal acoustic marker were not replaced or restarted.
+
+**Source-backed stage outcomes:** Real source extraction, figure mapping,
+figure merge, freshly generated slides, freshly generated 17-slide narration
+and independent scientific QA **PASS**. The preflight initially admitted
+the new narration under four semantically assisted slides
+`[11,13,14,15]`; the source science receipt passed. A Gemini 504 during
+slides was handled inside the already-integrated bounded key-failover
+gateway; the same stage completed without starting a new campaign.
+The **first** timed TTS planning attempt then failed with a non-retryable
+`SemanticMappingError: Semantic proposal must cover all unresolved cues`
+on slide 13. The semantic model returned no valid mapping. That slide's
+spoken computed velocity **20** was not present as an extractable literal
+on any current-slide PDF text region; another slide likewise contains
+derived numbers with no extractable PDF text anchors. Correctness of
+the arithmetic was **not disproved**; visual equation/image proof was
+**not independently attested by the text-only cue planner**. No cue plan,
+new WAV, acoustic acceptance, video, or final G2 acceptance receipt exists.
+The runner preserved its exact source/code-bound terminal TTS marker.
+Do **not** restart that paid campaign or treat an empty model answer as
+proof that its underlying mathematics is wrong.
+
+**Cross-workflow prevention baked into normal code:** The private
+`preflight_private_timed_acceptance` and direct
+`microgen_timed_cue_planner.propose_plan` now share a no-provider,
+full-deck check that rejects spoken numeric values not attested by
+extractable PDF text *before* any semantic proposal request. The shared
+`microgen_cue_semantic_mapping.numbers` now correctly recognizes
+mathematical coefficients in compact extracted formulas such as `5t2`,
+and canonicalizes equal decimal notation (2 and 2.0). It does NOT
+evaluate formulas, accept unproved derived numbers, or weaken PDF/voice
+acceptance. The active `gen_script_v13._compose_prompt` instructs
+future source-grounded narration not to speak calculated values missing
+from fixed slide text or verified source elements. Source-free regression
+tests exercise the normal G2 batch preflight, direct planner, correct
+visible-value acceptance, semantic provider non-invocation, and
+mathematical-token extraction. A read-only replay on the preserved
+**fresh real-source** deck now emits `UNATTESTED_VISIBLE_NUMERIC_CUE`
+at slide 13 cue 2 with **zero new semantic requests**.
+
+**Honest recurrence status:** Automatic failure signature classification
+and **SAFE_STOP_VERIFIED**. This eliminates recurring *wasted* provider
+requests for this literal-numeric evidence gap, but it is NOT proof of
+automatic revision, domain proof for mathematically derived values, or
+a successful G2 lecture. Reopening a new paid campaign requires a
+materially revised source-grounded lecture candidate or a separately
+verified source-PDF mathematical/visual cue mapping, within a fresh
+independently authorized finite scope. No acoustic or timed video pass
+is inferred from scientific QA alone. Keep G1 partially integrated,
+G2 blocked, G3 unverified, and G4 not ready.

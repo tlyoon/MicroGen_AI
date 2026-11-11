@@ -46,7 +46,7 @@ def test_single_block_does_not_admit_new_numerical_claim(tmp_path, monkeypatch):
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST", "0")
     stage = _title_stage(tmp_path, "2.5 Geometrical; claim of 7 additional results.")
     from microgen_timed_cue_planner import CuePlanningError
-    with pytest.raises(CuePlanningError, match="insufficient"):
+    with pytest.raises(CuePlanningError, match="UNATTESTED_VISIBLE_NUMERIC_CUE"):
         propose_plan(stage)
 
 
