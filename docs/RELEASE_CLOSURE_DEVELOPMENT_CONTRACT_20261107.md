@@ -509,3 +509,70 @@ verified source-PDF mathematical/visual cue mapping, within a fresh
 independently authorized finite scope. No acoustic or timed video pass
 is inferred from scientific QA alone. Keep G1 partially integrated,
 G2 blocked, G3 unverified, and G4 not ready.
+
+
+### 11 November 2026 — source-visible mathematics and exact cue auto-recovery
+
+**Real causal root, not generic model instability:** On the November 11
+Serway 2.5 17-slide G2 candidate, the production text cue planner used
+`_pdf_text_blocks` with the condition `salient(label)`. This silently
+excluded equation-only PDF vector text containing the computed result
+and intermediate expressions. The previous printed-value detector was
+therefore correct about *filtered blocks* but not about the actual source
+slide. Independent PDF inspection found those values and source bboxes
+already present on slides 13 and 14; the first failed semantic request
+was asked to map a formula it could not see.
+
+**Integrated reusable recovery in normal production paths:**
+1. `microgen_timed_cue_planner._pdf_text_blocks` retains extractable PDF
+   mathematical expressions with real bounded source coordinates, while
+   rejecting image-only, page-number and insignificant spans. This fixes
+   source-evidence omission in the shared lexical/private preflight planner.
+2. `microgen_cue_semantic_mapping.exact_math_source_block` and the ordinary
+   `_lexical_match` automatically ground a **unique**, source-visible
+   initial/final numerical-velocity expression (full numbers, source state
+   labels and units), or an exact dual symbolic identity such as a signed
+   algebraic result and time-step limit. Wrong signs, variables, units,
+   missing computed literals and duplicate candidate regions are rejected.
+   These are source-text references, not new algebraic inferences.
+3. All single-block lexical choices now require the *selected* original
+   PDF block to contain the spoken numeric values; presence somewhere else
+   on the slide cannot cover a contradictory selected block. Source-bearing
+   multi-element semantic groups remain the bounded non-lexical fallback.
+4. `source_grounded_speech_units` splits long spoken clauses at existing
+   commas only when separate numerical claims are each actually printed
+   in independent source blocks. It preserves all narration words and
+   mathematical values, avoids giant merged highlights spanning distant
+   title/formula positions, and uses the **same helper** for full-lecture
+   preflight and actual cue-plan generation. No independent ASR, voice
+   substitution, translation or mathematical invention is introduced.
+
+**Evidence:** Read-only replay of the **previously failed exact 17-slide**
+real PDF/narration showed equation math on slide 13 now contributes
+**6** source text elements (rather than 2) and on slide 14 **8**
+(rather than 2). The unique matched real numeric/math cues on slides
+13 and 14 are now grounded *without* a Gemini mapping request.
+The pure-source plan for this lecture has **70 speech cues** and requires
+four semantically assisted slides `[11,13,14,15]`, which remains within
+the unchanged maximum **4**. A source-quoted, model-free **offline
+feasibility fixture** in a separate private shadow folder
+`%LOCALAPPDATA%\MicroGen_AI_Checkpoints\20261111_HP_G2_MATH_GROUNDED_OFFLINE_SHADOW`
+created a complete plan with original-SHA-bound PDF regions, and the
+**actual `microgen_timed_cue_tts._verified_plan` accepted all 70 cue
+regions**. This is **OFFLINE SOURCE-MAPPING FEASIBILITY**, not real Gemini
+semantic screening, acoustic QA, generated voice, video, or G2 acceptance.
+The terminal old campaign was not restarted or mutated.
+
+**Regression evidence and release boundary:** Source-free tests cover
+PDF formula-only block retention; no acceptance of page counters/images;
+unique math/source unit anchoring; signed equation RHS rejection;
+ambiguous duplicate-source rejection; numeric mismatch in a lexical
+region; source-preserving comma cue splitting over distant bboxes;
+full cue-plan generation and independent source-PDF verification; and
+fail-closed behavior when no valid printed result exists. These
+production-path fixes prevent this particular PDF-math omission on
+future sources; they do NOT automatically approve model semantics for
+remaining paraphrases, independent audio or final MP4s. No claim
+of permanent G2 closure until a newly authorized source-bound campaign
+produces real timed Flash-Lite WAVs, independent acoustic and decoded
+visual receipts and a final private acceptance receipt.

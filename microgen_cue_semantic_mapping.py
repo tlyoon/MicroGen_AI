@@ -35,6 +35,76 @@ def numbers(text: str) -> set[str]:
     return {format(Decimal(token).normalize(), "f") for token in tokens}
 
 
+def exact_math_source_block(spoken: str, blocks: list[tuple]) -> int | None:
+    """Return one uniquely source-attested mathematical block, or no match.
+
+    No generative semantics: admit only a literal variable/limit identity
+    that can be read back from the PDF OR a unique initial/final measured
+    velocity calculation with >=3 matching numeric literals and matching
+    units. This does not prove a new equation or allow derived numbers that
+    the slide does not print.
+    """
+    if not isinstance(spoken, str) or not isinstance(blocks, list):
+        return None
+    canonical_spoken = spoken.casefold()
+    math_cues = []
+    for found in re.finditer(
+            r"\b(?:negative|minus)\s+(\d+(?:\.\d+)?)\s+"
+            r"(?:times\s+)?([a-z])\b", canonical_spoken):
+        math_cues.append("-" + format(Decimal(found.group(1)).normalize(), "f")
+                         + found.group(2))
+    for found in re.finditer(
+            r"\bdelta\s+([a-z])\s+(?:approaches|tends\s+to|"
+            r"goes\s+to)\s+(?:zero|0)\b", canonical_spoken):
+        math_cues.append("∆" + found.group(1) + "→0")
+
+    complete_values = numbers(spoken)
+    matches = []
+    for i, row in enumerate(blocks):
+        if (not isinstance(row, tuple) or len(row) < 2
+                or not isinstance(row[1], str)):
+            continue
+        label = row[1]
+        compact_equation = re.sub(r"\s+", "", label.casefold())
+        compact_equation = compact_equation.replace("−", "-").replace("–", "-")
+        # casefold() converts the Greek capital delta to lowercase δ; PDF
+        # generators may also emit the mathematical increment sign ∆.
+        compact_equation = compact_equation.replace("Δ", "∆").replace("δ", "∆")
+        if "=" not in compact_equation or not complete_values.issubset(numbers(label)):
+            continue
+        # Use two different printed symbolic anchors together, never infer a
+        # limit or sign from one isolated number.
+        literal_symbolic = (len(set(math_cues)) >= 2 and
+                            all(part in compact_equation for part in math_cues))
+        # In spoken "equals negative N variable", N*variable must be
+        # printed as an equation result, not merely appear in a preceding
+        # subexpression with a different RHS or sign.
+        if literal_symbolic and "equals" in canonical_spoken:
+            signed = [part for part in math_cues
+                      if re.fullmatch(r"-\d+(?:\.\d+)?[a-z]", part)]
+            if signed:
+                literal_symbolic = any(
+                    re.search(r"=" + re.escape(part) + r"(?![\w])",
+                              compact_equation)
+                    for part in signed
+                )
+        # Initial and final velocities are grounded only when BOTH values,
+        # their distinct time, and the associated i/f state variables appear
+        # in the SAME text region with the correct printed units.
+        unit_match = (
+            len(complete_values) >= 3
+            and "initial" in canonical_spoken and "final" in canonical_spoken
+            and bool(re.search(r"\bmet(?:ers|res)\s+per\s+second\b",
+                               canonical_spoken))
+            and "m/s" in compact_equation
+            and bool(re.search(r"\b[a-z]{1,5}_?i\s*=", label.casefold()))
+            and bool(re.search(r"\b[a-z]{1,5}_?f\s*=", label.casefold()))
+        )
+        if literal_symbolic or unit_match:
+            matches.append(i)
+    return matches[0] if len(matches) == 1 else None
+
+
 def validate_matches(matches: object, missing: list[tuple[int, str]],
                      blocks: list[tuple]) -> dict[int, tuple[tuple[int, ...], tuple[str, ...]]]:
     """Validate ALL cue proposals against original immutable PDF text blocks.

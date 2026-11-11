@@ -72,6 +72,46 @@ def speech_units(text: str) -> list[str]:
     return result
 
 
+def source_grounded_speech_units(text: str, blocks: list[tuple]) -> list[str]:
+    """Split only a numerical cue spanning independently printed PDF regions.
+
+    A model must not invent a giant source highlight joining a title and a
+    distant equation. Prefer intact narration; when a comma separates two
+    individually source-attested numerical claims, split there with all
+    original words and punctuation intact. The same logic is used by
+    preflight and production plan/TTS, never by paid transcription.
+    """
+    from microgen_cue_semantic_mapping import numbers
+
+    units = speech_units(text)
+    source_values = [numbers(label) for _, label, _ in blocks]
+    def split_one(fragment: str) -> list[str]:
+        claims = numbers(fragment)
+        if not claims or any(claims.issubset(value) for value in source_values):
+            return [fragment]
+        choices = []
+        for match in re.finditer(r",\s+", fragment):
+            left, right = fragment[:match.start()+1].strip(), fragment[match.end():].strip()
+            if len(left) < 18 or len(right) < 18:
+                continue
+            left_nums, right_nums = numbers(left), numbers(right)
+            if not left_nums or not right_nums:
+                continue
+            if (any(left_nums.issubset(vals) for vals in source_values)
+                    and any(right_nums.issubset(vals) for vals in source_values)):
+                choices.append((abs(len(left)-len(right)), left, right))
+        if not choices:
+            return [fragment]
+        _, left, right = min(choices, key=lambda item: item[0])
+        return split_one(left) + split_one(right)
+
+    result = [piece for fragment in units for piece in split_one(fragment)]
+    if (len(result) > 40 or normalized(" ".join(result)) != normalized(text)
+            or any(not piece or len(piece) < 10 for piece in result)):
+        raise CuePlanningError("Source-preserving narration cue splitting failed")
+    return result
+
+
 def prepare_slide_pages(stage: Path) -> list[Path]:
     """One source-preserving, byte-stable page extraction before opt-in TTS.
 
@@ -139,11 +179,26 @@ def prepare_slide_pages(stage: Path) -> list[Path]:
 
 
 def _pdf_text_blocks(page) -> list[tuple]:
-    """One shared immutable source-block extraction for actual planning and preflight."""
+    """Preserve visible equation elements as well as prose in both normal paths.
+
+    Previous extraction silently threw away mathematics containing only short
+    variables and numbers (e.g., `vxf = 40 - 5(2)2 = 20 m/s`), so a genuine
+    printed result looked absent to the downstream source-evidence gate.
+    The same source-PDF coordinate/text constraints still apply.
+    """
     blocks = []
     for block in page.get_text("blocks"):
+        # PyMuPDF returns image blocks too. Only accept extractable PDF text.
+        if len(block) < 7 or block[6] != 0:
+            continue
         label = str(block[4]).strip()
-        if (len(label) < 3 or not salient(label)
+        terms = salient(label)
+        math_text = (
+            len(normalized(label)) >= 8
+            and bool(re.search(r"[=+−×÷∆Δ∂∫√≤≥<>]", label))
+            and bool(re.search(r"\d|[A-Za-zα-ωΑ-Ω]", label))
+        )
+        if (len(label) < 3 or (not terms and not math_text)
                 or re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", label)):
             continue
         box = list(map(float, block[:4]))
@@ -151,7 +206,7 @@ def _pdf_text_blocks(page) -> list[tuple]:
                 or box[2] > page.rect.width + 0.5
                 or box[3] > page.rect.height + 0.5):
             continue
-        blocks.append((box, label[:350], salient(label)))
+        blocks.append((box, label[:350], terms))
     return blocks
 
 
@@ -165,8 +220,15 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
         terms = salient(spoken)
         if not terms and not allow_unanchored:
             raise CuePlanningError(f"Slide {slide_no}: narration has no anchored terms")
+        from microgen_cue_semantic_mapping import numbers
+        claim_values = numbers(spoken)
         scored = []
         for block_number, (box, label, tokens) in enumerate(blocks):
+            # A lexical hit does NOT override a contradictory or absent
+            # numeric value in the chosen source element. Combined claims
+            # across blocks must take the verified semantic-group path.
+            if not claim_values.issubset(numbers(label)):
+                continue
             shared = terms & tokens
             evidence = len(shared) / max(1, min(6, len(terms)))
             evidence += 0.02 * len(shared)
@@ -175,8 +237,13 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
             # cue may genuinely refer to the same visible element again.
             preference = evidence - (0.25 if block_number in used else 0.0)
             scored.append((preference, evidence, len(shared), block_number))
-        _, evidence, overlap, winner = max(scored)
-        if not terms or overlap < 2 or evidence < 0.32:
+        if scored:
+            _, evidence, overlap, winner = max(scored)
+        else:
+            # No one PDF element contains all spoken numeric claims.
+            # A verified multi-element semantic group may still support it.
+            evidence, overlap, winner = 0.0, 0, 0
+        if scored and (not terms or overlap < 2 or evidence < 0.32):
             # The presentation preference can otherwise select an unsupported
             # unused element over the actual, previously highlighted element.
             # Fall back only to the same conservative lexical threshold; do
@@ -202,8 +269,16 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
                 )
                 if verbatim_single:
                     winner = 0
-            if not verbatim_single and (not terms or overlap < 2
-                                        or evidence < 0.32):
+            # Before any paid semantic proposal, reuse unique verbatim
+            # mathematical evidence already printed in the fixed PDF. This
+            # is not numerical inference: the exact signed expression or
+            # initial/final values must share one unambiguous source block.
+            from microgen_cue_semantic_mapping import exact_math_source_block
+            mathematical = exact_math_source_block(spoken, blocks)
+            if mathematical is not None:
+                winner = mathematical
+            if not verbatim_single and mathematical is None and (
+                    not terms or overlap < 2 or evidence < 0.32):
                 unresolved.append((cue_number, spoken))
                 continue
         used.add(winner)
@@ -276,14 +351,14 @@ def _require_budget_preflight(stage: Path, *, semantic_limit: int,
                             normalized(single[0].get_text()) !=
                             normalized(page.get_text())):
                         raise CuePlanningError("Numbered PDF differs from source deck")
-                texts = speech_units(str(row.get("tts_text") or
-                                         row.get("narration") or ""))
-                cues_seen += len(texts)
-                if cues_seen > max_cues:
-                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 blocks = _pdf_text_blocks(page)
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                texts = source_grounded_speech_units(
+                    str(row.get("tts_text") or row.get("narration") or ""), blocks)
+                cues_seen += len(texts)
+                if cues_seen > max_cues:
+                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 _require_visible_numeric_evidence(slide_no, texts, blocks)
                 _, unresolved = _lexical_match(
                     slide_no, texts, blocks, allow_unanchored=True)
@@ -343,12 +418,12 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                             normalized(single[0].get_text()) != normalized(page.get_text())):
                         raise CuePlanningError("Numbered PDF differs from source deck")
                 speech = str(row.get("tts_text") or row.get("narration") or "")
-                texts = speech_units(speech)
-                if total_cues + len(texts) > max_cues:
-                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 blocks = _pdf_text_blocks(page)
                 if not blocks:
                     raise CuePlanningError(f"Slide {slide_no}: no grounded text blocks")
+                texts = source_grounded_speech_units(speech, blocks)
+                if total_cues + len(texts) > max_cues:
+                    raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 _require_visible_numeric_evidence(slide_no, texts, blocks)
                 cues, unresolved = _lexical_match(
                     slide_no, texts, blocks,
