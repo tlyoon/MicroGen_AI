@@ -296,6 +296,15 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     # publication, preventing receipt/artifact drift.
     figure_provenance = None
     provenance_file = stage / "figure_composition_receipt.json"
+    source_caption_provenance = None
+    if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
+        from microgen_source_caption_vector_recovery import (
+            validate_source_caption_vector_recovery, CaptionVectorRecoveryError,
+        )
+        try:
+            source_caption_provenance = validate_source_caption_vector_recovery(stage)
+        except CaptionVectorRecoveryError as exc:
+            raise QualityError(f"Source-caption figure provenance invalid: {exc}") from exc
     if provenance_file.is_file():
         from microgen_figure_composition import validate_figure_receipt
         # Source-crop integrity is not equivalent to composite-panel approval.
@@ -327,6 +336,13 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if source_caption_provenance is not None:
+        result["source_caption_vector_recovery_receipt_sha256"] = (
+            source_caption_provenance["receipt_sha256"]
+        )
+        result["source_caption_vector_figures"] = (
+            source_caption_provenance["figures"]
+        )
     if small_figures:
         result["figure_display_warnings"] = small_figures
         result["scientific_review_pending"] = True
@@ -371,6 +387,17 @@ def published_manifest_valid(dest: Path) -> bool:
         for name, digest in figure_sha256.items():
             if sha256(dest / name) != digest:
                 return False
+        if "source_caption_vector_recovery_receipt_sha256" in data:
+            name = ".microgen_source_caption_vector_recovery.json"
+            if sha256(dest / name) != data["source_caption_vector_recovery_receipt_sha256"]:
+                return False
+            from microgen_source_caption_vector_recovery import (
+                validate_source_caption_vector_recovery,
+            )
+            verified = validate_source_caption_vector_recovery(dest)
+            if (verified is None
+                    or verified["figures"] != data.get("source_caption_vector_figures")):
+                return False
         if "figure_composition_receipt_sha256" in data:
             if sha256(dest / "figure_composition_receipt.json") != data["figure_composition_receipt_sha256"]:
                 return False
@@ -404,6 +431,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         raise QualityError("Case-insensitive duplicate figure names in publication manifest")
     files = ["slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"]
     files += sorted(set(info.get("figure_sha256", {})))
+    if info.get("source_caption_vector_recovery_receipt_sha256"):
+        files.append(".microgen_source_caption_vector_recovery.json")
     if info.get("figure_composition_receipt_sha256"):
         files.append("figure_composition_receipt.json")
     if info.get("figure_review_approval_sha256"):
@@ -550,6 +579,15 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     inputs = list(dependencies.get(name, ("source.pdf",)))
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+        # A changed auto-recovery path must invalidate old slide-stage
+        # acceptance, without breaking legacy minimal offline fixtures.
+        for optional in ("microgen_missing_source_figure_candidates.py",
+                         "microgen_source_caption_vector_recovery.py"):
+            if (stage / optional).is_file():
+                inputs.append(optional)
+    if name in {"slides", "science_qa", "acceptance", "published"}:
+        if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
+            inputs.append(".microgen_source_caption_vector_recovery.json")
     if name == "narration" and (stage/"microgen_narration_batch.py").is_file():
         # The live v13 narrator delegates all resume/cache identities to
         # this shared helper. Its changes must invalidate a saved narration
@@ -587,6 +625,7 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
         for optional in (".microgen_autonomous_parts.json",
                          "figure_composition_receipt.json",
+                         ".microgen_source_caption_vector_recovery.json",
                          ".microgen_tts_provenance.json"):
             if (stage/optional).is_file():
                 inputs.append(optional)
