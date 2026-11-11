@@ -24,6 +24,7 @@ from microgen_tts_acoustic_qa import (
 from microgen_tts_evidence import verify_acoustic_evidence
 from microgen_tts_provenance import (
     verify_manifest, write_manifest, make_record, digest_file,
+    TTSProvenanceError, inspect_normalized_input_drift,
 )
 from microgen_tts_wave_integrity import require_structurally_usable_audio
 from microgen_quality import check_wavs, QualityError
@@ -475,7 +476,27 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     if (stage/RECEIPT).exists():
         return verify_receipt(stage)
     texts=_normalized(stage)
-    verify_manifest(stage,texts)
+    try:
+        verify_manifest(stage,texts)
+    except TTSProvenanceError as exc:
+        # Diagnose normalizer changes BEFORE any new paid ASR request. The
+        # original WAVs remain immutable; this report is an actionable
+        # source/voice-pinned re-render inventory, not acoustic clearance.
+        try:
+            drift=inspect_normalized_input_drift(stage,texts)
+        except TTSProvenanceError as corrupt:
+            raise AutonomousAcousticError(
+                "UNVERIFIED_AUDIO_PROVENANCE_HOLD: cannot trust original WAV "
+                "identity or isolate source input drift") from corrupt
+        if drift["changed_input_slides"]:
+            raise AutonomousAcousticError(
+                "SOURCE_NORMALIZER_DRIFT_HOLD: re-render source-changed "
+                f"slides {drift['changed_input_slides']} in the previously "
+                "pinned voice and re-run independent acoustic QA within a "
+                "new valid finite campaign; old WAVs preserved") from exc
+        raise AutonomousAcousticError(
+            "UNVERIFIED_AUDIO_PROVENANCE_HOLD: historical manifest differs "
+            "despite unchanged normalized inputs") from exc
     check_wavs(stage,len(texts))
     from microgen_tts_wave_integrity import analyze_pcm
     for n in range(1,len(texts)+1):

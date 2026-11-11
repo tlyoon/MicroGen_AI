@@ -361,3 +361,50 @@ unapproved destructive, security-sensitive, expensive or external action.
 Any future procedural amendment must state which prior rule it replaces,
 why the old rule caused a verified failure, and how the new procedure
 prevents recurrence without weakening the substantive quality contract.
+
+
+### 11 November 2026 — reusable source-grounding and acoustic drift prevention
+
+In the **normal** narration path (`gen_script_v13.py`), the model is required
+to retain verifiable distinctive on-slide terms, exact title/section names,
+mathematical signs, and source meaning rather than replacing every visible
+anchor with free paraphrase. This is a preventive instruction, **not** a
+semantic proof; the pre-existing `microgen_timed_cue_planner.py` full-deck
+offline admission remains authoritative. The conservative lexical matcher may
+now ground a *single visible text block* with only one salient term **only**
+when its entire text appears verbatim in the spoken cue and every spoken
+number is visible; neither sparse multi-block paraphrases nor new numerical
+claims are admitted. Unresolved cues stay unresolved: do not raise the
+four-slide semantic budget merely to pass this example.
+
+The normal independent acoustic comparison treats the explicit math-coordinate
+forms `x of t`/`ex of tee` (and `y of t`/`why of tee`) as equivalent
+spellings of the **same spoken letter-name phrase only in this precise
+context**. It must continue to flag `yay` for Y, `circa` for C, altered
+mathematical sign/value, or unresolvable recognizer disagreement. No ASR
+homophone equivalence constitutes proof of phonetic accuracy or overrides a
+source-derived pronunciation risk.
+
+Before any new recognition call, the normal acoustic entrypoint checks the
+previous signed WAV/voice manifest against the **current normalized speech
+inputs**. If speech normalization changed, it reports exact affected slide
+numbers only after independently checking every historical WAV SHA and PCM
+metadata and enforcing one pinned voice. The unmodified WAVs are left intact.
+The report **does not authorize re-synthesis, revalidate the old WAVs, or
+mark the acoustic gate passed**. A later authorized finite campaign must
+regenerate changed speech in the original engine/voice, preserve unaffected
+signed audio, run valid independent acoustic review, and promote nothing on
+unresolved risk. TTS/acoustic checkpoint fingerprints include normalizer,
+cue-planner and TTS-provenance implementation changes.
+
+**Verified historical evidence on HP, source kept private:** 17 original
+Serway §2.5 WAVs structurally usable; signed normalized input has drifted
+only for slides **10 and 17**. Fifteen other signed inputs are unchanged.
+The full-lecture cue budget preflight went from 6 semantically assisted slides
+to **5** using strict full-title evidence, still exceeding the authorized
+limit 4: `[2,4,11,13,14]`. Original acoustic review also holds slides
+`[10,11,12,13,14,17]`; these are *not* six proven audio defects. No paid
+semantic/TTS/ASR request, old-WAV replacement, copyright publication or G2
+acceptance was made by this offline development campaign. Keep the
+independent acoustic and complete real-media G2 gates blocked until their
+actual private SHA-bound receipts exist.

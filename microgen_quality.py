@@ -554,6 +554,7 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         # contain only the legacy TTS entrypoint. Fingerprint optional code
         # modules when actually staged; never require fabricated files.
         for candidate in ("microgen_flash_tts.py",
+                          "microgen_tts_provenance.py",
                           "microgen_timed_cue_tts.py",
                           "microgen_timed_cue_planner.py",
                           "microgen_cue_semantic_mapping.py"):
@@ -566,6 +567,10 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         if pairs_mode not in ("0","1"):
             raise QualityError("Invalid timed-cue opt-in mode")
     if name == "acoustic_qa":
+        # Changes to normalizer/provenance integrity checks must invalidate
+        # an old acoustic checkpoint as well as changes to ASR matching.
+        if (stage/"microgen_tts_provenance.py").is_file():
+            inputs.append("microgen_tts_provenance.py")
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
             inputs.append(".microgen_autonomous_acoustic_qa.json")

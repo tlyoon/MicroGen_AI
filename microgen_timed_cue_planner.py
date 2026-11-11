@@ -185,8 +185,27 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
                 scored, key=lambda candidate: (candidate[1], candidate[2],
                                                candidate[0]))
         if not terms or overlap < 2 or evidence < 0.32:
-            unresolved.append((cue_number, spoken))
-            continue
+            # A single-block title/card may be spoken verbatim even when it
+            # contains only one salient word (e.g. a numbered section title).
+            # Its complete visible phrase and all spoken numbers must match.
+            # Never generalize this exception to a sparse paraphrase or an
+            # ambiguous multi-block slide.
+            verbatim_single = False
+            if len(blocks) == 1 and len(terms) == 1:
+                from microgen_cue_semantic_mapping import numbers
+                label = blocks[0][1]
+                exact = normalized(label)
+                verbatim_single = (
+                    len(exact) >= 10 and exact in normalized(spoken)
+                    and terms.issubset(blocks[0][2])
+                    and numbers(spoken).issubset(numbers(label))
+                )
+                if verbatim_single:
+                    winner = 0
+            if not verbatim_single and (not terms or overlap < 2
+                                        or evidence < 0.32):
+                unresolved.append((cue_number, spoken))
+                continue
         used.add(winner)
         box, label, _ = blocks[winner]
         cues[cue_number - 1] = {

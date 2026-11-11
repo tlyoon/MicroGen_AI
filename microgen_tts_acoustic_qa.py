@@ -70,6 +70,16 @@ def tokens(text: str) -> list[str]:
     text = reference.sub(lambda m: (
         f"{m.group(1)} {numbers.get(m.group(2).lower(), m.group(2))}."
         f"{numbers.get(m.group(3).lower(), m.group(3))}"), text)
+    # A spoken coordinate x(t) or y(t) can be written by independent ASR
+    # as "x of t" even when TTS was explicitly fed "ex of tee".
+    # Canonicalize only this complete variable-of-time phrase: never
+    # equate arbitrary t/tee words, or suppress genuine "yay"/"circa" flags.
+    text = re.sub(
+        r"\b(?P<coordinate>ex|x|why|y)\s+of\s+(?:t|tee)\b",
+        lambda m: ("ex" if m["coordinate"].lower() in {"x", "ex"}
+                   else "why") + " of tee",
+        text, flags=re.IGNORECASE,
+    )
     raw = re.findall(r"[A-Za-z]+|\d+", text.lower())
     out = []
     for i, w in enumerate(raw):

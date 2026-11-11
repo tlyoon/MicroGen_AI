@@ -211,6 +211,18 @@ def _compose_prompt(slides: list[dict[str, Any]], source_blocks: list[dict[str, 
     return "\n\n".join(
         [
             _read_prompt("gen_script_prompt_v8_hybrid.md"),
+            "## SOURCE-ANCHORED TIMED NARRATION (MANDATORY)\n"
+            "Explain the source-backed mathematical meaning while visibly "
+            "naming the relevant element on each FIXED slide. For each "
+            "reasonably short narration sentence/cue, reuse two distinctive "
+            "words appearing in the same visible PDF text block wherever "
+            "possible. For a one-element title card with only one distinctive "
+            "word, repeat its full visible title and section number exactly. "
+            "Do not paraphrase every on-screen label away. Preserve equations, "
+            "numbers, signs, and source meaning. NEVER fabricate an anchor, "
+            "rewrite a slide or add inaccurate filler merely to pass lexical "
+            "matching. If a cue cannot genuinely be tied to a visible element, "
+            "downstream offline grounding must reject it before paid TTS.\n\n"
             "## FIXED LESSON AND SOURCE CONTEXT\n```json\n"
             + json.dumps(payload, ensure_ascii=False, indent=2)
             + "\n```",
