@@ -576,3 +576,63 @@ remaining paraphrases, independent audio or final MP4s. No claim
 of permanent G2 closure until a newly authorized source-bound campaign
 produces real timed Flash-Lite WAVs, independent acoustic and decoded
 visual receipts and a final private acceptance receipt.
+
+
+### 11 November 2026 — automatic panoramic-figure LaTeX overfull-box recovery
+
+**Latest real-source blocker:** The private, single-attempt HP Serway §2.5
+G2 candidate on revision `5ed811e1e20e6506174395134588148a4c8ac396`
+completed extraction, figure mapping and merge, then stopped in the
+normal `slides` stage. The exact slide's `slides.log` reported
+`Overfull \\hbox (21.916pt too wide) in paragraph at lines 93--93`.
+The preceding `\\includegraphics[height=0.4\\textheight,keepaspectratio]`
+for the panoramic original `Figure 2.7.png` produced a displayed
+width around 364pt, exceeding the slide's line width. The existing
+`microgen_slide_reflow.repair_layout` only split multiple
+exampleblock/column environments; this frame had neither kind of
+splittable structure, so it compiled but failed quality twice on
+identical TeX and correctly activated the anti-repeat guard.
+Gemini 504 messages also occurred, but **the terminal failure was the
+deterministic image geometry, not an equation or scientific QA result**.
+
+**Reusable normal-path solution:** The existing shared
+`microgen_slide_reflow.reflow_document(mode="graphics")` now proposes
+exactly one minimally changed height-only image per candidate, adding
+`width=\\linewidth` and preserving the original height ceiling and
+`keepaspectratio` setting, original figure path and bytes, mathematical
+expressions, frame order and slide count. Unknown graphics options,
+already width-bounded graphics and custom geometric transforms are not
+rewritten; all candidates still compile twice and must pass
+`check_graphics`, `check_slide_pdf(require_footer=True)`,
+`check_latex_overflow` and source math evidence checks **before**
+transactional promotion of both .tex and .pdf with receipt and
+source-hash-bound backup. The normal production
+`gen_slides_v20.py` already invokes `repair_layout` on this precise
+failure; no competing repair stage or per-PDF special case has been
+introduced. Image fit candidates are prioritized ahead of destructive
+slide-count splits. `microgen_quality.dependency_fingerprint("slides")`
+now includes the shared reflow implementation and layout anti-repeat
+guard so normal checkpoint reuse notices actual remedy code changes.
+
+**Actual private failure replay with no Gemini:** A separate private HP
+shadow copied the untouched failed `slides.tex` and original figure
+assets, then ran `repair_layout` through genuine two-pass pdflatex.
+Three bounded candidates were examined: unmodified normalized deck and
+the wrong first panoramic figure retained the **21.916pt** overflow;
+the third candidate constrained the correct Figure 2.7 and **passed**.
+Result **18 PDF pages, zero severe overfull boxes, no math deletion**,
+with source-verified backup and reflow receipt. The original terminal
+paid stage and its source remained frozen. This is **REAL_SOURCE
+DETERMINISTIC LAYOUT AUTO_RECOVERY_VERIFIED** in the actual production
+reflow routine, but not yet full G2 audio/video acceptance.
+
+**General regression proof:** New source-free fixture tests width-only
+bounding, preservation of source figures and math, refusal of already
+bounded or unrecognized graphics options, lack of frame corruption, and
+invalidation of the slide stage when the reflow or guard implementation
+changes. The live synthetic panorama also compiles through the same
+reflow and quality gates on a TeX-enabled Windows machine. Existing
+reflow/quality tests remain part of the full repository suite.
+No model, TTS, acoustic or media receipt can be inferred from these
+layout-only proofs; G2 remains blocked until a new, source-pinned
+authorized campaign produces and independently validates them.
