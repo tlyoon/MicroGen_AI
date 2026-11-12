@@ -22,6 +22,9 @@ UPSTREAM = (
     "figure_extraction", "figure_mapping", "figure_merge",
     "slides", "narration", "science_qa",
 )
+FOUR_UPSTREAM = UPSTREAM[:4]
+SIX_STATUS = "SIX_UPSTREAM_SOURCE_BOUND_STAGES_REVERIFIED"
+FOUR_STATUS = "FOUR_UPSTREAM_SOURCE_BOUND_STAGES_REVERIFIED_VOICE_REBUILD"
 RECEIPT = ".microgen_verified_upstream_import.json"
 ALLOW_DIRS = (
     "pages", "crops", ".microgen_mapping_cache",
@@ -81,11 +84,18 @@ def verify_import_receipt(stage: Path) -> dict | None:
     if not path.exists():
         return None
     data=_read_json(path)
+    stages = data.get("stages") if isinstance(data, dict) else None
+    expected = (SIX_STATUS if stages == list(UPSTREAM) else
+                FOUR_STATUS if stages == list(FOUR_UPSTREAM) else None)
     if (data is None or data.get("schema_version")!=1
-            or data.get("status")!="SIX_UPSTREAM_SOURCE_BOUND_STAGES_REVERIFIED"
+            or expected is None or data.get("status") != expected
             or data.get("publication_allowed") is not False
             or data.get("new_audio_reused") is not False
-            or data.get("stages")!=list(UPSTREAM)
+            or (expected == FOUR_STATUS and
+                any(x in data.get("copied_items",[]) for x in (
+                    "script.txt", "script_tts.json",
+                    ".microgen_autonomous_science_qa.json",
+                    ".microgen_narration_batches")))
             or data.get("source_pdf_sha256")!=_sha(stage/"source.pdf")
             or data.get("origin_slides_pdf_sha256")!=_sha(stage/"slides.pdf")):
         raise UpstreamReuseError("Imported upstream provenance drifted")
@@ -142,15 +152,24 @@ def _candidate(repo_root: Path, candidate_work: Path, subchapter: str,
     return (str(completed["science_qa"]), stage)
 
 
-def _copy_evidence(old: Path, target: Path) -> list[str]:
+def _copy_evidence(old: Path, target: Path, *, stages=UPSTREAM) -> list[str]:
+    """Copy only previously revalidated stages; never import stale audio."""
     copied = []
+    voice_rebuild = tuple(stages) == FOUR_UPSTREAM
     for dirname in ALLOW_DIRS:
+        if voice_rebuild and dirname == ".microgen_narration_batches":
+            continue
         source = old / dirname
         if source.is_dir():
             _safe_filetree(source)
             shutil.copytree(source, target / dirname)
             copied.append(dirname)
     names = set(ALLOW_FILES)
+    if voice_rebuild:
+        names.difference_update({
+            "script.txt", "script_tts.json",
+            ".microgen_autonomous_science_qa.json",
+        })
     names.update(p.name for p in old.iterdir()
                  if p.is_file() and ALLOW_PATTERN.fullmatch(p.name))
     for name in sorted(names):
@@ -209,6 +228,23 @@ def maybe_import_verified_upstream(
     if len(entries) > 1 and entries[0][0] == entries[1][0]:
         raise UpstreamReuseError("Ambiguous equally recent science-approved source")
     _, old = entries[0]
+    # Prior source/figure/slide work is still useful when the *narration*
+    # contains known ambiguous math-letter speech. A revised narrator must
+    # run again, but re-generating already verified figures/slides is waste.
+    # This preflight makes NO provider calls and preserves the prior failure.
+    from microgen_reviewed_math_voice import (
+        preflight_voice_sidecar, VoiceRiskPreflightError,
+    )
+    try:
+        preflight_voice_sidecar(old)
+    except VoiceRiskPreflightError as exc:
+        if "PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD" not in str(exc):
+            raise UpstreamReuseError(
+                "Historical voice input malformed; no trusted upstream reuse"
+            ) from exc
+        selected_stages = FOUR_UPSTREAM
+    else:
+        selected_stages = UPSTREAM
     # Use a temporary SOURCE+CURRENTRUNNER stage; no failed-old work or
     # symlinks are promoted before ALL new-code stage validators pass.
     with tempfile.TemporaryDirectory(
@@ -216,15 +252,15 @@ def maybe_import_verified_upstream(
     ) as temp_root:
         stage, cp, checkpoint_path = prepare_stage(
             repo, source_root, Path(temp_root), subchapter, source_wait, commit)
-        copied = _copy_evidence(old, stage)
-        for name in UPSTREAM:
+        copied = _copy_evidence(old, stage, stages=selected_stages)
+        for name in selected_stages:
             if not stage_valid(stage, name, dest):
                 raise UpstreamReuseError(
                     f"Current-code source QA failed imported {name}; "
                     "no old acceptance reused")
         summary = {
             "schema_version": 1,
-            "status": "SIX_UPSTREAM_SOURCE_BOUND_STAGES_REVERIFIED",
+            "status": (SIX_STATUS if selected_stages == UPSTREAM else FOUR_STATUS),
             "source_pdf_sha256": source_sha,
             "origin_stage": str(old),
             "origin_slides_pdf_sha256": _sha(old / "slides.pdf"),
@@ -233,7 +269,7 @@ def maybe_import_verified_upstream(
                 if (stage / ".microgen_source_caption_vector_recovery.json").is_file()
                 else None),
             "current_code_revision": commit,
-            "stages": list(UPSTREAM),
+            "stages": list(selected_stages),
             "copied_items": copied,
             "new_audio_reused": False,
             "new_model_requests": False,
@@ -241,7 +277,7 @@ def maybe_import_verified_upstream(
         }
         (stage / RECEIPT).write_text(
             json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
-        for name in UPSTREAM:
+        for name in selected_stages:
             mark_complete(cp, checkpoint_path, name, stage)
         # No existing accepted workroot stage may be overwritten, including
         # if another worker raced to start after the original check.
@@ -252,6 +288,6 @@ def maybe_import_verified_upstream(
     return {
         "status": summary["status"],
         "from": old.parent.name,
-        "stages": list(UPSTREAM),
+        "stages": list(selected_stages),
         "audio_reused": False,
     }

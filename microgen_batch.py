@@ -1116,6 +1116,16 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 print(f"[{subchapter}] mandatory private timed grounding "
                       f"admitted mode={admission['mode']} "
                       f"slides={admission['pages']}", flush=True)
+                if stage_name == "tts":
+                    # The independent acoustic gate always rejects ambiguous
+                    # raw mathematical letter names even when both ASR models
+                    # appear to agree. Catch this predictable source-only
+                    # hold BEFORE spending on another doomed TTS campaign.
+                    from microgen_reviewed_math_voice import preflight_voice_sidecar
+                    speech_evidence = preflight_voice_sidecar(stage)
+                    print(f"[{subchapter}] private voice source preflight "
+                          f"passed slides={speech_evidence['slide_count']}; "
+                          "independent acoustic QA still mandatory", flush=True)
             if stage_name == "published":
                 if lease is not None:
                     lease.assert_held()

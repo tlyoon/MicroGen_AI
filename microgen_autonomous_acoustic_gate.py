@@ -565,6 +565,15 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
         failed=stage/f".microgen_acoustic_blocked_{signature}_{stamp}.json"
         rows=report.get("slides",[])
         classification=_classify_review_blocker(report)
+        # Prior terminal acoustic reviews recorded only counts, losing the
+        # original model-blind disagreement and forcing new billed requests.
+        # Keep a bounded SHA-bound PRIVATE trace on owner-authorized HP only;
+        # never send to Git, source folders or publication outputs.
+        from microgen_private_acoustic_trace import (
+            retain_private_failed_acoustic_review,
+        )
+        private_trace_retained = retain_private_failed_acoustic_review(
+            stage, texts, report, models)
         diagnostic={
             "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
             # Stable, sanitized, automated recurrence classification.
@@ -594,6 +603,7 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 for row in rows},
             "source_pronunciation_risk_slides":[
                 row["slide"] for row in rows if row.get("source_pronunciation_risks")],
+            "private_blind_transcripts_retained":private_trace_retained,
             "failure_type":type(exc).__name__,
             "accepted_for_video":False,
             "human_approval_required":False,

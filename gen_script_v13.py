@@ -415,6 +415,23 @@ def main() -> None:
             tts_text = str(tts_text).strip() if tts_text is not None and str(tts_text).strip() else narration
             _speech_hygiene(narration, slide["id"])
             _speech_hygiene(tts_text, slide["id"])
+            # Recycle the reviewed mathematics-letter pronunciations before
+            # source-bound TTS/audio QA: a_x/v_x, d x/d t, x(t), time t C.
+            # Only the voice input changes; the scholarly narration stays
+            # untouched and independent WAV evidence is still mandatory.
+            from microgen_reviewed_math_voice import (
+                reviewed_math_voice, voice_input_risk_status,
+            )
+            from text_to_speech_v25 import normalize_scientific_speech
+            voice_preflight = voice_input_risk_status(
+                tts_text, normalize_scientific_speech)
+            if voice_preflight["unresolved_source_risk_count"]:
+                raise RuntimeError(
+                    f"Slide {idx}: unresolved source math pronunciation "
+                    "before paid TTS; revise source-grounded narration")
+            tts_text = normalize_scientific_speech(
+                reviewed_math_voice(tts_text))
+            _speech_hygiene(tts_text, slide["id"])
             timing = "1 sec" if idx == 1 else _reading_time(narration)
             out.write(f"**Slide {idx} [{timing}]: \n{narration}**\n\n")
             sidecar_slides.append(
@@ -424,6 +441,7 @@ def main() -> None:
                     "title": slide["title"],
                     "narration": narration,
                     "tts_text": tts_text,
+                    "tts_math_voice_preflight": voice_preflight,
                     "estimated_spoken_time": timing,
                 }
             )

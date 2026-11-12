@@ -915,3 +915,63 @@ Regression must include a real generated PDF page, misindexed genuine
 quotes, grouped evidence, false/duplicate/unordered/unsupported claims,
 SDK schema serialization, local-only failure evidence, full Windows
 tests and exact-head CI. No Ubuntu, local model or repeated per-PDF fixes.
+
+
+## 12 November 2026 — G2 acoustic risk prepayment prevention and private reviewer evidence
+
+The real 17-slide Serway §2.5 G2 attempt generated **60 verified PCM cues** in the
+unchanged Gemini voice, but the two-model independent acoustic gate rightly
+stopped at `SOURCE_PRONUNCIATION_RISK_HOLD`. Seven slide-level holds arose from
+source notation, alongside three disputed ASR slides and a separate targeted
+audio-repair candidate. Keep this terminal run immutable: the WAVs and one-use
+paid authorization are not a license for an unchanged replay.
+
+**Recycled code remedies:** Previous `text_to_speech_v25.normalize_scientific_speech`
+already handled `x of t` as `ex of tee` and mathematical letter compounds;
+`microgen_pronunciation_closed_loop` contained conservative text-expansion
+rules. `microgen_reviewed_math_voice.reviewed_math_voice` extends only
+unambiguous mathematical-component forms (e.g. `a x`, `v sub x`,
+`d squared x`, explicit `time t C`). It NEVER changes original textbook
+`source.pdf`, rendered slides, or the visible `script.txt` narration.
+The generated `script_tts.json` now stores only the explicitly spelled
+voice input together with SHA-bound hash-only preflight evidence,
+`phoneme_certified=false`, and `publication_allowed=false`.
+
+**Normal-path fail-fast:** New private G2 calls `preflight_voice_sidecar` at
+its existing TTS stage before the first external paid send. An imported
+historical script with remaining unreviewed mathematical letters is rejected
+with `PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD` rather than billed for a known
+source-risk acoustic failure. The new narrator only emits a voice-ready
+sidecar if these deterministic source risks have been resolved; separate
+two-model actual-WAV acoustic QA is ALWAYS required. Source risk reduction
+is NOT pronunciation certification.
+
+**Replay evidence:** A failed two-model acoustic review now keeps a bounded
+SHA-bound private record of both ORIGINAL blind ASR transcripts under the
+owner's local authorized HP campaign. No transcript, model output, credential,
+or copyrighted source text is logged to stdout, committed to Git, or included
+in a publication bundle. Previously saved blocked counts are not silently
+converted to transcripts. The original gate remains fail-closed on
+unavailable or conflicting recognition and limits same-voice audio repairs
+to the existing two-slide ceiling.
+
+G2 remains **blocked** until actual corrected-source voice audio, independent
+acoustic QA, synchronized video and final acceptance pass. No extension of
+owner authorization, automatic release, Ubuntu CI or local model is implied.
+
+
+**Four-stage selective upstream reuse:** The previous generic reuse contract
+could import all six accepted upstream stages, including old narration with
+predictable ambiguous source math. This would cause a new pre-TTS hold before
+the revised narrator could operate. The standard
+`microgen_verified_upstream_reuse.maybe_import_verified_upstream` now
+**reverifies the earlier complete six-stage source**, but when the earlier
+voice-sidecar has an independently detectable math risk, imports **only**
+figure extraction, figure mapping, figure merge, and slides. It imports
+neither old narration/science receipts, narration caches, WAVs nor failed
+provider attempts; current normal processing then regenerates and re-verifies
+narration and scientific QA, followed by new finite TTS and acoustic QA.
+A genuinely safe prior voice sidecar still permits all six stages to be
+reused. Malformed historical evidence is refused rather than silently
+promoted. Both four- and six-stage receipts are hash-bound, source-bound,
+code-revision-bound and independently validated before downstream release.

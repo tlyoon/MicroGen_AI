@@ -615,6 +615,10 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
             from microgen_verified_upstream_reuse import verify_import_receipt
             verify_import_receipt(stage)
             inputs.append(".microgen_verified_upstream_import.json")
+    if name in {"narration", "tts"} and (stage/"microgen_reviewed_math_voice.py").is_file():
+        # A reviewed spoken-variable rule change invalidates source-bound
+        # voice inputs; never reuse stale narration/TTS stage receipts.
+        inputs.append("microgen_reviewed_math_voice.py")
     if name == "narration" and (stage/"microgen_narration_batch.py").is_file():
         # The live v13 narrator delegates all resume/cache identities to
         # this shared helper. Its changes must invalidate a saved narration
@@ -645,6 +649,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         # an old acoustic checkpoint as well as changes to ASR matching.
         if (stage/"microgen_tts_provenance.py").is_file():
             inputs.append("microgen_tts_provenance.py")
+        if (stage/"microgen_private_acoustic_trace.py").is_file():
+            inputs.append("microgen_private_acoustic_trace.py")
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
             inputs.append(".microgen_autonomous_acoustic_qa.json")

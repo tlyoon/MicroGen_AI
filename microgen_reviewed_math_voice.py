@@ -1,0 +1,149 @@
+"""Deterministic reviewed spoken math-variable forms before paid G2 TTS.
+
+Never replace single letters globally: original textbook mathematics, slides,
+narration and source PDF remain unchanged. Only narrowly recognized physics
+notation can be rendered as an unambiguous *spoken* letter-name token.
+Source-side acoustic risks still need two-model evidence on actual WAV.
+"""
+from __future__ import annotations
+import hashlib
+import re
+
+_NAMES = {"x": "ex", "y": "why", "c": "see"}
+_COMPONENT = {"a": "ay", "v": "vee", "d": "dee"}
+
+
+def reviewed_math_voice(text: str) -> str:
+    """Expand only explicitly mathematical variable syntax in TTS text.
+
+    This is **not** pronunciation certification; it prevents easily
+    avoidable ambiguous speech input while preserving the raw narration.
+    """
+    if not isinstance(text, str):
+        raise TypeError("TTS voice input must be text")
+    value = text
+
+    # Printed a_x, v_x and d x/d t frequently arrive as "a x", "v x",
+    # "d x over d t" in model-generated narration. Do not rewrite an
+    # isolated English x, product name or arbitrary single-character word.
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<var>[avd])\s+(?P<axis>[xy])\b"
+        r"(?=\s*(?:[,.:;!?]|$|(?:avg|over|versus|equals|is|at|of|and)\b))",
+        lambda m: _COMPONENT[m["var"].lower()] + " " +
+                  _NAMES[m["axis"].lower()],
+        value,
+    )
+    # Second-derivative numerator d squared x is explicitly symbolic.
+    value = re.sub(r"\bd\s+squared\s+x\b", "dee squared ex", value)
+    # Unambiguous narrated symbolic subscripts; no assumption about
+    # multi-letter variables, element labels or index arithmetic.
+    value = re.sub(
+        r"\bsub\s+(?P<axis>[xy])\b",
+        lambda m: "sub " + _NAMES[m["axis"].lower()],
+        value,
+        flags=re.IGNORECASE,
+    )
+    # Once a subscript has been named explicitly, its one-letter
+    # component coefficient is also a spoken mathematical letter.
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<var>[avd])\s+sub\s+(?P<axis>ex|why)\b",
+        lambda m: _COMPONENT[m["var"].lower()] + " sub " + m["axis"],
+        value,
+    )
+    # Distinguish a symbolic point label C from "circa" only after
+    # an explicit time-variable cue; leave historical abbreviations alone.
+    value = re.sub(
+        r"\btime\s+t\s+C\b(?=\s*[,.;!?]|$)",
+        "time tee see", value,
+    )
+    # Explicitly named component derivative and plot notation.
+    value = re.sub(
+        r"\b(?P<axis>ex|why|x|y)\s+versus\s+t\b",
+        lambda m: (_NAMES.get(m["axis"].lower(), m["axis"].lower()))
+        + " versus tee", value, flags=re.IGNORECASE)
+    # Physically readable coefficient c times t, not a general c/C match.
+    value = re.sub(r"\bminus\s+c\s+t\b", "minus see tee", value)
+    return value
+
+
+def voice_input_risk_status(text: str, normalize) -> dict:
+    """Hash-only predictable source risk status; never log raw narration."""
+    from microgen_tts_risk_register import find_pronunciation_risks
+    corrected = normalize(reviewed_math_voice(text))
+    residual = find_pronunciation_risks(corrected, corrected)
+    return {
+        "schema_version": 1,
+        "text_before_sha256": hashlib.sha256(text.encode("utf8")).hexdigest(),
+        "voice_input_sha256": hashlib.sha256(corrected.encode("utf8")).hexdigest(),
+        "changed_for_tts_only": corrected != text,
+        "unresolved_source_risk_codes": sorted({r.code for r in residual}),
+        "unresolved_source_risk_count": len(residual),
+        "phoneme_certified": False,
+        "publication_allowed": False,
+    }
+
+
+class VoiceRiskPreflightError(RuntimeError):
+    """Predictable unresolved pronunciation risk; do not spend on new TTS."""
+
+
+def preflight_voice_sidecar(stage) -> dict:
+    """Source/WAV-independent G2 preflight before the FIRST paid TTS send.
+
+    The acoustic screen already marks unnormalized mathematical letters as
+    mandatory review. Prevent known doomed generations before billing, while
+    retaining the independent audio/visual acceptance gates for safe text.
+    """
+    import json
+    from pathlib import Path
+    from text_to_speech_v25 import normalize_scientific_speech
+    from microgen_tts_risk_register import find_pronunciation_risks
+
+    stage = Path(stage)
+    path = stage / "script_tts.json"
+    if path.is_symlink() or not path.is_file():
+        raise VoiceRiskPreflightError("Voice sidecar missing or linked")
+    try:
+        document = json.loads(path.read_text(encoding="utf8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise VoiceRiskPreflightError("Invalid voice sidecar JSON") from exc
+    slides = document.get("slides") if isinstance(document, dict) else None
+    if (not isinstance(slides, list) or not slides
+            or [r.get("slide") if isinstance(r, dict) else None for r in slides]
+            != list(range(1, len(slides)+1))):
+        raise VoiceRiskPreflightError("Unordered voice source or empty slides")
+    blocked = []
+    for row in slides:
+        spoken = row.get("tts_text") or row.get("narration")
+        if not isinstance(spoken, str) or not spoken.strip():
+            raise VoiceRiskPreflightError("Empty spoken lecture source")
+        actual_input = normalize_scientific_speech(spoken)
+        risk_list = find_pronunciation_risks(spoken, actual_input)
+        if risk_list:
+            blocked.append((row["slide"], len(risk_list)))
+        # Hash-bound proof generated by the new narrator, when present:
+        proof = row.get("tts_math_voice_preflight")
+        if proof is not None:
+            if (not isinstance(proof, dict) or proof.get("schema_version") != 1
+                    or proof.get("unresolved_source_risk_count") != 0
+                    or proof.get("voice_input_sha256") !=
+                    hashlib.sha256(actual_input.encode("utf8")).hexdigest()
+                    or proof.get("phoneme_certified") is not False
+                    or proof.get("publication_allowed") is not False):
+                raise VoiceRiskPreflightError(
+                    "Reviewed voice-preflight receipt mismatch or drift")
+    if blocked:
+        names = ",".join(str(n) for n, _ in blocked[:25])
+        raise VoiceRiskPreflightError(
+            "PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD: unresolved "
+            f"source notation on {len(blocked)} slide(s) [{names}]; "
+            "repair reviewed spoken input during narration before paid TTS; "
+            "never waive independent acoustic QA")
+    return {
+        "status": "VOICE_SOURCE_RISK_OFFLINE_PREFLIGHT_PASSED",
+        "slide_count": len(slides),
+        "source_risk_count": 0,
+        "script_tts_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "acoustic_qa_required": True,
+        "publication_allowed": False,
+    }

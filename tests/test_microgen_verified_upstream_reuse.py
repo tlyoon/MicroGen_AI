@@ -38,6 +38,10 @@ def fixture(tmp_path):
         "figure_extraction_receipt.json", "figure_composition_receipt.json",
     ):
         (stage / name).write_bytes(b"previously-verified-" + name.encode())
+    (stage / "script_tts.json").write_text(json.dumps({
+        "slides": [{"slide": 1, "tts_text":
+                    "The system has an ordinary momentum lesson."}]
+    }), encoding="utf8")
     (stage / "slide1.wav").write_bytes(b"DO-NOT-REUSE-FAILED-TTS")
     (stage / ".microgen_source_caption_vector_recovery.json").write_bytes(
         b"SOURCE-BOUND-VECTOR-RECOVERY-PROOF")
@@ -97,11 +101,16 @@ def call_fixture(tmp_path,make_changes=None):
     work=base/"NEW_PRIVATE_CAMPAIGN"
     work.mkdir()
     def valid(stage,name,dest):
-        return (stage/"source.pdf").is_file() and all(
-            (stage/file).is_file()
-            for file in ("slides.pdf","script_tts.json",
-                         "figure_extraction_receipt.json",
-                         ".microgen_autonomous_science_qa.json"))
+        required = {
+            "figure_extraction": ("figure_extraction_receipt.json",),
+            "figure_mapping": ("figure_composition_receipt.json",),
+            "figure_merge": ("figure_composition_receipt.json",),
+            "slides": ("slides.pdf",),
+            "narration": ("slides.pdf", "script_tts.json", "script.txt"),
+            "science_qa": ("script_tts.json", ".microgen_autonomous_science_qa.json"),
+        }.get(name, ())
+        return (stage / "source.pdf").is_file() and all(
+            (stage / filename).is_file() for filename in required)
     result=reuse.maybe_import_verified_upstream(
         repo=repo,source_root=sources,work_root=work,
         subchapter="2.5",source_file=source,dest=source.parent,
@@ -218,3 +227,46 @@ def test_imported_old_script_does_not_authorize_new_tts_by_itself(tmp_path):
     assert not (stage/".microgen_autonomous_acoustic_qa.json").exists()
     assert not (stage/".microgen_autonomous_acceptance.json").exists()
     assert not (stage/"slides.mp4").exists()
+
+
+def test_recurring_math_source_risk_imports_only_figures_and_slides_for_new_voice(
+    tmp_path,
+):
+    """Old source-bound slides reused; stale narration/science must rerun."""
+    def old_risky_voice(base, campaign, stage, source):
+        (stage / "script_tts.json").write_text(json.dumps({
+            "slides": [{"slide": 1, "tts_text":
+                        "The variable y approaches zero."}]
+        }), encoding="utf8")
+    result, work, old_stage = call_fixture(tmp_path, old_risky_voice)
+    assert result["status"] == reuse.FOUR_STATUS
+    assert result["stages"] == list(reuse.FOUR_UPSTREAM)
+    current = work / "2.5"
+    cp = json.loads((current / ".microgen_checkpoint.json").read_text())
+    assert set(cp["completed"]) == set(reuse.FOUR_UPSTREAM)
+    assert (current / "slides.pdf").is_file()
+    assert (current / "figure_extraction_receipt.json").is_file()
+    assert not (current / "script_tts.json").exists()
+    assert not (current / "script.txt").exists()
+    assert not (current / ".microgen_autonomous_science_qa.json").exists()
+    assert not (current / ".microgen_narration_batches").exists()
+    assert not (current / "slide1.wav").exists()
+    assert (old_stage / "script_tts.json").is_file()
+    summary = json.loads((current / reuse.RECEIPT).read_text())
+    assert summary["status"] == reuse.FOUR_STATUS
+    assert summary["stages"] == list(reuse.FOUR_UPSTREAM)
+    assert not any(name in summary["copied_items"] for name in (
+        "script.txt", "script_tts.json", ".microgen_narration_batches",
+        ".microgen_autonomous_science_qa.json"))
+    assert reuse.verify_import_receipt(current)["stages"] == list(reuse.FOUR_UPSTREAM)
+    summary["status"] = reuse.SIX_STATUS
+    (current / reuse.RECEIPT).write_text(json.dumps(summary))
+    with pytest.raises(reuse.UpstreamReuseError, match="provenance drift"):
+        reuse.verify_import_receipt(current)
+
+
+def test_unreadable_prior_narration_never_silently_imports_science_proof(tmp_path):
+    def malformed_voice(base, campaign, stage, source):
+        (stage / "script_tts.json").write_text("not a JSON sidecar")
+    with pytest.raises(reuse.UpstreamReuseError, match="Historical voice input malformed"):
+        call_fixture(tmp_path, malformed_voice)
