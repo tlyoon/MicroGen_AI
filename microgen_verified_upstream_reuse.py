@@ -166,20 +166,36 @@ def _candidate(repo_root: Path, candidate_work: Path, subchapter: str,
     fingerprints = cp.get("dependency_fingerprints")
     if not isinstance(completed, dict) or not isinstance(fingerprints, dict):
         return None
-    if any(not completed.get(name) for name in UPSTREAM):
+    # Importability is per stage, not all-or-nothing. An updated independent
+    # scientific reviewer invalidates its OLD receipt (as it should), but
+    # must not invalidate independently reverified source PDFs and slide
+    # artwork when that science result will be freshly regenerated anyway.
+    if any(not completed.get(name) for name in FOUR_UPSTREAM):
         return None
     if not (stage / "source.pdf").is_file() or (stage / "source.pdf").is_symlink():
         return None
     if _sha(stage / "source.pdf") != source_sha:
         return None
-    # A saved pass is never enough; recompute each OLD fingerprint and recheck
-    # six actual old outputs before considering the candidate for import.
-    for name in UPSTREAM:
+    for name in FOUR_UPSTREAM:
         if fingerprints.get(name) != quality.dependency_fingerprint(stage, name):
             return None
         if not stage_valid(stage, name, dest):
             return None
-    return (str(completed["science_qa"]), stage)
+    full_six_valid = all(bool(completed.get(name)) for name in UPSTREAM)
+    if full_six_valid:
+        for name in UPSTREAM[4:]:
+            try:
+                if (fingerprints.get(name) !=
+                        quality.dependency_fingerprint(stage, name)
+                        or not stage_valid(stage, name, dest)):
+                    full_six_valid = False
+                    break
+            except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+                full_six_valid = False
+                break
+    # The old science screen is NEVER adopted if its implementation or
+    # transcript fingerprint drifted; four-stage recovery remains possible.
+    return (str(completed["slides"]), stage, full_six_valid)
 
 
 def _copy_evidence(old: Path, target: Path, *, stages=UPSTREAM) -> list[str]:
@@ -348,8 +364,8 @@ def maybe_import_verified_upstream(
         return None
     entries.sort(key=lambda record: record[0], reverse=True)
     if len(entries) > 1 and entries[0][0] == entries[1][0]:
-        raise UpstreamReuseError("Ambiguous equally recent science-approved source")
-    _, old = entries[0]
+        raise UpstreamReuseError("Ambiguous equally recent source-verified slides")
+    _, old, full_six_valid = entries[0]
     # Prior source/figure/slide work is still useful when the *narration*
     # contains known ambiguous math-letter speech. A revised narrator must
     # run again, but re-generating already verified figures/slides is waste.
@@ -357,16 +373,16 @@ def maybe_import_verified_upstream(
     from microgen_reviewed_math_voice import (
         preflight_voice_sidecar, VoiceRiskPreflightError,
     )
-    try:
-        preflight_voice_sidecar(old)
-    except VoiceRiskPreflightError as exc:
-        if "PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD" not in str(exc):
-            raise UpstreamReuseError(
-                "Historical voice input malformed; no trusted upstream reuse"
-            ) from exc
-        selected_stages = FOUR_UPSTREAM
-    else:
-        selected_stages = UPSTREAM
+    selected_stages = FOUR_UPSTREAM
+    if full_six_valid:
+        try:
+            preflight_voice_sidecar(old)
+        except VoiceRiskPreflightError:
+            # An old ambiguous/malformed voice sidecar can never be reused.
+            # Independently accepted figures and slides remain reusable.
+            pass
+        else:
+            selected_stages = UPSTREAM
     # Use a temporary SOURCE+CURRENTRUNNER stage; no failed-old work or
     # symlinks are promoted before ALL new-code stage validators pass.
     with tempfile.TemporaryDirectory(
@@ -397,6 +413,8 @@ def maybe_import_verified_upstream(
                 else None),
             "current_code_revision": commit,
             "stages": list(selected_stages),
+            "full_previous_science_verification_current_code":
+                bool(full_six_valid),
             "copied_items": copied,
             "source_bound_narration_response_cache": reuse_cache,
             "new_audio_reused": False,

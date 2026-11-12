@@ -268,8 +268,14 @@ def test_recurring_math_source_risk_imports_only_figures_and_slides_for_new_voic
 def test_unreadable_prior_narration_never_silently_imports_science_proof(tmp_path):
     def malformed_voice(base, campaign, stage, source):
         (stage / "script_tts.json").write_text("not a JSON sidecar")
-    with pytest.raises(reuse.UpstreamReuseError, match="Historical voice input malformed"):
-        call_fixture(tmp_path, malformed_voice)
+    # Malformed old narration is not reusable, but the independently checked
+    # four source/slide stages need not be discarded or regenerated.
+    result, work, _ = call_fixture(tmp_path, malformed_voice)
+    assert result["status"] == reuse.FOUR_STATUS
+    stage = work / "2.5"
+    assert (stage / "slides.pdf").exists()
+    assert not (stage / "script_tts.json").exists()
+    assert not (stage / ".microgen_autonomous_science_qa.json").exists()
 
 
 def test_private_source_bound_response_cache_copied_without_tts_or_provider(
@@ -410,3 +416,44 @@ def test_published_manifest_can_verify_cache_provenance_without_exporting_model_
     assert reuse.verify_import_receipt(published,require_cache=False)
     with pytest.raises(reuse.UpstreamReuseError,match="cache missing"):
         reuse.verify_import_receipt(published,require_cache=True)
+
+
+def test_science_reviewer_code_drift_reuses_only_four_trusted_source_stages(
+    tmp_path,
+):
+    """Reproduce Nov 12 G2 blocker: upgraded science QA invalidates old QA
+    receipt, but source PDFs/figures/slides retain independent validation.
+    """
+    base,repo,sources,source,old_work,old_stage,quality=fixture(tmp_path)
+    work=base/"NEW_PRIVATE_CAMPAIGN"
+    work.mkdir()
+    def current_validator(stage,name,dest):
+        if name=="science_qa":
+            return False  # Updated independent reviewer must run again.
+        required={
+            "figure_extraction":("figure_extraction_receipt.json",),
+            "figure_mapping":("figure_composition_receipt.json",),
+            "figure_merge":("figure_composition_receipt.json",),
+            "slides":("slides.pdf",),
+        }.get(name,())
+        return (stage/"source.pdf").is_file() and all(
+            (stage/f).is_file() for f in required)
+    result=reuse.maybe_import_verified_upstream(
+        repo=repo,source_root=sources,work_root=work,subchapter="2.5",
+        source_file=source,dest=source.parent,commit="b"*40,
+        source_wait=0,prepare_stage=fake_prepare,
+        stage_valid=current_validator,mark_complete=fake_mark,
+        quality=quality,
+    )
+    assert result and result["status"]==reuse.FOUR_STATUS
+    stage=work/"2.5"
+    cp=json.loads((stage/".microgen_checkpoint.json").read_text())
+    assert set(cp["completed"])==set(reuse.FOUR_UPSTREAM)
+    assert (stage/"slides.pdf").is_file()
+    assert not (stage/"script_tts.json").exists()
+    assert not (stage/".microgen_autonomous_science_qa.json").exists()
+    assert not (stage/"slide1.wav").exists()
+    provenance=json.loads((stage/reuse.RECEIPT).read_text())
+    assert provenance["full_previous_science_verification_current_code"] is False
+    assert provenance["new_model_requests"] is False
+    assert reuse.verify_import_receipt(stage)["stages"]==list(reuse.FOUR_UPSTREAM)

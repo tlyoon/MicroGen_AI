@@ -1019,3 +1019,34 @@ no-replay authorizations remain mandatory; a pre-TTS reduction in predictable
 letter-name risks is only a source-input screen, never acoustic certification.
 Only real independent science, acoustic and decoded visual/video receipts
 can close G2. Publish/merge remains separate from private acceptance.
+
+
+### Dependency-aware source reuse after scientific-review code changes
+
+A fresh HP private G2 acceptance attempt on the newer scientific QA
+implementation exposed a recurring false all-or-nothing invalidation:
+the old **six-stage** QA receipt no longer validates under the upgraded
+reviewer's implementation hash, even though the original PDF, figures
+and slides are unchanged. The runner correctly refuses stale scientific
+approval, but MUST NOT use that rejection to force repeat source extraction,
+figure-caption provider calls or slide generation.
+
+The normal prior-campaign selector now independently rechecks each of
+the FOUR reusable source/art stages against its existing SHA-bound
+fingerprints and real output validators. A six-stage import is permitted
+only when current-code validation of BOTH narration AND science QA
+also passes and the voice sidecar passes preflight. Otherwise it imports
+FOUR stages only, preserving the source/deck and omitting old narration,
+science receipts, WAVs and provider approvals. Independently returned,
+source-and-prompt-bound narration batches may be re-imported as untrusted
+private caches; the current generator must independently recheck their
+original keys, and all QA must run again. An old malformed voice sidecar
+can no longer force expensive reprocessing of valid source/slide evidence.
+
+Never backdate or fabricate the independent scientific QA receipt.
+Tests must reproduce scientific implementation drift and source-hash
+tampering; real-source read-only verification must prove four-stage
+reuse without provider calls. Previously consumed figure-mapping/G2
+campaigns remain terminal. Any new paid campaign needs a fresh, finite,
+source-and-code-bound authorization scope, and no publication occurs
+until actual acoustic and technical acceptance passes.
