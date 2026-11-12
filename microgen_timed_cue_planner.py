@@ -439,19 +439,28 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                     from microgen_cue_semantic_mapping import (
                         validate_matches, SemanticMappingError,
                         repair_numbered_heading_body_pair,
+                        repair_unique_verbatim_quote_location,
+                        persist_private_semantic_failure,
                     )
+                    original_proposal = None
                     try:
                         choices = semantic_resolver(slide_no, unresolved, blocks)
+                        original_proposal = choices
                         # Gemini may cite a question/answer's genuine body
                         # but omit its immediately preceding "Question N:"
                         # or "Answer N:" heading, or vice versa. Recover
                         # only an independently UNIQUE, lexically supported
                         # adjacent two-block pair in the actual source PDF.
                         # The unchanged numeric and quote gates run afterward.
+                        choices = repair_unique_verbatim_quote_location(
+                            choices, unresolved, blocks)
                         choices = repair_numbered_heading_body_pair(
                             choices, unresolved, blocks)
                         verified = validate_matches(choices, unresolved, blocks)
                     except (SemanticMappingError, ValueError, KeyError) as exc:
+                        persist_private_semantic_failure(
+                            stage, slide_no, original_proposal, unresolved,
+                            blocks, exc)
                         raise CuePlanningError(
                             f"Slide {slide_no}: untrusted semantic proposal: {exc}") from exc
                     except Exception as exc:

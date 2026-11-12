@@ -872,3 +872,46 @@ credentials, source text, API tokens or personal account identifiers.
 A Git clone, missing/tampered private record or other PC must fail before
 billed requests. Resume of an exact granted campaign works without repeating
 this installation, but a prior terminal paid failure still cannot replay.
+
+
+## 12 November 2026 — Standing source-quote evidence recovery (reused historical fixes)
+
+The G2 Serway §2.5 slide-11 terminal semantic error `Quoted evidence not
+present in rendered PDF text` is **not** a Gemini outage, a formatting-only
+success, or permission to waive source evidence. The actual earlier model
+reply was not preserved, so its cause cannot be guessed retrospectively.
+The previous authorization is consumed.
+
+Reusable historical principles:
+- PR #258 / commit `562d47a` recovered a PDF superscript-reflow citation
+  using only unambiguous ORIGINAL-source text, never invented text.
+- PR #291 commits `79b932b` and `141c013` normalized harmless Gemini
+  JSON shapes and constrained the response schema, without changing the
+  independent source-quote verifier.
+- PR #291 commit `cf1b71e` safely matched adjacent numbered question/answer
+  PDF blocks with numerical and lexical source checks.
+
+**Binding normal-path rule:** `microgen_cue_semantic_mapping` now supplies
+a bounded provider-native list of *exact source-PDF quote excerpts* when
+feasible, and the existing `microgen_timed_cue_planner` can relocate a
+model's genuine quote only if it occurs in exactly one real visible source
+block, the recovered blocks remain contiguous and ordered, the spoken
+numbers exist there, and at least two lexically corroborating terms match.
+It must never invent a quote, replace an unsupported number, infer academic
+truth, move a duplicated quote, waive an unrelated quote, or turn a failure
+into acceptance. Existing independent PDF, narration, TTS, PCM, acoustic and
+decoded-video checks remain mandatory; semantic_mapping_certified stays
+false.
+
+**Recurrence evidence:** On a failed original-source semantic validation,
+the regular HP private G2 path preserves a bounded single-slide model
+proposal in a local SHA-bound private evidence file only under the
+authorized isolated workroot. No source text or failed proposal enters
+stdout, Git, published artifacts, or the source tree. If preservation
+cannot be secured, fail closed; no repeated paid attempt is inferred.
+Original unchanged failed campaigns remain terminal. New source/code
+campaigns remain finite and ledger-guarded under owner contract v1.1.
+Regression must include a real generated PDF page, misindexed genuine
+quotes, grouped evidence, false/duplicate/unordered/unsupported claims,
+SDK schema serialization, local-only failure evidence, full Windows
+tests and exact-head CI. No Ubuntu, local model or repeated per-PDF fixes.

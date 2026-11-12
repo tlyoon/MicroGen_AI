@@ -202,7 +202,7 @@ def test_normal_semantic_provider_request_uses_constrained_schema_and_one_send(
 ):
     import gemini_keys
     import microgen_flash_tts
-    from microgen_cue_semantic_mapping import SEMANTIC_RESPONSE_JSON_SCHEMA
+    from microgen_cue_semantic_mapping import source_quote_constrained_schema
 
     monkeypatch.setattr(
         microgen_flash_tts, "_load_gemini_keys_from_microvid",
@@ -217,7 +217,9 @@ def test_normal_semantic_provider_request_uses_constrained_schema_and_one_send(
             config = options["config"]
             assert config["temperature"] == 0
             assert config["response_mime_type"] == "application/json"
-            assert config["response_json_schema"] == SEMANTIC_RESPONSE_JSON_SCHEMA
+            assert config["response_json_schema"] == source_quote_constrained_schema(BLOCKS)
+            source_quotes = config["response_json_schema"]["properties"]["matches"]["items"]["anyOf"][0]["properties"]["quote"]["enum"]
+            assert source_quotes == [BLOCKS[0][1]]
             # Avoid duplicating schema examples in the narrated task.
             prompt = json.loads(options["contents"])
             assert "output_contract" not in prompt

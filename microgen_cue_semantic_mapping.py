@@ -274,6 +274,175 @@ def repair_numbered_heading_body_pair(
 repair_question_heading_body_pair = repair_numbered_heading_body_pair
 
 
+def repair_unique_verbatim_quote_location(
+    matches: object, missing: list[tuple[int, str]], blocks: list[tuple],
+) -> object:
+    """Re-anchor a real model quote misindexed within the SAME source PDF page.
+
+    Reuses PR #258's source-line recovery principle: only a unique existing
+    source fragment can repair a citation. Never invent/replace the quote,
+    infer meaning from an index, remap duplicated text or override an
+    unsupported scientific number. Original full validator runs afterward.
+    """
+    if not isinstance(matches, list) or len(matches) != len(missing):
+        return matches
+    needed = dict(missing)
+    result = []
+    for row in matches:
+        if not isinstance(row, dict) or type(row.get("cue")) is not int:
+            return matches
+        spoken = needed.get(row["cue"])
+        if spoken is None:
+            return matches
+        if set(row) == {"cue", "block", "quote"}:
+            chosen, quotes = [row["block"]], [row["quote"]]
+        elif set(row) == {"cue", "blocks", "quotes"}:
+            chosen, quotes = row["blocks"], row["quotes"]
+        else:
+            result.append(row)
+            continue
+        if (not isinstance(chosen, list) or not isinstance(quotes, list)
+                or not chosen or len(chosen) != len(quotes)
+                or len(chosen) > MAX_GROUP_BLOCKS
+                or any(type(x) is not int or not 1 <= x <= len(blocks)
+                       for x in chosen)
+                or any(not isinstance(q, str) or not 8 <= len(q) <= 200
+                       or len(compact(q)) < 8 for q in quotes)):
+            result.append(row)
+            continue
+        valid_at_current = all(
+            compact(q) in compact(str(blocks[b-1][1]))
+            for b, q in zip(chosen, quotes))
+        if valid_at_current:
+            result.append(row)
+            continue
+        # Every supplied quote must exist in EXACTLY ONE actual rendered PDF
+        # text block, including after whitespace/superscript normalization.
+        anchors = []
+        for quote in quotes:
+            positions = [i for i, block in enumerate(blocks, 1)
+                         if compact(quote) in compact(str(block[1]))]
+            if len(positions) != 1:
+                break
+            anchors.append(positions[0])
+        if (len(anchors) != len(quotes) or len(set(anchors)) != len(anchors)
+                or anchors != list(range(anchors[0], anchors[0] + len(anchors)))
+                or (len(anchors) == 1 and len(chosen) != 1)):
+            result.append(row)
+            continue
+        labels = " ".join(str(blocks[x-1][1]) for x in anchors)
+        if not numbers(spoken).issubset(numbers(labels)):
+            result.append(row)
+            continue
+        # A shifted citation needs INDEPENDENT cue/source corroboration;
+        # verbatim presence alone could still cite an unrelated source line.
+        tokens = lambda s: set(re.findall(r"[a-z]{4,}", s.casefold()))
+        if len(tokens(spoken) & tokens(labels)) < 2:
+            result.append(row)
+            continue
+        recovered = {"cue": row["cue"]}
+        if len(anchors) == 1:
+            recovered.update(block=anchors[0], quote=quotes[0])
+        else:
+            recovered.update(blocks=anchors, quotes=list(quotes))
+        print("[semantic source] re-anchored unique original-PDF quotation "
+              f"for cue {row['cue']}; source/numeric validation mandatory",
+              flush=True)
+        result.append(recovered)
+    return result
+
+
+def source_quote_constrained_schema(blocks: list[tuple]) -> dict:
+    """Constrain one existing Gemini request to actual source-PDF quote strings.
+
+    This is a generation-time prevention of invented verbatim citations,
+    analogous to the established provider-native *shape* schema. The
+    original quote/block/numeric postcondition remains required.
+    """
+    import copy
+    schema = copy.deepcopy(SEMANTIC_RESPONSE_JSON_SCHEMA)
+    candidates = []
+    for block in blocks:
+        label = block[1]
+        if not isinstance(label, str):
+            continue
+        # Use source-exact substrings; never generate an alternative
+        # rendering or silently make a model quotation source-valid.
+        for excerpt in ((label[:160].strip(), label[-160:].strip())
+                        if len(label) > 170 else (label.strip(),)):
+            if 8 <= len(excerpt) <= 200 and len(compact(excerpt)) >= 8:
+                if excerpt not in candidates:
+                    candidates.append(excerpt)
+    if not candidates or len(candidates) > 80 or sum(map(len, candidates)) > 10000:
+        return schema  # Existing strict validator still protects all calls.
+    single, grouped = schema["properties"]["matches"]["items"]["anyOf"]
+    single["properties"]["quote"]["enum"] = candidates
+    grouped["properties"]["quotes"]["items"]["enum"] = candidates
+    return schema
+
+
+def persist_private_semantic_failure(
+    stage: object, slide: int, original_proposal: object,
+    missing: list[tuple[int, str]], blocks: list[tuple], error: Exception,
+) -> bool:
+    """Preserve one failed model proposal ONLY in the authorized private HP root.
+
+    Past terminal G2 runs lost the actual model quotation, forcing speculative
+    diagnosis and repeat billing. The record is never copied to source/output,
+    Git, stdout, or a public artifact. Its content has a strict byte ceiling.
+    """
+    import hashlib
+    import os
+    from pathlib import Path
+    import socket
+    root = Path(os.environ.get("LOCALAPPDATA", "")).resolve()
+    stage = Path(stage).resolve()
+    private_root = root / "MicroGen_AI_Checkpoints"
+    if (socket.gethostname().casefold() != "hp"
+            or stage.parent.parent != private_root
+            or not (stage.parent / ".microgen_bounded_provider_authorization.json").is_file()
+            or not isinstance(slide, int) or not 1 <= slide <= 200):
+        return False
+    slide_file, script_file = stage / "slides.pdf", stage / "script_tts.json"
+    if not slide_file.is_file() or not script_file.is_file():
+        return False
+    reason = ("UNTRUSTED_SEMANTIC_QUOTE"
+              if isinstance(error, SemanticMappingError)
+              and "Quoted evidence not present" in str(error)
+              else "UNTRUSTED_SEMANTIC_SOURCE_EVIDENCE")
+    try:
+        saved = {
+            "schema_version": 1,
+            "status": "PRIVATE_FAILED_MODEL_PROPOSAL_NOT_ACCEPTED",
+            "reason_code": reason,
+            "slide": slide,
+            "slides_pdf_sha256": hashlib.sha256(slide_file.read_bytes()).hexdigest(),
+            "script_tts_sha256": hashlib.sha256(script_file.read_bytes()).hexdigest(),
+            "source_blocks_sha256": hashlib.sha256(json.dumps(
+                [str(row[1]) for row in blocks], ensure_ascii=False
+            ).encode("utf8")).hexdigest(),
+            "unresolved_cue_ids": [n for n, _ in missing],
+            "original_model_proposal": original_proposal,
+            "publication_allowed": False,
+            "accepted_semantic_mapping": False,
+        }
+        raw = json.dumps(saved, ensure_ascii=False, sort_keys=True, indent=2)
+        if len(raw.encode("utf8")) > 16000:
+            saved["original_model_proposal"] = None
+            saved["proposal_oversize_not_retained"] = True
+            raw = json.dumps(saved, ensure_ascii=False, sort_keys=True, indent=2)
+        target = stage / f".microgen_private_semantic_failed_slide_{slide}.json"
+        if target.exists() or target.is_symlink():
+            return False
+        with target.open("x", encoding="utf8") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def validate_matches(matches: object, missing: list[tuple[int, str]],
                      blocks: list[tuple]) -> dict[int, tuple[tuple[int, ...], tuple[str, ...]]]:
     """Validate ALL cue proposals against original immutable PDF text blocks.
@@ -508,7 +677,7 @@ def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
                 # Use provider-native constrained decoding to prevent
                 # predictable response-shape errors before the existing
                 # deterministic normalizer / original-PDF validator run.
-                "response_json_schema": SEMANTIC_RESPONSE_JSON_SCHEMA,
+                "response_json_schema": source_quote_constrained_schema(blocks),
             },
         ),
         label=f"MicroGen semantic cue screen slide {slide}",
