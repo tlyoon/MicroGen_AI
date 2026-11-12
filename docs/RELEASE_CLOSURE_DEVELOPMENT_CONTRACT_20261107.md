@@ -705,3 +705,59 @@ Gemini actually returned, independent academic semantic approval, an audio
 pass or a completed video. Previous G2 provider budget is NOT reset.
 G2 stays BLOCKED pending new independently scoped live source/TTS/audio/
 video acceptance; PR remains draft/unmerged.
+
+
+### 12 November 2026 — prevent Gemini cue-response format drift at generation time
+
+**Upstream terminal context unchanged:** The sole previously authorized
+private Serway §2.5 HP attempt (source SHA
+`923c1768656433f29ba3a2ba413ea81eb5db9383f81d25873358b58709ae14aa`)
+completed source/figures/slides/narration/science QA and failed during
+the first timed-cue semantic request on slide 7, with
+`Unexpected model proposal schema`. The raw response shape was not
+retained, so neither its exact representation nor scientific adequacy
+is established. No new provider authorization has been issued; never
+restart the exhausted stage on a generic `Proceed` instruction.
+
+**Generalized two-layer repair in normal Gemini request path:**
+`microgen_cue_semantic_mapping.propose_with_gemini` already has a
+strict deterministic adapter for harmless response wrapper/index
+variations, with original-PDF `validate_matches` unchanged.
+To prevent recurrence *before response parsing*, the existing one-call
+`client.models.generate_content` now sends the provider-native
+`response_json_schema`, alongside `application/json`, containing
+a root object with a mandatory `matches` list. Each item is
+one of two strictly typed/required source-evidence forms: a single
+cue/block/verbatim quote, or a cue plus two-to-five ordered source
+blocks and corresponding verbatim quotes. `additionalProperties=False`
+rules out unsupported row/root fields. Crucially `matches: []`
+remains representable for an abstention: failure must not force the
+model to invent a quote. The old duplicate `output_contract` examples
+were removed from the prompt; content instructions still stress full
+coverage and printed-PDF evidence.
+
+**Layered verification remains essential:** The schema constrains JSON
+syntax/structure only. The existing adapter checks completeness,
+and `validate_matches` checks exactly the original page's block
+indices/order, verbatim source text and visible numbers; downstream
+quality checks independently verify math, timing, audio, active-element
+video and source hashes. A schema-valid `matches: []` on an unresolved
+cue remains a **non-retryable failure**, not a science pass.
+No provider/key/retry/voice/budget/rights controls changed.
+
+**Non-billable evidence:** The installed HP Google GenAI SDK
+v2.28.0 accepts the exact `GenerateContentConfig` JSON schema with a
+two-form `anyOf` union. The production `propose_with_gemini`
+request is tested with an injected one-send Gemini client, asserting
+the literal schema in its model config and normal original-PDF quote
+postcondition. Negative tests verify empty-array abstention stops
+without a second send, unsupported response shape fails, and the prior
+schema normalization path remains intact. These are offline proofs of
+source/checkpoint-conserving code integration, **not** a successful
+live Gemini structured-output call or G2 media acceptance.
+
+**Release status:** G1 PARTIAL (the updated code remains within open
+draft PR #291, not merged main), G2 BLOCKED pending a newly and
+explicitly bounded real-provider campaign with independent acoustic
+and decoded video acceptance, G3 NOT VERIFIED, G4 NOT READY. Do not
+reclassify CI or local simulation success as a live G2 pass.

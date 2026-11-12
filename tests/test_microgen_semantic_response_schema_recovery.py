@@ -163,3 +163,105 @@ def test_full_planner_recovers_safe_equivalent_model_response_without_network(
     assert verified["semantic_mapping_certified"] is False
     assert verified["publication_allowed"] is False
     assert len(spoken) == 4
+
+
+
+def test_provider_native_schema_declares_both_exact_row_shapes():
+    from google.genai import types
+    from microgen_cue_semantic_mapping import SEMANTIC_RESPONSE_JSON_SCHEMA
+
+    source = SEMANTIC_RESPONSE_JSON_SCHEMA
+    assert source["type"] == "object"
+    assert source["required"] == ["matches"]
+    assert source["additionalProperties"] is False
+    matches = source["properties"]["matches"]
+    assert matches["type"] == "array"
+    # Zero matches must remain valid for grounded abstention.
+    assert matches.get("minItems", 0) == 0
+    variants = matches["items"]["anyOf"]
+    assert len(variants) == 2
+    for row in variants:
+        assert row["type"] == "object"
+        assert row["additionalProperties"] is False
+        assert set(row["properties"]) == set(row["required"])
+    assert set(variants[0]["required"]) == {"cue", "block", "quote"}
+    assert set(variants[1]["required"]) == {"cue", "blocks", "quotes"}
+    assert variants[1]["properties"]["blocks"]["maxItems"] == 5
+    assert variants[1]["properties"]["quotes"]["minItems"] == 2
+    # SDK schema serialization must work on HP without a billable request.
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        temperature=0,
+        response_json_schema=source,
+    )
+    assert config.response_json_schema["required"] == ["matches"]
+
+
+def test_normal_semantic_provider_request_uses_constrained_schema_and_one_send(
+    monkeypatch,
+):
+    import gemini_keys
+    import microgen_flash_tts
+    from microgen_cue_semantic_mapping import SEMANTIC_RESPONSE_JSON_SCHEMA
+
+    monkeypatch.setattr(
+        microgen_flash_tts, "_load_gemini_keys_from_microvid",
+        lambda: None,
+    )
+    sent = []
+
+    def fake_provider(factory, operation, **kwargs):
+        assert kwargs["max_retries"] == 0
+        def fake_generate(**options):
+            sent.append(options)
+            config = options["config"]
+            assert config["temperature"] == 0
+            assert config["response_mime_type"] == "application/json"
+            assert config["response_json_schema"] == SEMANTIC_RESPONSE_JSON_SCHEMA
+            # Avoid duplicating schema examples in the narrated task.
+            prompt = json.loads(options["contents"])
+            assert "output_contract" not in prompt
+            assert "unresolved_cues" in prompt
+            assert "source_blocks" in prompt
+            return SimpleNamespace(
+                text=json.dumps({"matches": [ROW]})
+            )
+        client = SimpleNamespace(
+            models=SimpleNamespace(generate_content=fake_generate)
+        )
+        return operation(client)
+
+    monkeypatch.setattr(
+        gemini_keys, "call_with_client_failover", fake_provider,
+    )
+    mapping = propose_with_gemini(7, MISSING, BLOCKS)
+    assert mapping == [ROW]
+    assert len(sent) == 1
+    assert validate_matches(mapping, MISSING, BLOCKS)[1][0] == (0,)
+
+
+def test_schema_mode_does_not_force_false_semantic_success(monkeypatch):
+    import gemini_keys
+    import microgen_flash_tts
+
+    monkeypatch.setattr(
+        microgen_flash_tts, "_load_gemini_keys_from_microvid",
+        lambda: None,
+    )
+    sends = []
+    def fake_provider(factory, operation, **kwargs):
+        def fake_generate(**options):
+            sends.append(options)
+            return SimpleNamespace(text='{"matches":[]}')
+        client = SimpleNamespace(
+            models=SimpleNamespace(generate_content=fake_generate)
+        )
+        return operation(client)
+    monkeypatch.setattr(
+        gemini_keys, "call_with_client_failover", fake_provider,
+    )
+    with pytest.raises(SemanticMappingError, match="incomplete proposal"):
+        propose_with_gemini(7, MISSING, BLOCKS)
+    assert len(sends) == 1
+    # A structured but empty response is an explicit fail-closed abstention,
+    # never a success or permission to invent a cue-to-PDF mapping.

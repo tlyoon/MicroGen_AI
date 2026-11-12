@@ -14,6 +14,72 @@ from decimal import Decimal
 
 MAX_GROUP_BLOCKS = 5
 
+# The Gemini JSON MIME setting alone does not require a particular shape.
+# Constrain output *at generation time*, then independently validate every
+# returned cue, verbatim PDF quote, number, and visible block coordinate.
+# Empty matches remain legal: a model must be allowed to abstain rather
+# than being forced to invent a source mapping.
+SEMANTIC_RESPONSE_JSON_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "matches": {
+            "type": "array",
+            "description": (
+                "One exact PDF-grounded mapping for every unresolved cue, "
+                "or an empty array if any cue cannot be grounded"
+            ),
+            "items": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "cue": {"type": "integer", "minimum": 1},
+                            "block": {"type": "integer", "minimum": 1},
+                            "quote": {
+                                "type": "string",
+                                "description": (
+                                    "Eight or more verbatim characters "
+                                    "from the selected source PDF block"
+                                ),
+                            },
+                        },
+                        "required": ["cue", "block", "quote"],
+                    },
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "cue": {"type": "integer", "minimum": 1},
+                            "blocks": {
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": MAX_GROUP_BLOCKS,
+                                "items": {"type": "integer", "minimum": 1},
+                            },
+                            "quotes": {
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": MAX_GROUP_BLOCKS,
+                                "items": {
+                                    "type": "string",
+                                    "description": (
+                                        "Verbatim quote from corresponding "
+                                        "source PDF block"
+                                    ),
+                                },
+                            },
+                        },
+                        "required": ["cue", "blocks", "quotes"],
+                    },
+                ]
+            },
+        },
+    },
+    "required": ["matches"],
+}
+
 
 class SemanticMappingError(RuntimeError):
     pass
@@ -320,31 +386,27 @@ def propose_with_gemini(slide: int, missing: list[tuple[int, str]],
             "text block or an ordered, consecutive group of 2 to 5 visible text blocks "
             "supporting the cue. A spoken enumeration of several labels needs a group, "
             "not one arbitrary label. Paraphrases may be proposed but are NOT certified. "
-            "Return one result per unresolved cue and cite each selected block with "
-            "8 or more verbatim characters. The ENTIRE response MUST be one JSON "
-            "object with exactly the key matches holding an array of rows. "
-            "A single-block row has exactly cue, block, quote; a group has exactly "
-            "cue, blocks, quotes. If ANY cue cannot be grounded, return "
-            "{\"matches\": []}. Never include extra keys, markdown, explanations, "
-            "fabricated labels, blocks, numbers or quotes."
+            "Cite every selected source block using at least eight verbatim "
+            "characters. If ANY cue cannot be grounded, return an empty matches "
+            "array. Never invent labels, blocks, numbers or source quotes."
         ),
         "slide": slide,
         "unresolved_cues": [{"cue": n, "spoken": text[:600]} for n, text in missing],
         "source_blocks": [{"block": i, "text": row[1]} for i, row in enumerate(blocks, 1)],
-        "output_contract": {
-            "single_element": {"cue": 1, "block": 1, "quote": "exact visible text"},
-            "multi_element": {
-                "cue": 2, "blocks": [2, 3],
-                "quotes": ["exact text from block 2", "exact text from block 3"],
-            },
-        },
     }
     response = call_with_client_failover(
         create_gemini_client,
         lambda client: client.models.generate_content(
             model="gemini-3.8-flash",
             contents=json.dumps(prompt, ensure_ascii=False),
-            config={"temperature": 0, "response_mime_type": "application/json"},
+            config={
+                "temperature": 0,
+                "response_mime_type": "application/json",
+                # Use provider-native constrained decoding to prevent
+                # predictable response-shape errors before the existing
+                # deterministic normalizer / original-PDF validator run.
+                "response_json_schema": SEMANTIC_RESPONSE_JSON_SCHEMA,
+            },
         ),
         label=f"MicroGen semantic cue screen slide {slide}",
         max_retries=0,
