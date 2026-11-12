@@ -1,7 +1,8 @@
 """Opt-in, crash-safe *private* Flash-Lite TTS producer for measured element cues.
 
-One whole-lecture render_batch() provides consistent fallback engine/voice.
-All cue chunks are concatenated as PCM, SHA-bound to slide text and PDFs,
+One whole-lecture render_batch() provides single-engine, consistent-voice
+Gemini 3.8 Flash-Lite TTS, Gemini 3.8 Flash fallback, and only after both
+fail a bounded, owner-authorized Google Cloud Chirp 3 fallback. All cue chunks are concatenated as PCM, SHA-bound to slide text and PDFs,
 then staged and verified before any output is installed. Existing WAVs and
 receipts are never overwritten. No local model, ASR, or publication.
 """
@@ -245,11 +246,36 @@ def produce_measured_cue_audio(stage: Path, *, speak=None) -> dict:
     with tempfile.TemporaryDirectory(prefix=".microgen-cue-tts-",
                                      dir=str(stage)) as temp_dir:
         scratch=Path(temp_dir)
+        # The standing owner contract authorizes TTS as required by private
+        # content generation. Cloud is only the FINAL whole-batch fallback,
+        # and only if a finite character ceiling was signed into the private
+        # provider scope. Standalone/direct calls remain Gemini-only unless
+        # the same bounded Cloud settings are explicitly supplied.
+        cloud_allowed=(os.environ.get("MICROGEN_TTS_ENABLE_CLOUD_FALLBACK")=="1")
+        if cloud_allowed:
+            cap=os.environ.get(
+                "MICROGEN_TTS_CLOUD_FALLBACK_MAX_CHARACTERS","").strip()
+            if not cap.isdigit() or int(cap)<1:
+                raise CueTTSError("Cloud fallback lacks a finite source-bound budget")
+            if sum(len(text) for text in texts)>int(cap):
+                # Cloud has insufficient consent for this long transcript,
+                # but both Gemini 3.8 choices remain fully usable.
+                cloud_allowed=False
+                print("[tts] Cloud-only character budget below source cue "
+                      "inventory; preserving Gemini 3.8 primary/fallback "
+                      "without paid Cloud calls",flush=True)
         report=render_batch(texts,scratch/"ready",voice=voice,
-                            allow_cloud=False,speak=speak)
+                            allow_cloud=cloud_allowed,speak=speak)
         model,provider,actual_voice=report["model"],report["engine"],report["voice"]
-        if (provider not in ("gemini_flash_lite_tts","gemini_flash_tts") or
-                actual_voice!=voice):
+        authorized={
+            "gemini_flash_lite_tts": ("gemini-3.8-flash-lite-tts",voice),
+            "gemini_flash_tts": ("gemini-3.8-flash-tts",voice),
+        }
+        if cloud_allowed:
+            authorized["google_cloud_chirp3"]=(
+                "chirp3-hd",f"en-US-Chirp3-HD-{voice}")
+        if (provider not in authorized
+                or (model,actual_voice)!=authorized[provider]):
             raise CueTTSError("Cue batch returned unauthorized voice/provider")
         prepared=scratch/"prepared"
         prepared.mkdir()

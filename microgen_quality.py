@@ -599,6 +599,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         # contain only the legacy TTS entrypoint. Fingerprint optional code
         # modules when actually staged; never require fabricated files.
         for candidate in ("microgen_flash_tts.py",
+                          "microgen_private_dev_policy.py",
+                          "microgen_campaign_authorization.py",
                           "microgen_tts_provenance.py",
                           "microgen_timed_cue_tts.py",
                           "microgen_timed_cue_planner.py",

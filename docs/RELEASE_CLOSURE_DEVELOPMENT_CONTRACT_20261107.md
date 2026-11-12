@@ -1,8 +1,14 @@
 # MicroGen_AI — Release Closure Development Contract
 
-**Version:** 1.0 · **Effective:** 7 November 2026 (Asia/Kuala_Lumpur)
+**Version:** 1.1 · **Effective:** 7 November 2026 (Asia/Kuala_Lumpur)
 **Project:** original Gemini-API `tlyoon/MicroGen_AI`, not Selenium `MicroGen_AI_Web`.
 **Mode:** RELEASE CLOSURE (default for all subsequent project-development invocations).
+
+**Owner amendment (12 November 2026):** Standing autonomous HP private G2/TTS
+development authorization, contract version **1.1**. This amendment governs
+conflicting earlier statements requiring renewed human approval for ordinary
+private content/TTS generation. It does not grant publication rights or
+unlimited paid provider usage.
 
 ## 1. Authority, precedence, and objective
 
@@ -97,8 +103,9 @@ for the same routine approval. A safe stop is not a successful full lecture.
   lecture-TTS choice; same speaker/provider across each complete generated
   lesson, with the established Gemini Flash fallback. Preserve all formal
   provider-authorization and cost preflights. Google Cloud TTS is only a
-  separately authorized troubleshooting path or opt-in last-resort fallback,
-  never the implicit formal default.
+  separately scoped troubleshooting path or the owner's standing finite
+  last-resort fallback **after both Gemini 3.8 TTS choices fail**; never the
+  formal default, never an unbudgeted or mixed-provider lecture.
 - **Cost/privacy:** keep source PDFs and generated textbook media private,
   do not expose credentials, never commit private content. Restrict billable
   work to existing authorization and explicit bounded case/request budgets;
@@ -761,3 +768,107 @@ draft PR #291, not merged main), G2 BLOCKED pending a newly and
 explicitly bounded real-provider campaign with independent acoustic
 and decoded video acceptance, G3 NOT VERIFIED, G4 NOT READY. Do not
 reclassify CI or local simulation success as a live G2 pass.
+
+
+## Owner Amendment v1.1 — 12 November 2026: autonomous private development and TTS
+
+**This supersedes contrary historical approvals clauses**, including the
+earlier wording that required a new manual `--authorize-provider-usage`
+for every new bounded HP G2 campaign. The owner explicitly authorizes
+autonomous ordinary development and required private lecture TTS. The
+implementation and source of truth are
+`microgen_private_dev_policy.py`,
+`microgen_campaign_authorization.py`,
+`microgen_batch.py`,
+`microgen_flash_tts.py` and `microgen_timed_cue_tts.py`,
+with production-path regression tests. Text alone is not an implementation.
+
+### A. No manual intervention for authorized development
+
+No approval or human review shall be requested at individual figure, slides,
+script, cue-mapping, science QA, TTS, acoustic QA or video stages. The owner
+standing grant allows the **normal** HP `microgen_batch.py` invocation to
+freeze a new private G2 or bounded TTS campaign without supplying
+`--authorize-provider-usage`, provided ALL the conditions hold:
+
+- The authorized host is HP and the repository is the original
+  `MicroGen_AI` checkout, not `MicroGen_AI_Web`.
+- Exactly one source subsection per new work root, stage endpoint
+  `tts` or `acceptance`, private under the local MicroGen checkpoint root;
+  no multipart expansion, public upload, source overwrite, or distribution.
+- One first-use standing campaign **per original-source SHA256 plus exact
+  Git commit**, across work-root renames or ChatGPT session changes, guarded
+  by an **exclusive, durable local ledger**. The source, commit, voice,
+  provider choices, Cloud ceiling and retry limits are frozen in the usual
+  authorization receipt. A terminal failed stage is never silently replayed.
+- Stage retry budget **0** for standing mode; existing finite per-model
+  fallback/queue attempts and Gemini API-key failover remain bounded. A
+  changed source, host, code, model, provider, text or voice invalidates
+  earlier acceptance. No fresh provider retry is inferred from a new chat.
+- Unknown host, arbitrary account/provider, unbounded job, non-G2 endpoint,
+  already-spent source/commit pair, ambiguous potentially billed operation,
+  unsafe file, and external publication remain fail-closed; they do not
+  trigger a manual approval loop inside the authorized development pipeline.
+  They do not count as successful lecture completion.
+
+Previously authorized exact-scope resumes are automatic. This amendment is
+the owner's standing authorization **within these finite limits**, not a
+permission for unlimited paid API requests or an override of provider
+service/usage policies.
+
+### B. Formal TTS, model order and permitted fallback
+
+When real lecture content requires speech, the private G2 pipeline **must
+attempt authorized TTS autonomously**, subject to the verified cue plan and
+existing source/voice/acoustic/visual QA. The authoritative default order is:
+
+1. **Primary: Gemini 3.8 Flash-Lite TTS**, ID
+   `gemini-3.8-flash-lite-tts`, voice `Kore`.
+2. **First fallback: Gemini 3.8 Flash TTS**, ID
+   `gemini-3.8-flash-tts`, same voice `Kore`, only if the first fails.
+3. **Last-resort fallback only: Google Cloud Chirp 3 HD**,
+   voice name `en-US-Chirp3-HD-Kore`, only after both Gemini choices fail,
+   with valid existing Cloud credentials and a source-bound maximum of
+   **40,000 attempted input characters per private campaign**.
+   The Cloud fallback is now covered by this standing owner grant; no
+   repeated manual confirmation is required. If the source text exceeds
+   its Cloud budget, Gemini synthesis remains allowed while Cloud is
+   disabled for that batch.
+
+No Cloud TTS as a primary default. No mixing Gemini and Google Cloud
+speech **inside one accepted lecture**. On provider failure, start a
+**whole-lecture single-provider candidate**, preserving unmodified old
+source and outputs until all PCM, source/WAV, voice and timing checks pass.
+Cloud narration is not claimed acoustically identical to Gemini simply
+because the speaker names correspond; independent acoustic QA is mandatory.
+The TTS queue has **two finite attempts per cue/provider** in standing mode.
+A fallback is not a way to hide non-speech, source drift, scientific
+inconsistency, mixed voice or unknown model access.
+
+### C. Verification and gate disposition
+
+Proof of implementation requires a source-free production-entrypoint test
+with **no approval flag** and exact provider-scope receipt/ledger, a
+same-source/commit duplicate refusal, terminal replay refusal, host/retry
+scope rejection, the correct 3.8 model and voice order, complete
+Gemini-to-Cloud failover, no mixed-provider WAVs, bounded Cloud attempts,
+and source/voice provenance checks. Also require the full HP Windows
+pytest suite and Windows-only GitHub Python 3.11/3.12 CI for the exact
+pushed SHA.
+
+This amendment removes **repeated approval as a development blocker**.
+It does NOT transform previously failed G2 media into a pass. G1 needs
+code integration; G2 still needs newly generated real-source private
+timed audio, independent acoustic QA and synchronized video receipts;
+G3/G4 remain separate release gates.
+
+
+**Security binding for standing consent (owner record, installed on HP):**
+The no-manual-development grant is usable only when the private, non-Git
+`%LOCALAPPDATA%\\MicroGen_AI_Checkpoints\\.microgen_owner_private_development_consent.json`
+matches `microgen_private_dev_policy.OWNER_CONSENT_RECORD` exactly.
+The owner authorized its creation in this session. The record has no
+credentials, source text, API tokens or personal account identifiers.
+A Git clone, missing/tampered private record or other PC must fail before
+billed requests. Resume of an exact granted campaign works without repeating
+this installation, but a prior terminal paid failure still cannot replay.

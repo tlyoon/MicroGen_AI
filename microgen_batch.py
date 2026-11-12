@@ -1193,7 +1193,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--stop-after", choices=STAGES[:-1],
                     help="Stage-bounded isolated campaign: stop after this verified stage, NEVER publish to source-root.")
     ap.add_argument("--authorize-provider-usage", action="store_true",
-                    help="Explicitly allow Gemini/Cloud TTS requests in a bounded --stop-after campaign.")
+                    help="Authorize a non-standing bounded provider scope. "
+                         "Owner-approved HP single-source PRIVATE G2/TTS "
+                         "development is authorized automatically with "
+                         "finite per-commit ledger and no stage prompts.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
@@ -1248,6 +1251,30 @@ def main() -> int:
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
+    # Owner standing instruction (12 Nov 2026): ordinary private G2/TTS
+    # development must not pause for repeated human authorizations. This
+    # only applies to one HP-local source, acceptance/TTS endpoint, clean
+    # new campaign work root, exact source/commit, and finite zero retries.
+    # It does not cover unbounded jobs, publication, or replay of a failure.
+    args.standing_private_development = False
+    if (len(targets) == 1
+            and args.stop_after in {"tts", "acceptance"}
+            and not args.authorize_provider_usage):
+        from microgen_private_dev_policy import (
+            eligible_private_development, freeze_standing_environment,
+        )
+        if eligible_private_development(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, stop_after=args.stop_after,
+            stage_retries=0, multipart=args.multipart,
+        ):
+            args.standing_private_development = True
+            args.stage_retries = 0
+            freeze_standing_environment()
+            print("[batch] autonomous HP private development scope selected; "
+                  "Gemini 3.8 Flash-Lite/Kore primary, 3.8 Flash fallback, "
+                  "Cloud fallback last and character-budgeted; no manual "
+                  "stage approval or publication", flush=True)
     if args.lease_bucket:
         raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
     if args.check_assignments and not args.multi_pc:
@@ -1286,6 +1313,8 @@ def main() -> int:
                         stage_retries=args.stage_retries,
                         multipart=args.multipart,
                         explicit_authorization=args.authorize_provider_usage,
+                        standing_private_development=(
+                            args.standing_private_development),
                     )
                 except BoundedCampaignAuthorizationError as exc:
                     raise SystemExit(str(exc)) from exc
