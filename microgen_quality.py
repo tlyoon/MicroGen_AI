@@ -336,6 +336,16 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if (stage / ".microgen_verified_upstream_import.json").is_file():
+        from microgen_verified_upstream_reuse import verify_import_receipt
+        try:
+            imported = verify_import_receipt(stage)
+        except (OSError, RuntimeError) as exc:
+            raise QualityError(f"Source-bound upstream import invalid: {exc}") from exc
+        result["verified_upstream_import_receipt_sha256"] = (
+            imported["receipt_sha256"]
+        )
+        result["verified_upstream_import_stages"] = imported["stages"]
     if source_caption_provenance is not None:
         result["source_caption_vector_recovery_receipt_sha256"] = (
             source_caption_provenance["receipt_sha256"]
@@ -387,6 +397,15 @@ def published_manifest_valid(dest: Path) -> bool:
         for name, digest in figure_sha256.items():
             if sha256(dest / name) != digest:
                 return False
+        if "verified_upstream_import_receipt_sha256" in data:
+            filename = ".microgen_verified_upstream_import.json"
+            if sha256(dest / filename) != data["verified_upstream_import_receipt_sha256"]:
+                return False
+            from microgen_verified_upstream_reuse import verify_import_receipt
+            receipt = verify_import_receipt(dest)
+            if (receipt is None
+                    or receipt["stages"] != data.get("verified_upstream_import_stages")):
+                return False
         if "source_caption_vector_recovery_receipt_sha256" in data:
             name = ".microgen_source_caption_vector_recovery.json"
             if sha256(dest / name) != data["source_caption_vector_recovery_receipt_sha256"]:
@@ -431,6 +450,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         raise QualityError("Case-insensitive duplicate figure names in publication manifest")
     files = ["slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"]
     files += sorted(set(info.get("figure_sha256", {})))
+    if info.get("verified_upstream_import_receipt_sha256"):
+        files.append(".microgen_verified_upstream_import.json")
     if info.get("source_caption_vector_recovery_receipt_sha256"):
         files.append(".microgen_source_caption_vector_recovery.json")
     if info.get("figure_composition_receipt_sha256"):
@@ -588,6 +609,12 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     if name in {"slides", "science_qa", "acceptance", "published"}:
         if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
             inputs.append(".microgen_source_caption_vector_recovery.json")
+    if name in {"science_qa", "tts", "acoustic_qa", "video",
+                "acceptance", "published"}:
+        if (stage / ".microgen_verified_upstream_import.json").is_file():
+            from microgen_verified_upstream_reuse import verify_import_receipt
+            verify_import_receipt(stage)
+            inputs.append(".microgen_verified_upstream_import.json")
     if name == "narration" and (stage/"microgen_narration_batch.py").is_file():
         # The live v13 narrator delegates all resume/cache identities to
         # this shared helper. Its changes must invalidate a saved narration

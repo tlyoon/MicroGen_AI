@@ -941,6 +941,32 @@ def preflight_private_timed_acceptance(stage: Path) -> dict:
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     if lease is not None:
         lease.assert_held()
+    if (getattr(args, "standing_private_development", False)
+            and getattr(args, "bounded_provider_scope_verified", False)
+            and getattr(args, "stop_after", None) == "acceptance"
+            and not (args.work_root / subchapter).exists()):
+        # An accepted source-PDF/slide/narration/science checkpoint must
+        # not trigger another 20-minute paid generation merely because the
+        # subsequent cue/TTS planner changed. Import only independently
+        # reverified upstream stages from an owner-authorized earlier HP
+        # campaign. No old WAV, failed TTS attempt or approval is copied.
+        from microgen_verified_upstream_reuse import (
+            maybe_import_verified_upstream,
+        )
+        import_evidence = maybe_import_verified_upstream(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, subchapter=subchapter,
+            source_file=source_for(args.source_root, subchapter),
+            dest=destination_for(args.source_root, subchapter),
+            commit=args.commit, source_wait=args.source_wait,
+            prepare_stage=prepare_stage, stage_valid=stage_valid,
+            mark_complete=mark_complete, quality=quality,
+        )
+        if import_evidence:
+            print(f"[{subchapter}] source-bound upstream resume "
+                  f"{import_evidence['stages']} from prior verified "
+                  f"private campaign {import_evidence['from']}; "
+                  "no old TTS/failed provider stage imported", flush=True)
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,

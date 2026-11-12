@@ -438,9 +438,18 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                         raise CuePlanningError("Bounded semantic slide budget exceeded")
                     from microgen_cue_semantic_mapping import (
                         validate_matches, SemanticMappingError,
+                        repair_numbered_heading_body_pair,
                     )
                     try:
                         choices = semantic_resolver(slide_no, unresolved, blocks)
+                        # Gemini may cite a question/answer's genuine body
+                        # but omit its immediately preceding "Question N:"
+                        # or "Answer N:" heading, or vice versa. Recover
+                        # only an independently UNIQUE, lexically supported
+                        # adjacent two-block pair in the actual source PDF.
+                        # The unchanged numeric and quote gates run afterward.
+                        choices = repair_numbered_heading_body_pair(
+                            choices, unresolved, blocks)
                         verified = validate_matches(choices, unresolved, blocks)
                     except (SemanticMappingError, ValueError, KeyError) as exc:
                         raise CuePlanningError(

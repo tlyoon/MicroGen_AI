@@ -171,6 +171,109 @@ def exact_math_source_block(spoken: str, blocks: list[tuple]) -> int | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def repair_numbered_heading_body_pair(
+    matches: object, missing: list[tuple[int, str]], blocks: list[tuple],
+) -> object:
+    """Recover an explicit *Question N / Answer N + adjacent source body*.
+
+    A model may quote only a printed numbered question/answer heading or
+    only its following body, although the narrated cue combines the number
+    and physical content. The only repair is a UNIQUE, same-kind two-block
+    source-PDF pair with a matching "Question N:" or "Answer N:" heading and
+    its immediately adjacent, lexically corroborated body. Original model
+    quotes must already belong to these exact regions. Never invent a
+    number, infer an equation, join different problems, change the source
+    speech, or treat this as academic certification. Independent PDF, cue,
+    audio and highlight validators remain mandatory.
+    """
+    if not isinstance(matches, list) or len(matches) != len(missing):
+        return matches
+    required = dict(missing)
+    repaired = []
+    for row in matches:
+        if (not isinstance(row, dict)
+                or type(row.get("cue")) is not int
+                or row["cue"] not in required):
+            return matches
+        spoken = required[row["cue"]]
+        ordinal = re.search(
+            r"\b(question|answer)\s+([1-9]\d{0,2})\b", spoken, re.I)
+        if not ordinal:
+            repaired.append(row)
+            continue
+        kind, num = ordinal.group(1), ordinal.group(2)
+        pair_headers = [
+            i for i, block in enumerate(blocks[:-1])
+            if re.match(
+                r"^\s*" + re.escape(kind) + r"\s+" +
+                re.escape(num) + r"\s*:",
+                str(block[1]), re.I
+            )
+        ]
+        if len(pair_headers) != 1:
+            repaired.append(row)
+            continue
+        header = pair_headers[0]
+        body = header + 1
+        header_text = str(blocks[header][1])
+        body_text = str(blocks[body][1])
+        if (len(body_text) < 20
+                or not numbers(spoken).issubset(
+                    numbers(header_text + " " + body_text))):
+            repaired.append(row)
+            continue
+        # A mathematical / verbal match is necessary; proximity and a
+        # question number alone cannot justify selecting a random block.
+        words = lambda text: set(re.findall(r"[a-z]{4,}", text.casefold()))
+        shared_body = words(spoken) & words(body_text)
+        if len(shared_body) < 3:
+            repaired.append(row)
+            continue
+        fields = set(row)
+        if fields == {"cue", "block", "quote"}:
+            selected, given_quotes = [row["block"]], [row["quote"]]
+        elif fields == {"cue", "blocks", "quotes"}:
+            selected, given_quotes = row["blocks"], row["quotes"]
+        else:
+            repaired.append(row)
+            continue
+        if (not isinstance(selected, list)
+                or not isinstance(given_quotes, list)
+                or len(selected) != len(given_quotes)
+                or not selected
+                or any(type(s) is not int or s not in (header + 1, body + 1)
+                       for s in selected)
+                or any(not isinstance(q, str)
+                       or not 8 <= len(q) <= 200
+                       or len(compact(q)) < 8
+                       or compact(q) not in compact(blocks[s-1][1])
+                       for s, q in zip(selected, given_quotes))):
+            repaired.append(row)
+            continue
+        # Generate only authentic contiguous PDF-source substrings. The
+        # subsequent general validator independently checks both citations.
+        a, b = header_text[:160].strip(), body_text[:160].strip()
+        if (not 8 <= len(a) <= 200 or not 8 <= len(b) <= 200
+                or len(compact(a)) < 8 or len(compact(b)) < 8):
+            repaired.append(row)
+            continue
+        if selected != [header + 1, body + 1]:
+            print("[semantic source] unique numbered heading/body "
+                  f"pair recovered for cue {row['cue']}; original-PDF "
+                  "numeric/quote checks still required", flush=True)
+        repaired.append({
+            "cue": row["cue"],
+            "blocks": [header + 1, body + 1],
+            "quotes": [a, b],
+        })
+    return repaired
+
+
+# Compatibility alias for source-grounded question-pair tests; the shared
+# normal planner invokes the generalized question/answer implementation.
+repair_question_heading_body_pair = repair_numbered_heading_body_pair
+
+
 def validate_matches(matches: object, missing: list[tuple[int, str]],
                      blocks: list[tuple]) -> dict[int, tuple[tuple[int, ...], tuple[str, ...]]]:
     """Validate ALL cue proposals against original immutable PDF text blocks.
