@@ -17,6 +17,13 @@ from microgen_tts_risk_register import find_pronunciation_risks
 
 @pytest.mark.parametrize("raw, fragment", [
     ("The acceleration a x, is defined here.", "acceleration ay ex,"),
+    ("The instantaneous acceleration a x as the limit appears.",
+     "acceleration ay ex as the limit"),
+    ("Later a x becomes negative.", "ay ex becomes negative."),
+    ("The velocity and a x both vanish.", "ay ex both vanish."),
+    ("A velocity increment delta v x equal to minus 10 t.",
+     "delta vee ex equal to minus 10 t"),
+    ("At time t C where the slope changes.", "time tee see where"),
     ("Velocity v x versus t.", "velocity vee ex versus tee."),
     ("Position d x over d t.", "position dee ex over d t."),
     ("Use d squared x over d t squared.", "dee squared ex over d t squared"),

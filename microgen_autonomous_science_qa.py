@@ -26,6 +26,34 @@ MAX_SOURCE_CHARS = 200_000
 MAX_NARRATION_CHARS = 100_000
 MAX_CORRECTIONS = 3
 
+# Reuse the production Gemini-native structured response technique from
+# the original source-grounded cue resolver (PR #291, 141c013). This only
+# constrains output format. It does NOT approve any scientific claim or
+# weaken _validate_review, original PDF source checks or second review.
+SCIENCE_REVIEW_RESPONSE_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {"reviews": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "slide": {"type": "integer"},
+            "status": {"type": "string",
+                       "enum": ["pass", "advisory", "error"]},
+            "issues": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "field": {"type": "string",
+                              "enum": ["slide", "narration"]},
+                    "observed_quote": {"type": "string"},
+                    "source_quote": {"type": "string"},
+                    "suggested_replacement": {"type": "string"},
+                },
+                "required": ["field", "observed_quote", "source_quote",
+                             "suggested_replacement"],
+            }},
+        }, "required": ["slide", "status", "issues"],
+    }}}, "required": ["reviews"],
+}
+
 
 class ScienceQAError(ValueError):
     """Generated lecture cannot pass current source-bound scientific review."""
@@ -91,7 +119,11 @@ def _review_prompt(source: list[str], slides: list[str], items: list[dict]) -> s
             "Mark an error only for a clear, source-contradicting statement.",
             "Do not flag differences in wording, supplementary teaching examples "
             "or legitimate rounding as errors without a clear contradiction.",
-            "Do not rewrite any file. Record advisory uncertainty honestly."
+            "Do not rewrite any file. Record advisory uncertainty honestly.",
+            "Narration TTS may spell out a mathematical variable for speech (e.g. "
+            "ex for x, tee for t, vee for v); that pronunciation spelling alone "
+            "is not a physics error. Still flag incorrect science, numerical "
+            "values, mathematical signs, unit or source contradictions."
         ],
         "source_pdf_pages": [
             {"page":i, "text":text} for i,text in enumerate(source,1)],
@@ -121,6 +153,7 @@ def _live_review(source: list[str], slides: list[str], items: list[dict]) -> dic
                 model=model, contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0, response_mime_type="application/json",
+                    response_json_schema=SCIENCE_REVIEW_RESPONSE_SCHEMA,
                     max_output_tokens=8192)),
             label="source-bound independent science QA")
     raw = (answer.text or "").strip()
@@ -168,6 +201,34 @@ def _grounded(candidate: str, corpus: str) -> bool:
     return len(candidate.strip()) >= 8 and " ".join(candidate.split()) in " ".join(corpus.split())
 
 
+def _spoken_correction_span(item: dict, original_quote: str) -> str:
+    """Map a model-verified narration quote into its actual TTS spoken form.
+
+    Recycle the reviewed-math-letter voice normalization instead of requiring
+    raw written 'v x' to be present in spoken 'vee ex'. Never infer a
+    correction from similarity: it must be an exact unique match in the
+    existing voice input, and a voice receipt must independently bind it.
+    """
+    spoken = item.get("tts_text") or item["narration"]
+    if spoken.count(original_quote) == 1:
+        return original_quote
+    proof = item.get("tts_math_voice_preflight")
+    if (not isinstance(proof, dict) or proof.get("schema_version") != 1
+            or proof.get("phoneme_certified") is not False
+            or proof.get("publication_allowed") is not False
+            or proof.get("unresolved_source_risk_count") != 0
+            or proof.get("voice_input_sha256") !=
+            hashlib.sha256(spoken.encode("utf8")).hexdigest()):
+        raise ScienceQAError("Unbound mathematical voice rendering in source correction")
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    from text_to_speech_v25 import normalize_scientific_speech
+    alternative = normalize_scientific_speech(
+        reviewed_math_voice(original_quote))
+    if alternative == original_quote or spoken.count(alternative) != 1:
+        raise ScienceQAError("Ambiguous mathematical spoken quote correction")
+    return alternative
+
+
 def _plan_corrections(rows: list[dict], source: list[str],
                       slides: list[str], items: list[dict]) -> list[tuple[int,str,str,str]]:
     ops = []
@@ -186,10 +247,9 @@ def _plan_corrections(rows: list[dict], source: list[str],
                 raise ScienceQAError("Unsupported or ungrounded scientific correction")
             if field == "narration":
                 if (not _grounded(quoted, items[i]["narration"])
-                    or not _grounded(quoted, items[i].get("tts_text") or items[i]["narration"])
-                    or items[i]["narration"].count(quoted) != 1
-                    or (items[i].get("tts_text") or items[i]["narration"]).count(quoted) != 1):
+                    or items[i]["narration"].count(quoted) != 1):
                     raise ScienceQAError("Ambiguous narration correction")
+                _spoken_correction_span(items[i], quoted)
             elif field == "slide":
                 from microgen_autonomous_slide_repair import _safe_text
                 if (not _safe_text(quoted) or not _safe_text(replacement)
@@ -210,10 +270,27 @@ def _candidate_changes(sidecar: dict, script: str,
         item = data["slides"][i]
         if script.count(old) != 1:
             raise ScienceQAError("Narration text not uniquely located in script.txt")
-        if "tts_text" not in item or old not in item["tts_text"]:
+        if "tts_text" not in item:
             raise ScienceQAError("Cannot synchronize TTS text with revised narration")
+        tts_old = _spoken_correction_span(item, old)
+        if tts_old == old:
+            tts_new = new
+        else:
+            from microgen_reviewed_math_voice import reviewed_math_voice
+            from text_to_speech_v25 import normalize_scientific_speech
+            tts_new = normalize_scientific_speech(reviewed_math_voice(new))
+        new_voice = item["tts_text"].replace(tts_old, tts_new, 1)
+        proof = item.get("tts_math_voice_preflight")
+        if proof is not None:
+            from microgen_reviewed_math_voice import voice_input_risk_status
+            from text_to_speech_v25 import normalize_scientific_speech
+            checked = voice_input_risk_status(
+                new_voice, normalize_scientific_speech)
+            if checked["unresolved_source_risk_count"]:
+                raise ScienceQAError("Corrected source still has unsafe voice notation")
+            item["tts_math_voice_preflight"] = checked
         item["narration"] = item["narration"].replace(old, new, 1)
-        item["tts_text"] = item["tts_text"].replace(old, new, 1)
+        item["tts_text"] = new_voice
         script = script.replace(old, new, 1)
     return data, script
 

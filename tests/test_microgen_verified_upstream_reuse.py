@@ -270,3 +270,143 @@ def test_unreadable_prior_narration_never_silently_imports_science_proof(tmp_pat
         (stage / "script_tts.json").write_text("not a JSON sidecar")
     with pytest.raises(reuse.UpstreamReuseError, match="Historical voice input malformed"):
         call_fixture(tmp_path, malformed_voice)
+
+
+def test_private_source_bound_response_cache_copied_without_tts_or_provider(
+    tmp_path,
+):
+    """A terminal old narration stage may donate verified returned responses,
+    NEVER a completed narration receipt, WAV or provider authorization.
+    """
+    base,repo,sources,source,old_work,old_stage,_=fixture(tmp_path)
+    target = base / "NEW_PRIVATE_CAMPAIGN" / "2.5"
+    target.mkdir(parents=True)
+    for name in reuse.FOUR_UPSTREAM:
+        pass
+    (target / "source.pdf").write_bytes(source.read_bytes())
+    (target / "slides.pdf").write_bytes((old_stage / "slides.pdf").read_bytes())
+    scripts = (
+        "gen_script_v13.py", "microgen_narration_batch.py",
+        "gen_script_prompt_v8_hybrid.md",
+    )
+    for name in scripts:
+        (old_stage / name).write_bytes(b"same-authentic-generator-contents")
+        (target / name).write_bytes(b"same-authentic-generator-contents")
+    folder = old_stage / ".microgen_narration_batches"
+    folder.mkdir()
+    payload = {
+        "key": "1" * 64,
+        "narration": {"slide_01": {
+            "narration": "Original source-confirmed mathematical explanation.",
+            "tts_text": "Original source-confirmed mathematical explanation.",
+        }},
+    }
+    (folder / "batch_0000.json").write_text(json.dumps(payload),encoding="utf8")
+    imported = reuse._copy_verifiable_narration_response_cache(
+        base,target,source_sha=sha(source.read_bytes()),
+        slides_sha=sha((target/"slides.pdf").read_bytes()))
+    assert imported["file_sha256"] == {
+        "batch_0000.json": sha((folder/"batch_0000.json").read_bytes())
+    }
+    assert imported["requires_exact_prompt_key_revalidation"] is True
+    assert (target/".microgen_narration_batches"/"batch_0000.json").read_bytes() == (
+        folder/"batch_0000.json").read_bytes()
+    assert not (target/"script_tts.json").exists()
+    assert not (target/"slide1.wav").exists()
+    assert not (target/".microgen_autonomous_science_qa.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ("source","slides","generator","key","link"))
+def test_mismatched_or_incomplete_cached_model_output_is_not_adopted(
+    tmp_path, mutation,
+):
+    base,repo,sources,source,old_work,old_stage,_=fixture(tmp_path)
+    target=base/"NEW_PRIVATE_CAMPAIGN"/"2.5"
+    target.mkdir(parents=True)
+    for name in ("source.pdf","slides.pdf"):
+        (target/name).write_bytes((old_stage/name).read_bytes())
+    for name in ("gen_script_v13.py","microgen_narration_batch.py",
+                 "gen_script_prompt_v8_hybrid.md"):
+        (old_stage/name).write_text("identical verified provider code")
+        (target/name).write_text("identical verified provider code")
+    old_cache=old_stage/".microgen_narration_batches"
+    old_cache.mkdir()
+    f=old_cache/"batch_0000.json"
+    f.write_text(json.dumps({"key":"1"*64,"narration":{
+        "slide_01":{"narration":"The verified original model narration"}}}))
+    if mutation=="source": (old_stage/"source.pdf").write_bytes(b"source drift")
+    if mutation=="slides": (old_stage/"slides.pdf").write_bytes(b"slide drift")
+    if mutation=="generator": (old_stage/"gen_script_v13.py").write_bytes(b"unsafe generator")
+    if mutation=="key": f.write_text(json.dumps({"key":"NOT_VALID","narration":{}}))
+    if mutation=="link":
+        f.unlink()
+        try:
+            f.symlink_to(old_stage/"source.pdf")
+        except (OSError,NotImplementedError):
+            pytest.skip("Symlinks unavailable on this Windows host")
+    result=reuse._copy_verifiable_narration_response_cache(
+        base,target,source_sha=sha(source.read_bytes()),
+        slides_sha=sha((target/"slides.pdf").read_bytes()))
+    assert result is None
+    assert not (target/".microgen_narration_batches").exists()
+
+
+def test_private_cached_response_digest_is_bound_to_import_receipt(tmp_path):
+    def risky(base,old_work,old_stage,source):
+        (old_stage/"script_tts.json").write_text(json.dumps({
+            "slides":[{"slide":1,"tts_text":"The variable y approaches zero."}]
+        }))
+    result,work,_=call_fixture(tmp_path,risky)
+    assert result and result["status"]==reuse.FOUR_STATUS
+    stage=work/"2.5"
+    cache=stage/".microgen_narration_batches"
+    cache.mkdir()
+    name="batch_0000.json"
+    payload=b'{"key":"112233","narration":{}}'
+    (cache/name).write_bytes(payload)
+    manifest=json.loads((stage/reuse.RECEIPT).read_text())
+    manifest["source_bound_narration_response_cache"]={
+        "requires_exact_prompt_key_revalidation":True,
+        "original_response_not_academic_qa":True,
+        "file_sha256":{name:sha(payload)},
+    }
+    (stage/reuse.RECEIPT).write_text(json.dumps(manifest))
+    assert reuse.verify_import_receipt(stage)
+    (cache/name).write_bytes(payload+b"drift")
+    with pytest.raises(reuse.UpstreamReuseError,match="Narration cache digest mismatch"):
+        reuse.verify_import_receipt(stage)
+
+
+def test_published_manifest_can_verify_cache_provenance_without_exporting_model_text(
+    tmp_path,
+):
+    """Published bundle carries SHA proof but never private cached replies."""
+    def risky(base,old_work,old_stage,source):
+        (old_stage/"script_tts.json").write_text(json.dumps({
+            "slides":[{"slide":1,"tts_text":"The variable y approaches zero."}]
+        }))
+    result,work,_=call_fixture(tmp_path,risky)
+    assert result and result["status"]==reuse.FOUR_STATUS
+    stage=work/"2.5"
+    cache=stage/".microgen_narration_batches"
+    cache.mkdir()
+    payload=b'{"key":"1","narration":{}}'
+    (cache/"batch_0000.json").write_bytes(payload)
+    receipt=json.loads((stage/reuse.RECEIPT).read_text())
+    receipt["source_bound_narration_response_cache"]={
+        "requires_exact_prompt_key_revalidation":True,
+        "original_response_not_academic_qa":True,
+        "file_sha256":{"batch_0000.json":sha(payload)}
+    }
+    (stage/reuse.RECEIPT).write_text(json.dumps(receipt))
+    assert reuse.verify_import_receipt(stage,require_cache=True)
+    published=tmp_path/"PUBLISHED_PROVENANCE_ONLY"
+    published.mkdir()
+    import shutil
+    for name in ("source.pdf","slides.pdf",reuse.RECEIPT,
+                 ".microgen_source_caption_vector_recovery.json"):
+        shutil.copy2(stage/name,published/name)
+    assert not (published/".microgen_narration_batches").exists()
+    assert reuse.verify_import_receipt(published,require_cache=False)
+    with pytest.raises(reuse.UpstreamReuseError,match="cache missing"):
+        reuse.verify_import_receipt(published,require_cache=True)

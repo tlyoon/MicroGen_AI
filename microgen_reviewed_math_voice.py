@@ -28,7 +28,7 @@ def reviewed_math_voice(text: str) -> str:
     # isolated English x, product name or arbitrary single-character word.
     value = re.sub(
         r"(?<![A-Za-z])(?P<var>[avd])\s+(?P<axis>[xy])\b"
-        r"(?=\s*(?:[,.:;!?]|$|(?:avg|over|versus|equals|is|at|of|and)\b))",
+        r"(?=\s*(?:[,.:;!?]|$|(?:avg|over|versus|equals?|is|at|of|and|as|becomes|both)\b))",
         lambda m: _COMPONENT[m["var"].lower()] + " " +
                   _NAMES[m["axis"].lower()],
         value,
@@ -53,7 +53,7 @@ def reviewed_math_voice(text: str) -> str:
     # Distinguish a symbolic point label C from "circa" only after
     # an explicit time-variable cue; leave historical abbreviations alone.
     value = re.sub(
-        r"\btime\s+t\s+C\b(?=\s*[,.;!?]|$)",
+        r"\btime\s+t\s+C\b(?=\s*(?:[,.;!?]|$|where\b))",
         "time tee see", value,
     )
     # Explicitly named component derivative and plot notation.

@@ -975,3 +975,47 @@ A genuinely safe prior voice sidecar still permits all six stages to be
 reused. Malformed historical evidence is refused rather than silently
 promoted. Both four- and six-stage receipts are hash-bound, source-bound,
 code-revision-bound and independently validated before downstream release.
+
+
+## 12 November 2026 — Reusable science/acoustic closure improvements
+
+The historical scientific QA and acoustic QA modules already enforce strict
+source quoting, independent re-review, model-key failover, model disagreement
+classification, bounded same-voice repairs and fail-closed provider budgets.
+These safeguards remain authoritative. Green offline tests do not establish
+real G2 independent QA acceptance.
+
+**New source-bound narration recovery:** A terminal narration campaign may
+preserve complete returned Gemini response batches even though its narrated
+voice-preflight failed. The regular private G2 importer may copy these
+records ONLY when the original PDF, slides, narration generator code and
+original prompt-template hashes match. It carries NO completed narration,
+science QA, TTS/acoustic receipt or authorization. Each original batch is
+then independently verified against the full current source+model+prompt
+request key inside the established generate_batched normal path. A drift
+or unrecognized request requires normal finite failure handling, never
+silent promotion. The 17-slide Serway 2.5 source shadow verified three
+batches reused and zero extra model calls. Raw cached model replies stay
+PRIVATE; published-manifest validation can verify their SHA manifest without
+exporting the raw cached responses.
+
+**Scientific reviewer format and spoken variable corrections:** Reuse the
+existing Gemini-native JSON schema method (141c013) to force structural
+17-slide scientific-review responses, without presupposing a pass. The
+original source-PDF, quote-containment, ordered review, strict issue schema
+and second model re-review rules still apply. For source-verified plain
+narration corrections, when the exact observed written quotation is absent
+from voice text solely due to previously reviewed math-letter expansion,
+the normal QA may locate the uniquely matching spoken equivalent only
+under a SHA-valid voice preflight receipt; otherwise it must fail closed.
+A correction updates visible narration, spoken TTS and its voice-input
+fingerprint atomically, then requires a fresh independent source recheck.
+Unsafe/fabricated numerical corrections, non-source citations, duplicate
+matches and unbound spoken mappings remain prohibited.
+
+**Acoustic stage unchanged in its academic gate:** The existing independent
+two-model ASR assessment, bounded repair rules, source-risk safeguards and
+no-replay authorizations remain mandatory; a pre-TTS reduction in predictable
+letter-name risks is only a source-input screen, never acoustic certification.
+Only real independent science, acoustic and decoded visual/video receipts
+can close G2. Publish/merge remains separate from private acceptance.

@@ -402,7 +402,7 @@ def published_manifest_valid(dest: Path) -> bool:
             if sha256(dest / filename) != data["verified_upstream_import_receipt_sha256"]:
                 return False
             from microgen_verified_upstream_reuse import verify_import_receipt
-            receipt = verify_import_receipt(dest)
+            receipt = verify_import_receipt(dest, require_cache=False)
             if (receipt is None
                     or receipt["stages"] != data.get("verified_upstream_import_stages")):
                 return False

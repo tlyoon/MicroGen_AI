@@ -77,8 +77,8 @@ def _safe_filetree(root: Path) -> None:
             raise UpstreamReuseError("Source reuse exceeds bounded private scratch budget")
 
 
-def verify_import_receipt(stage: Path) -> dict | None:
-    """Verify portable source/deck/commit proof, independent of old workroot."""
+def verify_import_receipt(stage: Path, *, require_cache: bool = True) -> dict | None:
+    """Verify source/deck proof; private model response cache is not published."""
     stage=Path(stage)
     path=stage/RECEIPT
     if not path.exists():
@@ -106,6 +106,36 @@ def verify_import_receipt(stage: Path) -> dict | None:
     if vector_sha and (vector_receipt.is_symlink() or not vector_receipt.is_file()
                        or _sha(vector_receipt) != vector_sha):
         raise UpstreamReuseError("Imported source-caption provenance drifted")
+    cached = data.get("source_bound_narration_response_cache")
+    if cached is not None:
+        if (expected != FOUR_STATUS or not isinstance(cached, dict)
+                or cached.get("requires_exact_prompt_key_revalidation") is not True
+                or cached.get("original_response_not_academic_qa") is not True):
+            raise UpstreamReuseError("Untrusted model response cache receipt")
+        manifest = cached.get("file_sha256")
+        if (not isinstance(manifest, dict)
+                or not 1 <= len(manifest) <= 40):
+            raise UpstreamReuseError("Incomplete source-bound batch response cache")
+        cache_folder = stage / ".microgen_narration_batches"
+        if require_cache:
+            # Working-stage acceptance requires every exact cached byte.
+            # The final published copy deliberately omits raw model replies;
+            # its signed manifest still binds this receipt and final script.
+            if cache_folder.is_symlink() or not cache_folder.is_dir():
+                raise UpstreamReuseError("Source-bound narration cache missing")
+            if {x.name for x in cache_folder.iterdir()} != set(manifest):
+                raise UpstreamReuseError("Narration cache inventory drift")
+        for name, digest in manifest.items():
+            if (not isinstance(name, str)
+                    or not re.fullmatch(r"batch_[0-9]{4}\.json", name)
+                    or not isinstance(digest, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+                raise UpstreamReuseError("Unsafe narration response cache manifest")
+            if require_cache:
+                file = cache_folder / name
+                if (file.is_symlink() or not file.is_file()
+                        or _sha(file) != digest):
+                    raise UpstreamReuseError("Narration cache digest mismatch")
     cp=_read_json(stage/".microgen_checkpoint.json")
     if cp is not None and cp.get("package_commit") != data.get(
             "current_code_revision"):
@@ -185,6 +215,98 @@ def _copy_evidence(old: Path, target: Path, *, stages=UPSTREAM) -> list[str]:
     return copied
 
 
+def _copy_verifiable_narration_response_cache(
+    checkpoint_root: Path, target: Path, *,
+    source_sha: str, slides_sha: str,
+) -> dict | None:
+    """Reuse only fully returned, original-source, same-generator model batches.
+
+    A failed narration *stage* must never be resumed as passed. A saved
+    successfully returned model response is instead an untrusted candidate
+    that the normal generate_batched() rechecks against the exact fresh
+    prompt/model/source request key before accepting. This avoids billed
+    repeats for already completed batches when ONLY downstream voice
+    normalization code changed. No previous script, QA or WAV is imported.
+    """
+    generation_files = (
+        "gen_script_v13.py", "microgen_narration_batch.py",
+        "gen_script_prompt_v8_hybrid.md",
+    )
+    sources = []
+    for entry in checkpoint_root.iterdir():
+        if (entry.is_symlink() or not entry.is_dir() or entry == target.parent
+                or entry.name.startswith(".")):
+            continue
+        auth = _read_json(entry / OWNER_RECEIPT)
+        if (auth is None or auth.get("schema_version") != 1
+                or auth.get("publication_authorized") is not False):
+            continue
+        scope = auth.get("scope", {})
+        if (not isinstance(scope, dict) or scope.get("host") != "hp"
+                or scope.get("stop_after") != "acceptance"
+                or scope.get("source_sha256") != source_sha):
+            continue
+        old = entry / target.name
+        cp = _read_json(old / ".microgen_checkpoint.json")
+        cache = old / ".microgen_narration_batches"
+        if (cp is None or cp.get("package_commit") != scope.get("code_revision")
+                or not cache.is_dir() or cache.is_symlink()
+                or not (old / "source.pdf").is_file()
+                or not (old / "slides.pdf").is_file()):
+            continue
+        try:
+            if (_sha(old / "source.pdf") != source_sha
+                    or _sha(old / "slides.pdf") != slides_sha
+                    or any(not (old / name).is_file()
+                           or (old / name).is_symlink()
+                           or _sha(old / name) != _sha(target / name)
+                           for name in generation_files)):
+                continue
+            names = sorted(cache.iterdir())
+            if not 1 <= len(names) <= 40:
+                continue
+            verified = {}
+            for path in names:
+                if (not path.is_file() or path.is_symlink()
+                        or not re.fullmatch(r"batch_[0-9]{4}\.json", path.name)
+                        or path.stat().st_size > 200000):
+                    raise UpstreamReuseError("Unsafe cached narration response")
+                row = _read_json(path)
+                key = row.get("key") if row else None
+                responses = row.get("narration") if row else None
+                if (not isinstance(key, str)
+                        or not re.fullmatch(r"[0-9a-f]{64}", key)
+                        or not isinstance(responses, dict)
+                        or not 1 <= len(responses) <= 20
+                        or any(not isinstance(item, dict)
+                               or not isinstance(item.get("narration"), str)
+                               or not item["narration"].strip()
+                               or not str(item.get("tts_text") or
+                                          item["narration"]).strip()
+                               for item in responses.values())):
+                    raise UpstreamReuseError("Untrusted cached narration row")
+                verified[path.name] = _sha(path)
+            sources.append((max(x.stat().st_mtime for x in names),
+                            entry.name, cache, verified))
+        except (OSError, ValueError, TypeError, KeyError, UpstreamReuseError):
+            continue
+    if not sources:
+        return None
+    sources.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    _, selected, cache, hashes = sources[0]
+    dest = target / ".microgen_narration_batches"
+    if dest.exists() or dest.is_symlink():
+        raise UpstreamReuseError("Narration cache destination already exists")
+    dest.mkdir()
+    for name, sha in hashes.items():
+        shutil.copy2(cache / name, dest / name)
+        if _sha(dest / name) != sha:
+            raise UpstreamReuseError("Source-bound narration cache drift")
+    return {"prior_private_workroot": selected, "file_sha256": hashes,
+            "original_response_not_academic_qa": True,
+            "requires_exact_prompt_key_revalidation": True}
+
+
 def maybe_import_verified_upstream(
     *, repo: Path, source_root: Path, work_root: Path,
     subchapter: str, source_file: Path, dest: Path, commit: str,
@@ -253,6 +375,11 @@ def maybe_import_verified_upstream(
         stage, cp, checkpoint_path = prepare_stage(
             repo, source_root, Path(temp_root), subchapter, source_wait, commit)
         copied = _copy_evidence(old, stage, stages=selected_stages)
+        reuse_cache = None
+        if selected_stages == FOUR_UPSTREAM:
+            reuse_cache = _copy_verifiable_narration_response_cache(
+                root, stage, source_sha=source_sha,
+                slides_sha=_sha(old / "slides.pdf"))
         for name in selected_stages:
             if not stage_valid(stage, name, dest):
                 raise UpstreamReuseError(
@@ -271,6 +398,7 @@ def maybe_import_verified_upstream(
             "current_code_revision": commit,
             "stages": list(selected_stages),
             "copied_items": copied,
+            "source_bound_narration_response_cache": reuse_cache,
             "new_audio_reused": False,
             "new_model_requests": False,
             "publication_allowed": False,
@@ -290,4 +418,6 @@ def maybe_import_verified_upstream(
         "from": old.parent.name,
         "stages": list(selected_stages),
         "audio_reused": False,
+        "cached_model_responses_reused": (
+            len(reuse_cache["file_sha256"]) if reuse_cache else 0),
     }
