@@ -1050,3 +1050,37 @@ reuse without provider calls. Previously consumed figure-mapping/G2
 campaigns remain terminal. Any new paid campaign needs a fresh, finite,
 source-and-code-bound authorization scope, and no publication occurs
 until actual acoustic and technical acceptance passes.
+
+
+### Source-attested preceding numerical-context recovery
+
+In the 17-slide Serway G2 campaign the independent scientific review
+passed, but timed-cue semantic mapping stopped before audio on slide 11:
+Gemini selected a short visible heading for a cue containing two explicit
+time values; the exact values were printed in the immediately preceding
+problem-statement block. Previous numbered Question/Answer and unique
+verbatim quote repairs were too narrow for this unnumbered heading pattern.
+
+The NORMAL `microgen_timed_cue_planner` now invokes
+`repair_preceding_numeric_context_heading` before the existing
+unchanged `validate_matches` gate. The repair may expand a single
+short, uniquely rendered, source-quoted heading to a contiguous
+predecessor+heading group ONLY if the spoken cue has at least TWO
+exact variable/value pairs, both are present verbatim in the preceding
+source-PDF block, the spoken cue lexically identifies the heading, and
+all spoken numerical claims remain source-supported. It carries the
+original source text as an exact additional quotation and must pass
+the independent final numerical, geometry, ordering, and PDF textbox
+verification. No invented quote, paraphrase, numeric approximation,
+unrelated or non-adjacent block is allowed. Absence of exact proof
+remains a terminal source-evidence hold; no unchanged paid retry.
+
+A private read-only replay of the exact failed PDF validated all three
+model-proposed numerical cues, including the recovered two-element
+region at 16.7% of the PDF page (<40% limit), using zero provider calls.
+Synthetic normal-planner and adversarial tests cover incorrect variables,
+mismatched decimals, nonunique headings and forged quotations.
+The prior one-use campaign remains terminal and its independent
+scientific QA result is preserved; a separate finite campaign can
+revalidate that SHA-bound QA receipt without repeating scientific
+review if the underlying implementation and inputs are unchanged.

@@ -352,6 +352,83 @@ def repair_unique_verbatim_quote_location(
     return result
 
 
+def _explicit_source_variable_values(text: str) -> set[tuple[str, str]]:
+    """Source-exact variable=number evidence; never approximate mathematics."""
+    return {
+        (m.group(1).casefold(), m.group(2))
+        for m in re.finditer(
+            r"\b([txyav])\s*(?:equals|=)\s*([+\-]?\d+(?:\.\d+)?)\b",
+            text, flags=re.IGNORECASE)
+    }
+
+
+def repair_preceding_numeric_context_heading(
+    matches: object, missing: list[tuple[int, str]], blocks: list[tuple],
+) -> object:
+    """Recover a model-selected heading whose numerical context is ABOVE it.
+
+    Reuses the established adjacent source-block repair contract, but only
+    when the spoken cue contains at least two EXACT explicit variable/value
+    equations printed in the immediately preceding source-PDF block. Both
+    blocks retain source-verbatim quotes; normal numeric, geometry and
+    ordering validators run AFTER this repair. Unrelated numerical formulas,
+    invented values, duplicated headings and non-adjacent matches still fail.
+    """
+    if not isinstance(matches, list) or len(matches) != len(missing):
+        return matches
+    needed = dict(missing)
+    repaired = []
+    for row in matches:
+        if (not isinstance(row, dict)
+                or set(row) != {"cue", "block", "quote"}
+                or type(row["cue"]) is not int
+                or type(row["block"]) is not int
+                or row["cue"] not in needed
+                or not 2 <= row["block"] <= len(blocks)
+                or not isinstance(row["quote"], str)):
+            repaired.append(row)
+            continue
+        index = row["block"]
+        heading = str(blocks[index-1][1]).strip()
+        preceding = str(blocks[index-2][1]).strip()
+        quoted = row["quote"]
+        spoken = needed[row["cue"]]
+        if (not heading.endswith(":") or len(heading) > 80
+                or not 8 <= len(quoted) <= 200
+                or compact(quoted) not in compact(heading)
+                or not 8 <= len(preceding) <= 200
+                or len(compact(preceding)) < 8
+                or numbers(spoken).issubset(numbers(heading))):
+            repaired.append(row)
+            continue
+        # A repeated heading cannot uniquely establish which problem
+        # statement the model meant to cite.
+        if sum(compact(heading) in compact(str(b[1])) for b in blocks) != 1:
+            repaired.append(row)
+            continue
+        cue_pairs = _explicit_source_variable_values(spoken)
+        printed_pairs = _explicit_source_variable_values(preceding)
+        if len(cue_pairs) < 2 or not cue_pairs.issubset(printed_pairs):
+            repaired.append(row)
+            continue
+        words = lambda s: set(re.findall(r"[a-z]{4,}", s.casefold()))
+        if not (words(heading) & words(spoken)):
+            repaired.append(row)
+            continue
+        if not numbers(spoken).issubset(numbers(preceding + " " + heading)):
+            repaired.append(row)
+            continue
+        repaired.append({
+            "cue": row["cue"],
+            "blocks": [index-1, index],
+            "quotes": [preceding, quoted],
+        })
+        print("[semantic source] recovered exact preceding numeric context "
+              f"for cue {row['cue']}; standard evidence checks required",
+              flush=True)
+    return repaired
+
+
 def source_quote_constrained_schema(blocks: list[tuple]) -> dict:
     """Constrain one existing Gemini request to actual source-PDF quote strings.
 

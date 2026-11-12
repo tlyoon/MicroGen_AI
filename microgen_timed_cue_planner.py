@@ -440,6 +440,7 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                         validate_matches, SemanticMappingError,
                         repair_numbered_heading_body_pair,
                         repair_unique_verbatim_quote_location,
+                        repair_preceding_numeric_context_heading,
                         persist_private_semantic_failure,
                     )
                     original_proposal = None
@@ -455,6 +456,8 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                         choices = repair_unique_verbatim_quote_location(
                             choices, unresolved, blocks)
                         choices = repair_numbered_heading_body_pair(
+                            choices, unresolved, blocks)
+                        choices = repair_preceding_numeric_context_heading(
                             choices, unresolved, blocks)
                         verified = validate_matches(choices, unresolved, blocks)
                     except (SemanticMappingError, ValueError, KeyError) as exc:
