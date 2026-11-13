@@ -1681,3 +1681,42 @@ archive as one candidate only to inspect its actual decoded frames. This
 is NOT a formal long-video pass. Private G2 must still re-run the genuine
 transactional two-or-more sub-600-second parts, independently decode all
 part-local cues, and produce an acceptance receipt before PASS.
+
+
+### 13 November 2026 — G3 cross-section narrated-notation recovery (general rule)
+
+The real Serway section 2.6 G3 attempt demonstrated a new *normal-path*
+source-mathematics pronunciation preflight failure at narration, before TTS:
+mathematical displacement/time increments such as **delta x**, and authentic
+numbered **figure-panel c** notation, can be ambiguously spoken by Flash TTS.
+It is not a source error and must not be resolved by silently replacing a
+coefficient, source PDF, mathematics or scholarly narration, loosening the
+independent Gemini acoustic QA, or manually editing a specific slide.
+
+The shared `microgen_reviewed_math_voice.reviewed_math_voice` now applies
+narrow, source-faithful *TTS-input-only* deterministic rules:
+`delta x` -> `delta ex`, `delta y` -> `delta why`,
+`delta t` -> `delta tee`; and actual numbered figure-panel references
+(e.g. `Figure 2 point 10 c`, `Figure 2.10c`, `Fig. 3.9a`)
+receive explicit `panel see`/`panel ay`, preserving all numbered identities.
+Unrelated letter names, coefficients, signs, exponents and figure numbers remain
+unchanged. The existing source risk detector and independent audio QA remain
+mandatory and are never converted to silent approvals.
+
+**No paid retry from an unchanged failed attempt:** its finite provider grant
+remains terminal. The existing production
+`microgen_verified_upstream_reuse` may, on a new exact committed code revision
+and bounded independent grant, import independently accepted four source-
+through-slide stages and **original model-generated narration batch replies**
+ONLY when original source SHA, slide PDF SHA, narrator generator/prompt code
+and exact model-prompt request keys revalidate. A failed narration stage and
+its source-sidecar/science/media receipts are NOT imported as accepted.
+Normal source voice polishing runs again without re-billing cached models.
+Any cache mismatch triggers normal bounded regeneration or a hold, never
+fake success.
+
+This class-level remediation was tested against the actual 13-slide G3 model
+narration cache and cleared all 3 original residual pronunciation-risk flags
+with zero model calls. Two general source-free regression suites passed 66 tests.
+G3 remains open until two additional genuine sources pass all mandatory QA,
+plus genuine long-media and source-hash-bound interruption recovery evidence.

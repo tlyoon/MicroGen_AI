@@ -43,6 +43,31 @@ def reviewed_math_voice(text: str) -> str:
         raise TypeError("TTS voice input must be text")
     value = text
 
+    # General physics displacement/time increments: the spoken source
+    # variables in "delta x", "delta y" and "delta t" are letter names,
+    # not English words. Correct only this explicit math-prefix context.
+    delta_names = {"x": "ex", "y": "why", "t": "tee"}
+    value = re.sub(
+        r"\bdelta\s+(?P<axis>[xyt])\b",
+        lambda m: "delta " + delta_names[m["axis"].lower()],
+        value, flags=re.IGNORECASE,
+    )
+    # Figure panels are not mathematical coefficients. Gemini may express
+    # an authentic printed reference Figure 2.10c as "Figure 2 point 10 c".
+    # Preserve exactly the numbered figure identity and speak the separate
+    # panel label explicitly; never rewrite an unrelated solitary c/C.
+    panel_names = {
+        "a": "ay", "b": "bee", "c": "see",
+        "d": "dee", "e": "ee", "f": "eff",
+    }
+    value = re.sub(
+        r"\b(?P<figure>(?:figure|fig\.?)\s+\d+\s*(?:point|\.)\s*\d+)"
+        r"\s*(?P<panel>[a-f])\b",
+        lambda m: m["figure"] + " panel " +
+                  panel_names[m["panel"].lower()],
+        value, flags=re.IGNORECASE,
+    )
+
     # Printed a_x, v_x and d x/d t frequently arrive as "a x", "v x",
     # "d x over d t" in model-generated narration. Do not rewrite an
     # isolated English x, product name or arbitrary single-character word.

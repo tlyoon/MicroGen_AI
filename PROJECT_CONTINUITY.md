@@ -505,3 +505,50 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   fresh source/SHA-bound private G2 (reuse audio and original Gemini blind
   transcripts only), then genuine sub-600-second video part QA and final
   source-grounded acceptance. Keep media unpublished; G2 still open.
+
+
+## 13 Nov 2026 22:45 MYT — G3 advance, genuine first-source failure and reusable fix
+
+- G2 baseline **PASS** at commit ad7467835d2233679542eb158b3174d0af644104.
+  G3 contractual criteria: two additional real-source accepted subsections;
+  one combined media >=600 s split into verified <600-s parts; one real-media
+  bounded interruption/resume/fault-injection recovery proof.
+- Selected Serway section 2.6 SHA
+  5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032
+  (2 original source PDF pages), and section 2.7 SHA
+  03676ed9dc5ded9e07874902c5e2d3689d4293cdc086b9819003770310293102
+  (5 original PDF pages). Not yet two completed acceptances.
+- New bounded HP private source/commit G3 section 2.6 campaign:
+  20261113_HP_G3_SERWAY26_AD746_PRIVATE. Completed authentic figure
+  extraction, figure mapping, merge and 13-slide deck. Gemini 503/read
+  timeouts were automatically recovered by normal keyed provider failover.
+  Both genuine 13-slide narrator model batches returned and are present in
+  SHA-keyed .microgen_narration_batches. Narration stage then rejected
+  Slide 6 due to a real source math voice preflight hold; first run exited
+  1 and recorded last_error=narration BEFORE paid TTS. Grant consumed;
+  it must NEVER be restarted unchanged or relabeled PASS.
+- Analysis of **all 13 genuine saved provider responses** showed 3 precise
+  residual risks: slide 6 delta x; slides 8 and 9 true figure-panel c
+  references. Generic source-faithful TTS-only normalizer expansion for
+  delta x/y/t and numbered Figure/Fig. X.Y panel a-f now in
+  microgen_reviewed_math_voice.py (not any per-PDF clause). Source text,
+  scholarly narration, math signs/numbers and original failure preserved.
+  Production voice_adapter_code_sha256 invalidates previous voice sidecar.
+  All 13 unchanged authentic model texts now pass voice_input_risk_status
+  with ZERO residual risk using new code (no Gemini/TTS calls). Focused
+  tests 66 passed. Current edits require full HP suite and commit.
+- Crucially, current production microgen_verified_upstream_reuse already
+  supports importing exactly verified 4 upstream stages and the TWO
+  original genuine model narrator batch replies after source + slides SHA
+  and generator/prompt and request key revalidation. New bounded campaign
+  must use it automatically; no old failed stage or receipts transferred.
+- G3 real-media recovery component already has 3/3 PASS using genuine G2
+  accepted long-video source/parts, actual production recover_timed_long:
+  partial rollback, tamper-protection, completed real H264+decoded visual
+  validation. Generalized source-independent opt-in integration test at
+  tests/test_microgen_g3_real_media_recovery.py; re-ran 3/3 PASS.
+  Issue #278 has evidence comment ID 6856125552.
+- Next: finish full HP regression and exact Git commit; then run a NEW
+  bounded SHA/source/commit pinned section 2.6 real campaign to acceptance,
+  followed by independently new section 2.7 long candidate and complete
+  G3 3/3 matrix. No manual per-slide edits; no public publication.
