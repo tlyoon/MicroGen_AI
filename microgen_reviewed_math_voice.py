@@ -63,6 +63,34 @@ def reviewed_math_voice(text: str) -> str:
         + " versus tee", value, flags=re.IGNORECASE)
     # Physically readable coefficient c times t, not a general c/C match.
     value = re.sub(r"\bminus\s+c\s+t\b", "minus see tee", value)
+
+    # Authentic G2 independent TWO-MODEL acoustic failures demonstrated that
+    # compact variable names adjacent to ordinary grammar can sound like a
+    # different equation ("ay ex as" -> "ay equals"). Prefer the same
+    # scholarly meaning as an explicit x-component statement. This modifies
+    # ONLY the voice input, never visible narration or textbook mathematics.
+    value = re.sub(
+        r"\binstantaneous\s+acceleration\s*,?\s+ay\s+ex\s*,?\s+"
+        r"as\s+the\s+limit\b",
+        "instantaneous acceleration along the ex axis as the limit",
+        value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"\brepresents\s+average\s+acceleration\s*,?\s+"
+        r"ay\s+ex\s*,?\s+avg\b",
+        "represents average acceleration along the ex axis",
+        value, flags=re.IGNORECASE,
+    )
+    # Both blind recognizers inserted an unsupported squared term when a
+    # terse polynomial was read aloud. Make multiplication and the cubic
+    # exponent separately audible. Never change the sign or exponent.
+    value = re.sub(
+        r"\bposition\s+(?:ex|x)\s+of\s+(?:tee|t)\s+equals\s+"
+        r"b\s+(?:tee|t)\s+cubed\s+minus\s+(?:see\s+tee|c\s+t)\b",
+        "position ex as a function of time equals "
+        "b multiplied by tee cubed minus see multiplied by tee",
+        value, flags=re.IGNORECASE,
+    )
     return value
 
 

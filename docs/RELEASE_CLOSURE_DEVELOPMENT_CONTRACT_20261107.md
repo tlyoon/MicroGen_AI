@@ -1150,3 +1150,43 @@ source-grounded signed coefficient such as `minus see tee`). Generic
 17-slide private transcript replay still yields only **one
 malformed reviewer response** (slide 5) requiring a genuine bounded
 audio-model recheck. This diagnostic is not an acoustic pass.
+
+
+### 13 November 2026 — Recycled source-grounded voice remediation from independent acoustic consensus
+
+A fresh source-bound private Serway 2.5 candidate on commit
+`6268b40` generated 71 grounded source cues / 88 WAV files, but **did
+not pass** independent acoustic QA. The original private dual-review
+evidence (never published) classified slide 5 as a recognizer
+disagreement and slides 4 and 17 as source-math-word pronunciation
+candidates. Both independent reviewers saw the slide-4 expression
+as an **equality** rather than the intended component-plus-grammar
+phrase; both also reported an unwanted **square exponent** on the
+slide-17 cubic polynomial. These are not safe ASR formatting waivers.
+
+The normal `microgen_reviewed_math_voice` source-only pre-TTS
+adapter now expands precisely source-confirmed expressions into
+fully spoken, semantically equivalent wording:
+instantaneous x-direction acceleration before a limit; average
+x-direction acceleration on a graph; and a polynomial with explicit
+multiplication and preserved cubic exponent and minus sign.
+The original `narration`, displayed PDF/equations and textbook
+source are NEVER modified by this spoken-language adapter.
+
+A private read-only replay across all 17 slide voices verified that
+exactly **slides 4, 5 and 17** change; the remaining 14 are identical.
+The transformation is idempotent, hash-bound by the already integrated
+`tts_math_voice_preflight`, preserves mathematical values and has
+zero unresolved predictable source pronunciation-risk flags.
+Independent scientific review MUST recheck the changed TTS sidecar;
+actual new TTS audio MUST pass both independent recognizers, the
+sensitive mathematical mismatch checks, decoded visual synchronization,
+strict per-video <600s packaging and final technical acceptance.
+No earlier failed WAV, terminal paid attempt or ASR approval may be
+promoted or replayed as a pass.
+
+Future similar failures should be repaired through narrowly reviewed,
+source-attested transformations at the narration-to-voice boundary
+BEFORE generating audio, with counterexamples and whole-lecture
+replay tests. Never replace a failed acoustic gate with acceptance
+by guessing what the speaker meant.

@@ -18,7 +18,7 @@ from microgen_tts_risk_register import find_pronunciation_risks
 @pytest.mark.parametrize("raw, fragment", [
     ("The acceleration a x, is defined here.", "acceleration ay ex,"),
     ("The instantaneous acceleration a x as the limit appears.",
-     "acceleration ay ex as the limit"),
+     "acceleration along the ex axis as the limit"),
     ("Later a x becomes negative.", "ay ex becomes negative."),
     ("The velocity and a x both vanish.", "ay ex both vanish."),
     ("A velocity increment delta v x equal to minus 10 t.",
@@ -197,3 +197,59 @@ def test_real_batch_route_rejects_ambiguous_voice_before_provider_send(
     with pytest.raises(Exception, match="PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD"):
         batch.process_one(args, "2.5", [])
     assert sent == []
+
+
+@pytest.mark.parametrize("raw, expected_fragment", [
+    (
+        "We define instantaneous acceleration ay ex as the limit of average acceleration.",
+        "instantaneous acceleration along the ex axis as the limit",
+    ),
+    (
+        "The tangent line represents average acceleration ay ex avg over the interval.",
+        "represents average acceleration along the ex axis over the interval",
+    ),
+    (
+        "Calculate position ex of tee equals b t cubed minus see tee.",
+        "position ex as a function of time equals b multiplied by tee cubed "
+        "minus see multiplied by tee",
+    ),
+    (
+        "Position x of t equals b t cubed minus c t.",
+        "position ex as a function of time equals b multiplied by tee cubed "
+        "minus see multiplied by tee",
+    ),
+])
+def test_historical_independent_acoustic_math_phrases_expanded_source_safely(
+    raw, expected_fragment,
+):
+    voice=normalize_scientific_speech(reviewed_math_voice(raw))
+    assert expected_fragment.casefold() in voice.casefold()
+    assert normalize_scientific_speech(reviewed_math_voice(voice))==voice
+    assert not find_pronunciation_risks(voice,voice)
+    assert not voice_input_risk_status(
+        raw, normalize_scientific_speech)["unresolved_source_risk_count"]
+
+
+@pytest.mark.parametrize("source", [
+    "The time tee was discussed in the experiment.",
+    "He described the average acceleration ay ex avg informally.",
+    "We examine b t squared minus see tee.",
+    "The position is b t cubed plus see tee.",
+    "The book cover reads instant acceleration in the x axis.",
+    "Instantaneous acceleration ay ex is a valid quantity.",
+    "The painter draws a line to represent average acceleration ay ex avg.",
+    "The coefficient c was unknown in the equation.",
+])
+def test_acoustic_phrasing_never_rewrites_unrelated_english_or_math(source):
+    assert reviewed_math_voice(source)==source
+
+
+def test_tts_math_voice_receipt_binding_after_semantic_spoken_repair():
+    raw="The graph represents average acceleration ay ex avg over time."
+    status=voice_input_risk_status(raw,normalize_scientific_speech)
+    value=normalize_scientific_speech(reviewed_math_voice(raw))
+    import hashlib
+    assert status["voice_input_sha256"]==hashlib.sha256(value.encode()).hexdigest()
+    assert status["phoneme_certified"] is False
+    assert status["publication_allowed"] is False
+    assert status["changed_for_tts_only"] is True
