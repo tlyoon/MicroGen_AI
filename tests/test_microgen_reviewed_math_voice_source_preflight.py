@@ -287,3 +287,60 @@ def test_old_math_voice_policy_receipt_rejected_before_paid_tts(tmp_path):
     assert checked["source_risk_count"]==0
     assert checked["acoustic_qa_required"] is True
     assert checked["publication_allowed"] is False
+
+
+@pytest.mark.parametrize("raw, result", [
+    ("velocity vee ex equals 40 minus 5 t squared",
+     "velocity vee ex equals the constant term forty, then subtract five multiplied by the square of time"),
+    ("velocity vee ex equals 30 minus 8 tee squared",
+     "velocity vee ex equals the constant term thirty, then subtract eight multiplied by the square of time"),
+    ("position ex equals 60 minus 2 t squared",
+     "position ex equals the constant term sixty, then subtract two multiplied by the square of time"),
+    ("acceleration ay ex equals 90 minus 4 t squared",
+     "acceleration ay ex equals the constant term ninety, then subtract four multiplied by the square of time"),
+])
+def test_general_quadratic_constant_tts_voice_is_unambiguous_and_idempotent(
+    raw,result,
+):
+    spoken=reviewed_math_voice(raw)
+    assert result==spoken
+    assert reviewed_math_voice(spoken)==spoken
+    assert not find_pronunciation_risks(spoken,spoken)
+    status=voice_input_risk_status(raw,normalize_scientific_speech)
+    assert status["changed_for_tts_only"] is True
+    assert status["unresolved_source_risk_count"]==0
+    assert status["phoneme_certified"] is False
+    assert status["publication_allowed"] is False
+
+
+@pytest.mark.parametrize("unrelated", [
+    "velocity vee ex equals 40 plus 5 t squared",
+    "velocity vee ex equals 40 minus 5 t cubed",
+    "velocity vee ex equals 40 minus 5 t",
+    "velocity vee ex equals 40 minus five t squared",
+    "The lesson starts at forty minutes.",
+    "One can choose 40 minus 5 t squared in prose.",
+    "velocity vee ex equals 40 minus 50 t squared at this value",
+    "The field is velocity vee ex equals 140 minus 5 t squared",
+])
+def test_voice_policy_does_not_rewrite_unmatched_equations_or_ordinary_numbers(unrelated):
+    assert reviewed_math_voice(unrelated)==unrelated
+
+
+def test_stale_math_voice_sidecar_detected_before_another_paid_request(tmp_path):
+    stage=tmp_path/"2.5"
+    stage.mkdir()
+    raw="velocity vee ex equals 40 minus 5 t squared"
+    sidecar=stage/"script_tts.json"
+    sidecar.write_text(json.dumps({"slides":[{"slide":1,
+                    "tts_text":raw,"narration":raw}]}),encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage)
+    changed=normalize_scientific_speech(reviewed_math_voice(raw))
+    proof=voice_input_risk_status(raw,normalize_scientific_speech)
+    sidecar.write_text(json.dumps({"slides":[{"slide":1,
+                    "tts_text":changed,"narration":raw,
+                    "tts_math_voice_preflight":proof}]}),encoding="utf8")
+    result=preflight_voice_sidecar(stage)
+    assert result["source_risk_count"]==0
+    assert result["acoustic_qa_required"] is True

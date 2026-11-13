@@ -106,3 +106,57 @@ def test_formula_coefficients_and_decimal_notation_have_exact_literal_equivalenc
     # Literal extraction is NOT an unproved arithmetic evaluator.
     assert "20" not in visible
     assert "10" not in visible
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("velocity vee ex equals the constant term forty, then subtract "
+     "five multiplied by the square of time", {"40", "5"}),
+    ("position ex equals the constant term thirty, then subtract "
+     "two multiplied by the square of time", {"30", "2"}),
+    ("acceleration ay ex equals the constant term ninety, then subtract "
+     "four multiplied by the square of time", {"90", "4"}),
+    ("The constant term fifty, then subtract eight multiplied by time squared",
+     {"50", "8"}),
+])
+def test_reviewed_quadratic_spoken_numbers_keep_exact_pdf_numeric_claims(
+    text,expected,
+):
+    from microgen_cue_semantic_mapping import numbers
+    assert numbers(text)==expected
+
+
+@pytest.mark.parametrize("ordinary", [
+    "The lecturer started forty years ago.",
+    "The constant temperature rises to forty degrees.",
+    "We subtract five from the expression.",
+    "Five multiplied by the square of time may be mentioned in English.",
+    "The constant term forty five is ambiguous.",
+    "Constant term forty-five.",
+])
+def test_unrelated_cardinal_words_do_not_forge_source_numeric_claims(ordinary):
+    from microgen_cue_semantic_mapping import numbers
+    assert numbers(ordinary)==set()
+
+
+@pytest.mark.parametrize("spoken,source", [
+    ("The constant term forty, then subtract five multiplied by time",
+     "The original source says velocity = 40 - 5t2"),
+    ("The constant term twenty, then subtract nine multiplied by time",
+     "v = 20 - 9t2"),
+])
+def test_exact_spoken_math_claims_have_matching_visible_pdf_numbers(spoken,source):
+    from microgen_cue_semantic_mapping import numbers
+    assert numbers(spoken).issubset(numbers(source))
+    assert not numbers(spoken).issubset(numbers(source.replace("40","50")
+             .replace("20","30").replace("9t2","8t2").replace("5t2","4t2")))
+
+
+def test_reviewed_voice_quadratic_numerical_grounding_detects_wrong_value():
+    from microgen_cue_semantic_mapping import numbers
+    spoken=("velocity vee ex equals the constant term forty, then subtract "
+            "five multiplied by the square of time")
+    source="velocity vx = 40 - 5t2"
+    assert numbers(spoken)=={"40","5"}
+    assert numbers(spoken).issubset(numbers(source))
+    assert not numbers(spoken).issubset(numbers("velocity vx = 50 - 5t2"))
+    assert not numbers(spoken).issubset(numbers("velocity vx = 40 - 4t2"))

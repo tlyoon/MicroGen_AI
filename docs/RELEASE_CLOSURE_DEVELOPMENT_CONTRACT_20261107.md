@@ -1495,3 +1495,64 @@ TEST EVIDENCE ONLY, not actual third-reviewer approval. A later individually
 authorized private G2 campaign must obtain real Gemini audio-review evidence
 before claiming acoustic/video acceptance. Do not manually label slide 11
 passed or publish old review failures.
+
+
+### 13 November 2026 — Automatic prevention of genuinely ambiguous spoken quadratic constants
+
+**G2 evidence, not a fabricated acceptance:** In a NEW SHA-bound authentic
+private 17-slide Serway 2.5 G2 campaign under code `5cd74cb`, all six
+upstream scientific stages and all 17 original slide WAVs plus 71 timed
+cue chunks were reverified and reused with unchanged hashes. The revised
+minor-ASR rule **cleared historical slide 6** (math-letter spelling
+variants). The remaining real blocker was **slide 11 only**, where one
+independent Gemini reviewer transcribed the `40` in the genuine source
+equation `v_x = 40 - 5t²` as `4 t`. A bounded independent third-model
+check was attempted but did not establish a verified majority. The acoustic
+gate correctly reported `ASR_DISAGREEMENT_HOLD`, preserved original WAVs,
+stopped before video and did NOT silently approve the disputed mathematics.
+This remains a real unpublished audio-acoustic blocker pending NEW evidence.
+
+**New generalizable pre-TTS voice remedy, normal pipeline:** The existing
+`microgen_reviewed_math_voice.reviewed_math_voice`, invoked automatically
+at the narration-to-voice source boundary, now rewrites narrowly
+source-attested quadratic kinematics with explicit named quantities, an
+integer tens **constant term**, minus sign and a small integer multiplied
+by the square of time. E.g., the raw spoken-source
+`velocity vee ex equals 40 minus 5 t squared` becomes
+`velocity vee ex equals the constant term forty, then subtract five
+multiplied by the square of time`. No visible PDF, equation sign,
+coefficient, exponent, textbook source or written narration is modified.
+This is a deterministic, repeatable template, not a slide-specific patch.
+Unrecognized equations, ordinary words, changed signs or non-matching
+powers remain unchanged. Reviewed math voice preflight requires a current
+fixed-point `script_tts.json` before any paid TTS call, and the normal
+upstream importer automatically invalidates **six-to-four** when the
+reviewed adapter changes spoken mathematical input; old uncorrected
+science/TTS/acoustic approval cannot be replayed as current.
+
+**Source/visual cue validation correction:** The normal shared
+`microgen_cue_semantic_mapping.numbers` now recognizes *only* fixed
+reviewed mathematical phrases such as `constant term forty` and
+`then subtract five multiplied by` as actual source-grounded values
+`40` and `5`. It still rejects an unprinted numerical claim and does
+NOT treat ordinary English cardinal words or a hyphenated different value
+like `forty-five` as source-grounded `40`. Original PDF text remains
+the required source for every cue. The new full-slide offline real-source
+check confirmed the revised 17-slide lesson alters **only slide 11**,
+that the voice rewrite is idempotent/source-risk free, and that ALL new
+numeric claims on slide 11 are subsets of the *actual source slide PDF*
+numeric inventory. These are pre-provider tests, NOT an acoustic or video
+pass.
+
+**Mandatory downstream continuation and honest limits:** The normal
+private batch must regenerate fresh narration/voice sidecar, revalidate
+independent scientific content, generate fresh measured cues/WAVs under the
+same Gemini Flash-Lite/Kore formal voice policy, obtain genuine two-model
+independent ASR evidence on the changed spoken equation, synchronize
+new per-cue PCM highlights, render verified per-video <600-second MP4
+parts and complete independent private acceptance. The old WAVs CANNOT
+be reused when the voiced mathematical equation changes. Full-lecture
+same-engine timed-cue synthesis is currently atomic; do not claim only
+one slide is re-billed or attempt an unverified hybrid PCM merge to save
+cost. New verified QA may still legitimately block if the provider or
+actual audio is unavailable. Do not claim G2/G3 complete on tests alone.

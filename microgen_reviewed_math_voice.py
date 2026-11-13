@@ -91,6 +91,34 @@ def reviewed_math_voice(text: str) -> str:
         "b multiplied by tee cubed minus see multiplied by tee",
         value, flags=re.IGNORECASE,
     )
+    # Historical 13-Nov 2026 source-bound G2 two-model recognition followed
+    # by a blind third reviewer could not corroborate whether a velocity
+    # equation said "forty" or "four t". The original source equation was
+    # v_x = 40 - 5t^2; neither a numerical mismatch nor a changed exponent
+    # may be waived in acoustic QA. Phrase *the constant term* explicitly
+    # in the spoken mathematics BEFORE paid TTS, and separate the subtraction
+    # instruction. This is a reusable pattern for quadratic kinematics,
+    # not a slide/page-specific patch, and leaves visible narration intact.
+    tens={20:"twenty",30:"thirty",40:"forty",50:"fifty",
+          60:"sixty",70:"seventy",80:"eighty",90:"ninety"}
+    small={"1":"one","2":"two","3":"three","4":"four","5":"five",
+           "6":"six","7":"seven","8":"eight","9":"nine","10":"ten"}
+    formula=re.compile(
+        r"\b(?P<quantity>velocity\s+vee\s+ex|position\s+ex|"
+        r"acceleration\s+ay\s+ex)\s+equals\s+"
+        r"(?P<const>[2-9]0)\s+minus\s+"
+        r"(?P<coef>[1-9])\s+(?:tee|t)\s+squared\b",
+        flags=re.IGNORECASE,
+    )
+    def clarify_constant_equation(match):
+        value_number=int(match["const"])
+        coefficient=match["coef"]
+        return (f"{match['quantity']} equals the constant term "
+                f"{tens[value_number]}, then subtract "
+                f"{small.get(coefficient,coefficient)} multiplied by "
+                "the square of time")
+    value=formula.sub(clarify_constant_equation,value)
+
     return value
 
 

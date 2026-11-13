@@ -98,7 +98,35 @@ def numbers(text: str) -> set[str]:
     absent from the printed expression.
     """
     tokens = re.findall(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", text)
-    return {format(Decimal(token).normalize(), "f") for token in tokens}
+    values = {format(Decimal(token).normalize(), "f") for token in tokens}
+    # Reviewed narration sometimes spells a *mathematical constant* to make
+    # it acoustically distinct from adjacent symbolic variables. Extract
+    # numerals only within these exact deterministic reviewed-voice phrases;
+    # never infer a numerical claim from ordinary prose ("forty years") or
+    # from unrelated spelled cardinal words.
+    spoken_tens = {
+        "twenty": "20", "thirty": "30", "forty": "40",
+        "fifty": "50", "sixty": "60", "seventy": "70",
+        "eighty": "80", "ninety": "90",
+    }
+    coefficients = {
+        "one": "1", "two": "2", "three": "3", "four": "4",
+        "five": "5", "six": "6", "seven": "7", "eight": "8",
+        "nine": "9",
+    }
+    for match in re.finditer(
+            r"\b(?:the\s+)?constant\s+term\s+"
+            r"(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b"
+            r"(?!(?:\s+|-)(?:one|two|three|four|five|six|seven|eight|nine)\b)",
+            text, flags=re.IGNORECASE):
+        values.add(spoken_tens[match[1].lower()])
+    for match in re.finditer(
+            r"\bthen\s+subtract\s+"
+            r"(one|two|three|four|five|six|seven|eight|nine)"
+            r"\s+multiplied\s+by\b",
+            text, flags=re.IGNORECASE):
+        values.add(coefficients[match[1].lower()])
+    return values
 
 
 def exact_math_source_block(spoken: str, blocks: list[tuple]) -> int | None:
