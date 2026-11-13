@@ -125,18 +125,25 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
                     reference_words=len(tokens(texts[slide-1]))
                 except (ValueError,IndexError):
                     reference_words=0
-                if (reference_words>=25 and
-                        len(tokens(transcript)) < 0.45*reference_words):
+                from microgen_tts_acoustic_qa import is_meta_transcript
+                contaminated=is_meta_transcript(transcript)
+                short=(reference_words>=25 and
+                       len(tokens(transcript)) < 0.45*reference_words)
+                if contaminated or short:
+                    reason=("explanatory/nontranscript" if contaminated
+                            else "short partial")
                     print(f"[Acoustic QA] model {models[index]} returned "
-                          f"short partial transcript for {path.name}; "
+                          f"{reason} audio response for {path.name}; "
                           "one independent recheck",flush=True)
                     try:
                         candidate=str(engines[index](path)).strip()
-                        if len(tokens(candidate))>len(tokens(transcript)):
+                        if (not is_meta_transcript(candidate)
+                                and (not short or
+                                     len(tokens(candidate))>len(tokens(transcript)))):
                             transcript=candidate
                     except Exception:
-                        # The original partial response stays untrusted and
-                        # the final acoustic report will fail closed.
+                        # Never repair audio or manufacture missing words from
+                        # the expected script when a reviewer is unreliable.
                         pass
                 memo[key]=transcript
             return memo[key]

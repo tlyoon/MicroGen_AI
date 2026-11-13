@@ -1084,3 +1084,57 @@ The prior one-use campaign remains terminal and its independent
 scientific QA result is preserved; a separate finite campaign can
 revalidate that SHA-bound QA receipt without repeating scientific
 review if the underlying implementation and inputs are unchanged.
+
+
+### 13 November 2026 — Independent acoustic reviewer formatting and transport recovery
+
+The genuine Serway section 2.5 G2 candidate completed 17-slide source science
+QA, 71 timed source-grounded PCM cues and 88 WAVs on HP; the independent
+Gemini 3.5/3.8 audio screen then failed with a **five-slide disagreement
+and five-slide mismatch** record. The code correctly left the campaign
+terminal and preserved original model-blind transcripts, WAV and SHA input
+snapshots privately. NO video or publication approval was issued.
+
+Prior fixes `c3b7add`, `264cb19`, `ad4a818`, `c59c58d`
+and `b850892` already provided finite ASR key-pool fallbacks,
+transcript short-response recheck, two-model disagreement categories,
+no-billing-unchanged-input safeguards, and immutable private failed-ASR
+evidence. **Do not remove or weaken these.** The new robust remedy
+extends these normal paths:
+
+- Normalize expected-blind reviewer **orthography only** with
+  `microgen_acoustic_math_transcript.py`: explicit spoken vs printed
+  mathematical components (vee ex/v_x, ay ex/a sub x), selected equation
+  operators, decimal points, actual SI units, and exact polynomial
+  exponents. Preserve every sign, decimal digit, mathematical exponent,
+  source letter identity, and negation. The existing conservative
+  sensitive-token and 5% discrepancy gates still operate.
+- Require **strict JSON transcript-only** responses from both independent
+  Gemini audio models, using the same provider-native response schema
+  established earlier for independent scientific review and semantic
+  source-grounded mapping. No expected narration text is EVER sent to
+  either recognizer.
+- Detect a recognizer returning its own drafting/explanatory notes in
+  place of audible lecture words; use the existing bounded **one
+  independent recheck** per affected WAV/model, without modifying
+  original audio or fabricating script-based text. Invalid repeat
+  remains rejected. Key pool rotation and hard retry budgets are
+  unchanged.
+- Bind the new mathematical reviewer module to the normal
+  `acoustic_qa` stage dependency fingerprint, but NOT the `tts`
+  fingerprint. Future changes invalidate a prior acoustic approval,
+  not previously source/provenance-verified audio.
+- Preserve original model-blind evidence and a private SHAs-only issue
+  summary. An offline replay of the existing genuine 17-slide dual-ASR
+  evidence under the revised conservative mathematical comparator
+  yields **16 clean slides** and only **slide 5** blocked by a clearly
+  malformed/explanatory independent reviewer response. This is a
+  diagnostic **without new model calls**, NOT an acoustic pass, and
+  no old terminal G2 campaign may be replayed unchanged.
+
+This is a reusable automated protocol, not a waiver of independent
+phonetic checking. Mathematical mistakes, incomplete transcripts,
+speaker slips and ambiguous source evidence remain blocked. New
+provider calls require fresh finite, owner-authorized HP campaign
+scope. G2 can close only on actual independent acoustic, visual
+synchronization and complete accepted video evidence.

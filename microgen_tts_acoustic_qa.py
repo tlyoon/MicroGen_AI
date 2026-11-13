@@ -29,6 +29,7 @@ continuous continuity discontinuity integral integrals minus plus
 positive negative numerator denominator fraction infinite infinity
 equals equal point zero one two three four five six seven eight nine ten
 not never no greater less negative positive above below minus multiplied divided
+squared cubed
 """.split()) | set("0 1 2 3 4 5 6 7 8 9 10".split())
 
 class AcousticQAError(RuntimeError):
@@ -51,6 +52,11 @@ def tokens(text: str) -> list[str]:
     A removed mathematical sign, changed digit or changed subscript letter
     remains a real discrepancy.
     """
+    # Recycle exact mathematical notation equivalences previously observed
+    # in independent Gemini ASR (vee ex / v_x, t=0 / t equals zero).
+    # This is script-blind and never drops signs or numerical exponents.
+    from microgen_acoustic_math_transcript import canonical_math_transcript
+    text = canonical_math_transcript(text)
     # The hyphen between non and isolated does not change the audible word.
     text = re.sub(r"\bnon[\s-]?isolated\b", "non isolated", text,
                   flags=re.IGNORECASE)
@@ -80,6 +86,9 @@ def tokens(text: str) -> list[str]:
                    else "why") + " of tee",
         text, flags=re.IGNORECASE,
     )
+    # A decimal separator is a meaningful spoken mathematical token.
+    # Never conflate 8.2 with the two separate values 8 and 2.
+    text = re.sub(r"(?<=\d)\.(?=\d)", " point ", text)
     raw = re.findall(r"[A-Za-z]+|\d+", text.lower())
     out = []
     for i, w in enumerate(raw):
@@ -251,6 +260,51 @@ def audit_with_recognizer(
     }
 
 
+AUDIO_TRANSCRIPT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {"transcript": {"type": "string"}},
+    "required": ["transcript"],
+}
+
+
+def is_meta_transcript(text: str) -> bool:
+    """Detect a reviewer returning its own drafting process, not audible words.
+
+    This never removes text or approves speech. A contaminated result must
+    be independently rechecked ONCE, or marked as an untrusted transcript.
+    The patterns identify unusual model *editing* phrases and explicit
+    correction arrows, not common lecture language ("let us check").
+    """
+    if not isinstance(text, str):
+        return True
+    v = text.casefold()
+    markers = (
+        "let's write it as", "let’s write it as",
+        "let's check if there's any other word",
+        "let’s check if there’s any other word",
+        "let's check if there is any other word",
+        "the transcription should be", "my transcription is",
+    )
+    return any(m in v for m in markers) or (
+        ' -> ' in v and ('wait,' in v or 'let' in v))
+
+
+def parse_blind_audio_transcript_response(raw: str) -> str:
+    """Strict Gemini JSON contract; never use a model explanation as audio."""
+    if not isinstance(raw, str) or len(raw) > 20000:
+        raise AcousticQAError("Independent audio reviewer returned oversized/nontext output")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise AcousticQAError("Independent audio reviewer broke JSON transcript contract") from exc
+    if (not isinstance(data, dict) or set(data) != {"transcript"}
+            or not isinstance(data["transcript"], str)
+            or not 5 <= len(data["transcript"].strip()) <= 12000
+            or is_meta_transcript(data["transcript"])):
+        raise AcousticQAError("Independent reviewer returned invalid or explanatory transcript")
+    return data["transcript"].strip()
+
+
 def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     """Use a separate audio understanding model; never send target script.
 
@@ -268,7 +322,9 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
         "Preserve odd or unexpected words as actually spoken. Do not "
         "substitute conventional mathematical terminology for what is heard. "
         "Return only words actually heard, no explanations or timecodes. "
-        "When unintelligible insert [unclear]."
+        "When unintelligible insert [unclear]. "
+        "Respond with only one JSON object containing a transcript string. "
+        "Do not include reasoning, draft notes or suggested corrections."
     )
     def transcribe(wav: Path) -> str:
         content = wav.read_bytes()
@@ -284,10 +340,12 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
                           prompt],
                 config=types.GenerateContentConfig(
                     temperature=0, max_output_tokens=2400,
+                    response_mime_type="application/json",
+                    response_json_schema=AUDIO_TRANSCRIPT_SCHEMA,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
             )
-            return (response.text or "").strip()
+            return parse_blind_audio_transcript_response(response.text or "")
         try:
             return run_bounded_recognition(single_attempt,time.sleep,max_attempts=3)
         except AudioRecognitionUnavailable:

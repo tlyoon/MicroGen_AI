@@ -645,6 +645,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         if pairs_mode not in ("0","1"):
             raise QualityError("Invalid timed-cue opt-in mode")
     if name == "acoustic_qa":
+        # Changing the script-blind mathematical ASR typography comparator
+        # invalidates old acoustic pass/hold evidence, NEVER valid TTS PCM.
+        # Optional for legacy fixtures; present in normal packaged jobs.
+        if (stage/"microgen_acoustic_math_transcript.py").is_file():
+            inputs.append("microgen_acoustic_math_transcript.py")
         # Changes to normalizer/provenance integrity checks must invalidate
         # an old acoustic checkpoint as well as changes to ASR matching.
         if (stage/"microgen_tts_provenance.py").is_file():
