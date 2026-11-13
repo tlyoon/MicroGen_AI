@@ -194,7 +194,9 @@ def test_real_batch_route_rejects_ambiguous_voice_before_provider_send(
     monkeypatch.setattr(batch, "run_subprocess",
                         lambda *a, **k: sent.append("paid") or
                         pytest.fail("The known doomed source risk must never be billed"))
-    with pytest.raises(Exception, match="PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD"):
+    with pytest.raises(Exception, match=(
+        "PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD|"
+        "STALE_VOICE_ADAPTER_SOURCE_HOLD")):
         batch.process_one(args, "2.5", [])
     assert sent == []
 
@@ -253,6 +255,23 @@ def test_tts_math_voice_receipt_binding_after_semantic_spoken_repair():
     assert status["phoneme_certified"] is False
     assert status["publication_allowed"] is False
     assert status["changed_for_tts_only"] is True
+
+
+def test_exact_old_spoken_phrase_with_stale_adapter_sha_blocks_before_tts(tmp_path):
+    # A prior sidecar can already be a fixed point of the updated adapter.
+    # Text idempotence alone is not evidence that its voiced wording is current.
+    stage = tmp_path / "2.5"
+    stage.mkdir()
+    spoken = "Velocity vee ex equals the constant term forty."
+    proof = voice_input_risk_status(spoken, normalize_scientific_speech)
+    proof["voice_adapter_code_sha256"] = "0" * 64
+    (stage / "script_tts.json").write_text(json.dumps({
+        "slides": [{"slide": 1, "tts_text": spoken,
+                    "tts_math_voice_preflight": proof}]
+    }), encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,
+                       match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage, require_policy_binding=True)
 
 
 def test_old_math_voice_policy_receipt_rejected_before_paid_tts(tmp_path):

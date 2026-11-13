@@ -1146,7 +1146,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     # appear to agree. Catch this predictable source-only
                     # hold BEFORE spending on another doomed TTS campaign.
                     from microgen_reviewed_math_voice import preflight_voice_sidecar
-                    speech_evidence = preflight_voice_sidecar(stage)
+                    speech_evidence = preflight_voice_sidecar(
+                    stage, require_policy_binding=(args.stop_after == "acceptance"))
                     print(f"[{subchapter}] private voice source preflight "
                           f"passed slides={speech_evidence['slide_count']}; "
                           "independent acoustic QA still mandatory", flush=True)

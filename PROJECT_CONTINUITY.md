@@ -444,3 +444,9 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   finite private G2 run with fresh narration/TTS and blind acoustic review.
   Only if acoustic passes may timed video and independent visual QA proceed.
   Do not reissue spent identical recognizer calls or merge PR before G2.
+
+## 13 Nov 2026 follow-up — stale fixedpoint voice replay blocker and repair
+
+- Remedial G2 private workroot `20261113_HP_G2_ACOUSTIC_REMEDY_91D29_PRIVATE` was launched at `91d29c9`; source SHA and repo guards passed. **Invalid source-to-voice resumption:** six historical stages were imported including old `script_tts.json`, even though voice adapter content had changed, so TTS started stale PCM. Stop was initiated promptly; partial new WAVs were generated, **no acoustic/video/acceptance passed**. Preserve this incomplete folder, do not resume it or assert zero provider spending.
+- Root cause: text-only fixedpoint adapter preflight lacks a code hash, so old fully normalized spoken text looks current. Reusable repair now derives `voice_adapter_code_sha256` automatically over exact narration generator, speech normalizer and math-voice adapter source files; each new narrator voice receipt binds to it. Six-stage upstream importer checks bound receipts and otherwise automatically uses four source/slide stages plus original revalidated narration response caches. Acceptance TTS also fails before payment on missing/drifted binding. A new mock real-route stale-fixedpoint regression is added. **Retest and commit/CI of new candidate pending.**
+- Priority: complete exact-head offline+Windows test, verify old real source stage is rejected before provider, then only one new workroot/source-SHA-bound fresh voice/acoustic campaign. G2/G3/G4 not accepted without independent actual audio/video verification.

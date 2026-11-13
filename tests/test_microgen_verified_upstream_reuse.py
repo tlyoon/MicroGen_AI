@@ -38,9 +38,13 @@ def fixture(tmp_path):
         "figure_extraction_receipt.json", "figure_composition_receipt.json",
     ):
         (stage / name).write_bytes(b"previously-verified-" + name.encode())
+    from microgen_reviewed_math_voice import voice_input_risk_status
+    from text_to_speech_v25 import normalize_scientific_speech
+    old_voice = "The system has an ordinary momentum lesson."
     (stage / "script_tts.json").write_text(json.dumps({
-        "slides": [{"slide": 1, "tts_text":
-                    "The system has an ordinary momentum lesson."}]
+        "slides": [{"slide": 1, "tts_text": old_voice,
+                    "tts_math_voice_preflight": voice_input_risk_status(
+                        old_voice, normalize_scientific_speech)}]
     }), encoding="utf8")
     (stage / "slide1.wav").write_bytes(b"DO-NOT-REUSE-FAILED-TTS")
     (stage / ".microgen_source_caption_vector_recovery.json").write_bytes(
@@ -457,6 +461,26 @@ def test_science_reviewer_code_drift_reuses_only_four_trusted_source_stages(
     assert provenance["full_previous_science_verification_current_code"] is False
     assert provenance["new_model_requests"] is False
     assert reuse.verify_import_receipt(stage)["stages"]==list(reuse.FOUR_UPSTREAM)
+
+
+def test_stale_fixedpoint_voice_code_receipt_reuses_only_four_before_tts(tmp_path):
+    """Regression for real Nov 13 paid replay: the old speech was already
+    fixed-point, so text-only preflight falsely accepted old six-stage QA.
+    Source-code binding must invalidate it before ANY provider call.
+    """
+    def old_adapter(_base, _campaign, stage, _source):
+        path = stage / "script_tts.json"
+        data = json.loads(path.read_text(encoding="utf8"))
+        data["slides"][0]["tts_math_voice_preflight"][
+            "voice_adapter_code_sha256"] = "0" * 64
+        path.write_text(json.dumps(data), encoding="utf8")
+    result, work, old = call_fixture(tmp_path, old_adapter)
+    assert result and result["status"] == reuse.FOUR_STATUS
+    stage = work / "2.5"
+    assert set(json.loads((stage / ".microgen_checkpoint.json").read_text())[
+        "completed"]) == set(reuse.FOUR_UPSTREAM)
+    assert not (stage / "script_tts.json").exists()
+    assert not (stage / "slide1.wav").exists()
 
 
 def test_prior_six_stage_math_voice_is_downgraded_to_four_on_new_policy(

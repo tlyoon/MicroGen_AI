@@ -376,7 +376,7 @@ def maybe_import_verified_upstream(
     selected_stages = FOUR_UPSTREAM
     if full_six_valid:
         try:
-            preflight_voice_sidecar(old)
+            preflight_voice_sidecar(old, require_policy_binding=True)
         except VoiceRiskPreflightError:
             # An old ambiguous/malformed voice sidecar can never be reused.
             # Independently accepted figures and slides remain reusable.
