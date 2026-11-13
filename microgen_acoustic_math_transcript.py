@@ -26,6 +26,20 @@ def canonical_math_transcript(text: str) -> str:
     # Reviewers must remain blind to expected speech. Do not delete malformed
     # assistant deliberation or output markup to hide a failed recognizer.
     value = value.replace("\u2212", "-")
+    # In a mathematical position-function assignment, "x of t" and
+    # "x at time t" denote the same function argument. Require the full
+    # position/function/equality context; never change a general "at time"
+    # or a different argument such as x(x), x(t squared), or y(t).
+    value = re.sub(
+        r"\bposition\s*,?\s*(?:ex|x)\s+(?:of|at\s+time)\s+"
+        r"(?:t|tee)\s*,?\s*(?:equal|equals)\b",
+        "position ex at time tee equals", value, flags=re.I)
+    # Letter names for the time variable are equivalent only as an explicit
+    # factor of a named mathematical coefficient, not in ordinary prose.
+    value = re.sub(
+        r"\b(?P<coefficient>b|c|see)\s+multiplied\s+by\s+(?:t|tee)\b",
+        lambda m: m["coefficient"] + " multiplied by tee",
+        value, flags=re.I)
     # Independent ASR can print a time-function as x(t), v_x(t) or a_x(t)
     # while the source-safe voice says "ex of tee", "vee ex of tee", etc.
     # Only exact t arguments are aliases: x(x), x(t squared), and changed
@@ -96,6 +110,10 @@ def canonical_math_transcript(text: str) -> str:
                    lambda m: _COMPONENT[m[1].lower()], value, flags=re.I)
     value = re.sub(r"\b([av])\s+y\s+x\b",
                    lambda m: _COMPONENT[m[1].lower()], value, flags=re.I)
+    # Some recognizers spell the explicit x subscript as "a y sub x".
+    # Only the complete a-y-sub-x sequence is a component alias.
+    value = re.sub(r"\ba\s+y\s+sub\s+(?:e\s+)?x\b",
+                   "ay ex", value, flags=re.I)
     value = re.sub(r"\b(?:ay|vee)\s+(?:sub\s+)?(?:e\s+x|x|ex)\b",
                    lambda m: ("vee ex" if m[0].lower().startswith("vee")
                               else "ay ex"), value, flags=re.I)

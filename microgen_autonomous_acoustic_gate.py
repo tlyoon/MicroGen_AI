@@ -637,6 +637,11 @@ def verify_receipt(stage:Path) -> dict:
         "script_tts_sha256":digest_file(stage/"script_tts.json"),
         "tts_provenance_sha256":digest_file(stage/".microgen_tts_provenance.json")}):
         raise AutonomousAcousticError("Source/acoustic receipt SHA drift")
+    # Unlike fresh reviewer calls, a recovered historical transcript must
+    # remain cryptographically linked to the authentic original private
+    # failure trace at every downstream video/acceptance verification.
+    from microgen_verified_acoustic_replay import verify_replay_evidence
+    verify_replay_evidence(stage,receipt)
     return receipt
 
 
@@ -710,6 +715,44 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 f"Slide {n} PCM defects block independent ASR: "
                 +", ".join(evidence["blocking_defects"]))
     auto_provider_recovery=engines is None
+    if auto_provider_recovery:
+        # Automatic production recovery for a corrected source-BLIND
+        # transcript normalizer: reclassify BOTH original Gemini reviewers
+        # only when the former private WAV/source/model evidence is exactly
+        # SHA-identical and the mathematical comparator actually changed.
+        # No old PASS assessment is trusted and no paid call is replayed.
+        from microgen_verified_acoustic_replay import (
+            maybe_replay_verified_acoustic,
+        )
+        replay=maybe_replay_verified_acoustic(stage,texts)
+        if replay is not None:
+            report=replay["report"]
+            _verify(stage,report,texts)
+            receipt={
+                "schema_version":1,
+                "status":"AUTONOMOUS_INDEPENDENT_ASR_SCREEN_PASSED",
+                "slide_count":len(texts),
+                "recognition_models":report["recognition_models"],
+                "repaired_audio_slides":0,
+                "source_inputs":{
+                    "script_tts_sha256":digest_file(stage/"script_tts.json"),
+                    "tts_provenance_sha256":digest_file(
+                        stage/".microgen_tts_provenance.json")},
+                "independent_report":report,
+                "verified_historical_asr_reclassification":replay["evidence"],
+                "automatic_technical_review":True,
+                "human_approval_required":False,
+                "pronunciation_perfection_certified":False,
+                "publication_allowed":False,
+            }
+            with (stage/RECEIPT).open("x",encoding="utf8") as f:
+                f.write(json.dumps(receipt,indent=2,ensure_ascii=False))
+            verify_receipt(stage)
+            print("[Acoustic QA] SHA-bound original two-Gemini evidence "
+                  "strictly reclassified after exact notation-policy fix; "
+                  "no additional recognition calls or audio regeneration",
+                  flush=True)
+            return receipt
     if engines is None:
         first,second,found=_providers()
         engines=(first,second)

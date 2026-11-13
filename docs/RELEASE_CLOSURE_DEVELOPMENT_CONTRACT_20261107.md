@@ -1612,3 +1612,34 @@ A subsequent SHA-bound G2 remedial private acceptance run under code `91d29c9` e
 **Required permanent normal-path remedy:** Every newly written voice-preflight receipt now includes a cryptographic fingerprint derived directly from the exact current `gen_script_v13.py`, `text_to_speech_v25.py`, and `microgen_reviewed_math_voice.py` bytes. The six-stage upstream importer requires this source-code binding and rechecks it *before* any provider request; absent or stale receipt downgrades automatically to the four verified source/figure/slide stages, then uses separately verified original narration model-response caches for fresh voice-sidecar reconstruction and independent science QA. Mandatory private acceptance TTS also requires this binding at its own pre-payment guard. Text fixed-point equivalence ALONE may never authorize narration/science reuse after policy changes. No manually bumped version, slide-specific loophole, or manual approval is permitted. Changes to the adapter invalidate only dependent narration, science, audio, acoustic and subsequent media, not verified source slides. Maintain finite provider scopes and preserve failed evidence. Source-free tests include stale-fixedpoint code fingerprint, allowed current fingerprint, changed scientific symbols, and normal batch no-paid-side-effects preflight.
 
 A candidate SHA and all-source full Windows regression/hosted Windows CI must be recorded separately from subsequent genuine private G2 acoustic/video results. Do not claim that regression success alone is acoustic or release acceptance.
+
+### 13 November 2026 — Reuse authentic blind Gemini evidence after an ASR formatter correction
+
+**Binding normal-path automatic recovery, no per-blocker user intervention.** When
+two independent Gemini reviewers have already produced complete, genuine
+source-blind transcripts on immutable G2 voice/WAV inputs, a later narrow
+script-blind mathematical-notation normalizer correction MUST re-evaluate
+those exact transcripts before invoking additional paid Gemini recognition.
+This is implemented inside the production acoustic gate through its
+verified-acoustic-replay module, not a per-PDF manual waiver.
+
+The recovery may issue a *private acoustic-screen* receipt only if all of the
+following are true: (1) both original reviewers' entire transcripts were
+retained in an HP-private content-hashed trace with the original blocked
+audit; (2) the previous and new bounded HP grants, exact source PDF, all 17
+WAV hashes, TTS sidecar/manifest, reviewer identities, and input snapshot
+are identical; (3) the new mathematical comparator code differs from the
+previous one; (4) re-running the **existing complete independent evidence
+validator**, including source-risk and sensitive math/negation/number/units
+checks, passes all slides; (5) the original trace remains present and SHA
+bound for every later acoustic and visual/final acceptance verification.
+No reviewer transcript is edited, no new evidence invented, and the original
+failure remains recorded. Recovered source/model identity and zero new paid
+calls are recorded; publication approval is always false.
+
+If any match is missing, ambiguous, tampered, or substantive disagreement
+remains, fail closed. Do not shop an older convenient reviewer response or
+retranscribe unchanged audio under the same authorization. No local speech
+model, ChatGPT reviewer, or new external platform is introduced. The
+ordinary stage continuation must still independently verify source-grounded
+timed visual cues, <600-second private video parts, and final G2 acceptance.

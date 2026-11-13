@@ -450,3 +450,33 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
 - Remedial G2 private workroot `20261113_HP_G2_ACOUSTIC_REMEDY_91D29_PRIVATE` was launched at `91d29c9`; source SHA and repo guards passed. **Invalid source-to-voice resumption:** six historical stages were imported including old `script_tts.json`, even though voice adapter content had changed, so TTS started stale PCM. Stop was initiated promptly; partial new WAVs were generated, **no acoustic/video/acceptance passed**. Preserve this incomplete folder, do not resume it or assert zero provider spending.
 - Root cause: text-only fixedpoint adapter preflight lacks a code hash, so old fully normalized spoken text looks current. Reusable repair now derives `voice_adapter_code_sha256` automatically over exact narration generator, speech normalizer and math-voice adapter source files; each new narrator voice receipt binds to it. Six-stage upstream importer checks bound receipts and otherwise automatically uses four source/slide stages plus original revalidated narration response caches. Acceptance TTS also fails before payment on missing/drifted binding. A new mock real-route stale-fixedpoint regression is added. **Retest and commit/CI of new candidate pending.**
 - Priority: complete exact-head offline+Windows test, verify old real source stage is rejected before provider, then only one new workroot/source-SHA-bound fresh voice/acoustic campaign. G2/G3/G4 not accepted without independent actual audio/video verification.
+
+## 13 Nov 2026 — Full G2 acoustic reviewer disambiguation and safe replay candidate
+
+- Real bounded HP G2 20261113_HP_G2_VOICE_CODEBOUND_105664_PRIVATE
+  at exact original source SHA 923c1768656433f29ba3a2ba413ea81eb5db9383f81d25873358b58709ae14aa
+  completed upstream, narration/science QA and 17 slide + 72 measured cue WAVs.
+- **Actual two-model Gemini QA** passed 16 slides including prior 9 and 11;
+  only slide 17 failed ASR_DISAGREEMENT_HOLD. Original two blind responses:
+  "position x of t, equal b multiplied by t cubed minus c multiplied by t"
+  versus "position x at time t equals ..."; source voice used
+  "position ex at time tee equals ...". No changed coefficients, sign or power.
+  Full private SHA-bound trace retained; 0 MP4 and G2 NOT yet accepted.
+- Corrected only context-bound script-blind mathematical typography in
+  microgen_acoustic_math_transcript.py: exact position x(t) assignment,
+  time factor after explicit coefficient multiplication, x-component
+  subscript spelling; changed arguments, powers and operators remain
+  genuine mismatches. **Offline replay** of all 17 real original Gemini
+  transcripts yielded 17 independent screen passes under existing
+  acoustic evidence verifier, without a new Gemini call.
+- New production microgen_verified_acoustic_replay.py requires exact
+  HP/private scope, previous failed review and checksum-bound trace,
+  matching all input snapshot WAV/sidecar/voice hashes, reviewer identities,
+  original textbook PDF, and changed comparator source SHA. Recomputed
+  reports are validated again on every downstream receipt check. No
+  source text, WAVs or model results sent to Git.
+- Focused and full offline HP tests / exact-head Windows CI required
+  before new one-use G2 campaign. A previous paid campaign cannot be
+  restarted; new code must use normal verified TTS PCM reuse and strict
+  prior-Gemini-evidence replay. G2 remains open until timed video and
+  decoded visual/final acceptance actually pass.

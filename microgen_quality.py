@@ -661,6 +661,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
             inputs.append("microgen_tts_provenance.py")
         if (stage/"microgen_private_acoustic_trace.py").is_file():
             inputs.append("microgen_private_acoustic_trace.py")
+        if (stage/"microgen_verified_acoustic_replay.py").is_file():
+            inputs.append("microgen_verified_acoustic_replay.py")
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
             inputs.append(".microgen_autonomous_acoustic_qa.json")
