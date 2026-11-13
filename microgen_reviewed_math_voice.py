@@ -87,7 +87,7 @@ def reviewed_math_voice(text: str) -> str:
     value = re.sub(
         r"\bposition\s+(?:ex|x)\s+of\s+(?:tee|t)\s+equals\s+"
         r"b\s+(?:tee|t)\s+cubed\s+minus\s+(?:see\s+tee|c\s+t)\b",
-        "position ex as a function of time equals "
+        "position ex at time tee equals "
         "b multiplied by tee cubed minus see multiplied by tee",
         value, flags=re.IGNORECASE,
     )
@@ -113,8 +113,12 @@ def reviewed_math_voice(text: str) -> str:
     def clarify_constant_equation(match):
         value_number=int(match["const"])
         coefficient=match["coef"]
+        # A full sentence break and "fixed numerical value" distinguish
+        # the tens constant from an adjacent letter-name such as 4 t.
+        # The same exact numeric source evidence is still required.
         return (f"{match['quantity']} equals the constant term "
-                f"{tens[value_number]}, then subtract "
+                f"{tens[value_number]}, a fixed numerical value. "
+                "Then subtract "
                 f"{small.get(coefficient,coefficient)} multiplied by "
                 "the square of time")
     value=formula.sub(clarify_constant_equation,value)

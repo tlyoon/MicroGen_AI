@@ -26,6 +26,19 @@ def canonical_math_transcript(text: str) -> str:
     # Reviewers must remain blind to expected speech. Do not delete malformed
     # assistant deliberation or output markup to hide a failed recognizer.
     value = value.replace("\u2212", "-")
+    # Independent ASR can print a time-function as x(t), v_x(t) or a_x(t)
+    # while the source-safe voice says "ex of tee", "vee ex of tee", etc.
+    # Only exact t arguments are aliases: x(x), x(t squared), and changed
+    # coordinate/derivative labels must remain different.
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<component>[av])_?x\s*\(\s*t\s*\)",
+        lambda m: _COMPONENT[m["component"].lower()] + " of tee",
+        value, flags=re.I)
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<coordinate>[xy])\s*\(\s*t\s*\)",
+        lambda m: ("ex" if m["coordinate"].lower() == "x"
+                   else "why") + " of tee",
+        value, flags=re.I)
     # A symbol or spelled number represents the same exact decimal only
     # inside a numeric x.point.y construction; not an arbitrary sentence.
     digits = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|\d+)"
@@ -89,6 +102,12 @@ def canonical_math_transcript(text: str) -> str:
     value = re.sub(r"\b(vx|ax)\b",
                    lambda m: _COMPONENT[m[1][0].lower()],
                    value, flags=re.I)
+    # A transcription may use "VX of T" rather than "v_x(t)".
+    # The time-letter alias is limited to a complete component function.
+    value = re.sub(
+        r"\b(?P<component>vee|ay)\s+ex\s+of\s+t\b",
+        lambda m: m["component"] + " ex of tee",
+        value, flags=re.I)
     value = re.sub(r"\bdvx\b", "d vee ex", value, flags=re.I)
     value = re.sub(r"\bdt\b", "d t", value, flags=re.I)
     value = re.sub(r"\b(?:a\s+v\s+g|average)\b(?=\s*(?:over|acceleration|,|\b))",

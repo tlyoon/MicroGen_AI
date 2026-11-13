@@ -416,3 +416,31 @@ The user **explicitly changed the original MicroGen_AI default TTS choice** to m
 **New primary:** Gemini API `gemini-3.8-flash-lite-tts`, voice `Kore`, educational style from Web source, complete WAV. **First fallback:** `gemini-3.8-flash-tts`, same `Kore`. **Last optional fallback:** Google Cloud Chirp3 HD named `en-US-Chirp3-HD-Kore` (matches Web's actual source code; README's `Aoede` sentence conflicts). Cloud never default; must explicitly enable paid Cloud fallback and supply cumulative attempted-character budget. Original API repo uses only whole-batch same-engine fallback for strict voice-provenance consistency; the Web project also has optional per-slide voice-similarity fallback. Explicit `MICROGEN_FORMAL_TTS_PROVIDER=unconfigured` continues to block generation, and explicit `=google_cloud` preserves historical legacy Cloud routes. Historical `en-US-Chirp-HD-F` identity is kept for old provenance/isolated diagnostics and is NOT the new default narrator.
 
 New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, synthetic tests and `docs/HP_PR270_GEMINI_FLASHLITE_TTS_FROM_WEB_REFERENCE.md`. Patched existing `text_to_speech_v25.py`, `microgen_tts_provider_policy.py`, `microgen_tts_provenance.py`, `requirements.txt` and one old expectation in `tests/test_microgen_cloud_tts_diagnostic_policy.py`. HP SDK `google-genai` upgraded 2.28.0 -> 2.34.0, no local LLM. Source-grounded real Chapter1 CLI preflight exit 0, 6 sections, 57 exact requests, 35,714 characters, 0 provider calls, 0 WAVs generated, no publication. Chapter generator requires `--authorize-paid-gemini-tts` before invoking paid API and delivers PR269-compatible capture manifest plan. Audio and 6 real private MP4s only after separate actual paid production run; pronunciation/academe/rights release remains separate. Do NOT start per-PDF fix loops.
+
+## 13 Nov 2026 — HP original MicroGen_AI acoustic continuation (new candidate)
+
+- Selected original API project `tlyoon/MicroGen_AI` / HP Windows, not the
+  Dell-115 Selenium web project. Predecessor: 12–13 Nov `Generate Thomas`.
+- PR #291 remains draft and unmerged; previous exact head `48172eb`
+  has 2/2 successful Windows CI jobs. New candidate source changes require
+  a fresh SHA-pinned CI run before merge.
+- Real private `20261113_HP_G2_QUADRATIC_VOICE_4817_PRIVATE`:
+  verified source/figure/slides reused, narration and Gemini scientific QA
+  passed for 17 slides with zero corrections; 17 slide WAV and 71 PCM
+  cue WAV completed. Independent ASR failed safely (9: format mismatch,
+  11: forty/4t disagreement, 17: potential function-letter risk).
+  Old audio is preserved and video/G2/G3/G4 NOT accepted.
+- Reusable code remedy: mathematically exact `x(t)`, `v_x(t)`, `a_x(t)`
+  ASR-format aliases on normal acoustic comparator; strict anti-ambiguity
+  tests for changed arguments, signs and coefficients. New source-attested
+  spoken quadratic and cubic phrasing in the normal narration voice adapter
+  awaits genuinely new WAV evidence. Local focused tests must be rerun
+  before release; no academic/media approval inferred.
+- Fresh source-free local validation so far: earlier 73+28 tests passed;
+  new targeted voice/math/source preflight suite 124 passed. Full Windows
+  regression and exact-head hosted CI still required.
+- Next: complete focused/full tests, commit and publish this generalizable
+  code candidate to PR #291, then allow exactly one newly source/SHA-bound
+  finite private G2 run with fresh narration/TTS and blind acoustic review.
+  Only if acoustic passes may timed video and independent visual QA proceed.
+  Do not reissue spent identical recognizer calls or merge PR before G2.

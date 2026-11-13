@@ -1568,3 +1568,39 @@ also found that `add` versus `subtract` had not been marked as a
 sensitive operator; all elementary add/subtract/multiply/divide verb forms
 are now mandatory mathematical red flags. These fixes have explicit
 positive and negative tests and do not waive an ASR disagreement.
+
+### 13 November 2026 — Generalized real-acoustic recovery, not a per-PDF waiver
+
+A new source/SHA-bound private Serway 2.5 campaign at code `48172eb`
+completed 17-slide scientific QA and generated 17 slide WAVs plus 71 verified
+source-timed PCM cues. Independent two-Gemini-model acoustic QA then
+correctly held slides 9, 11 and 17, without changing original source, passing
+audio or video. Slide 9's original independent transcripts used exact symbolic
+time-function typography (`x(t)`, `vx(t)`, `ax(t)`) versus equivalent spoken
+letter-names. Slide 11 retained a material `40` versus `4t` reviewer
+ambiguity; slide 17 retained potential spoken function-variable ambiguity.
+Do not label all three audio files defective, silently approve changed maths
+or reuse a failed reviewer receipt.
+
+Production remedy: `microgen_acoustic_math_transcript.canonical_math_transcript`
+now canonicalizes **only exact t-function notation** in ordinary acoustic QA
+and its independent final receipt validator. Wrong argument, component,
+power, coefficient and sign remain distinct. Offline replay of both
+authentic slide-9 blind transcripts now gives zero source mismatch. The
+normal pre-TTS `microgen_reviewed_math_voice.reviewed_math_voice`
+also uses sentence separation and a fixed-number noun phrase for source
+attested tens constants in quadratic kinematics, and a clear time-variable
+description for source-attested cubic position polynomials; source narration,
+visible slides and PDF remain unchanged. Neither voice adaptation is an
+acoustic pass before newly generated and reviewed audio.
+
+The **permanent contract rule** remains: every reproducible resolution must
+be coded into ordinary pipeline execution, protected by source-free positive
+and negative regressions, and tested against the actual failure mechanism.
+New voice-sidecar hashes invalidate earlier narration/science/TTS/acoustic
+stage acceptance; resume verified source, figures and slides only. Preserve
+the prior 88 WAVs as failed-review evidence, never rerun them unchanged or
+consume extra provider calls without a materially changed bounded campaign.
+If genuine acoustic uncertainty remains after new speech and independent
+review, fail closed with slide-level evidence and a reusable follow-up
+diagnostic, not manual approval or a fabricated acceptance.

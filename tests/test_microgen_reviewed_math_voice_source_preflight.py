@@ -210,12 +210,12 @@ def test_real_batch_route_rejects_ambiguous_voice_before_provider_send(
     ),
     (
         "Calculate position ex of tee equals b t cubed minus see tee.",
-        "position ex as a function of time equals b multiplied by tee cubed "
+        "position ex at time tee equals b multiplied by tee cubed "
         "minus see multiplied by tee",
     ),
     (
         "Position x of t equals b t cubed minus c t.",
-        "position ex as a function of time equals b multiplied by tee cubed "
+        "position ex at time tee equals b multiplied by tee cubed "
         "minus see multiplied by tee",
     ),
 ])
@@ -291,13 +291,13 @@ def test_old_math_voice_policy_receipt_rejected_before_paid_tts(tmp_path):
 
 @pytest.mark.parametrize("raw, result", [
     ("velocity vee ex equals 40 minus 5 t squared",
-     "velocity vee ex equals the constant term forty, then subtract five multiplied by the square of time"),
+     "velocity vee ex equals the constant term forty, a fixed numerical value. Then subtract five multiplied by the square of time"),
     ("velocity vee ex equals 30 minus 8 tee squared",
-     "velocity vee ex equals the constant term thirty, then subtract eight multiplied by the square of time"),
+     "velocity vee ex equals the constant term thirty, a fixed numerical value. Then subtract eight multiplied by the square of time"),
     ("position ex equals 60 minus 2 t squared",
-     "position ex equals the constant term sixty, then subtract two multiplied by the square of time"),
+     "position ex equals the constant term sixty, a fixed numerical value. Then subtract two multiplied by the square of time"),
     ("acceleration ay ex equals 90 minus 4 t squared",
-     "acceleration ay ex equals the constant term ninety, then subtract four multiplied by the square of time"),
+     "acceleration ay ex equals the constant term ninety, a fixed numerical value. Then subtract four multiplied by the square of time"),
 ])
 def test_general_quadratic_constant_tts_voice_is_unambiguous_and_idempotent(
     raw,result,
