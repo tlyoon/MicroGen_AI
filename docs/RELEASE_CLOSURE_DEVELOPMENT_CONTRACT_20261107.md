@@ -1643,3 +1643,41 @@ retranscribe unchanged audio under the same authorization. No local speech
 model, ChatGPT reviewer, or new external platform is introduced. The
 ordinary stage continuation must still independently verify source-grounded
 timed visual cues, <600-second private video parts, and final G2 acceptance.
+
+
+### 13 November 2026 — Normal-path decoded-video highlight QA calibration
+
+Private G2 full-source H.264 candidate (~689.62 s, 17 slides, 72 PCM cues)
+passed independent audio and all 17 source-grounded WAV checks but initially
+failed decoded visual QA because the old generic figure-region threshold
+mistook PDF/H.264 rasterization bias, geometrically shared source regions
+across multiple valid cues, and large genuine source regions for incorrectly
+highlighted video. These are structural QA issues, NOT grounds to waive
+source-grounded video checks or customize one PDF.
+
+The normal production checker now measures the same target ROI in *every*
+nonoverlapping PCM cue's independently decoded H.264 frame, verifies strong
+active/on vs independent off temporal contrast, and requires at least one
+nonoverlapping off-control per ROI on multi-cue slides. It excludes a control
+where another active source ROI overlaps >2% of the target PDF region;
+otherwise the same source element would incorrectly be treated as OFF. Static
+PDF-to-H.264 baseline MAE greater than the old 8.5 threshold is admissible
+only with decoded-frame on/off delta >=25, active/off MAE gap >=20 and off
+signal <=30% of active. The existing standard sixfold localized-figure test
+remains the first choice, with a tightly area-aware upper bound for large
+source-grounded text ROI where sixfold localization is geometrically
+unattainable (active >=20, ratio >= min(6,0.75*frameArea/ROIarea)), only when
+independent off controls are possible. Always reject static/stuck highlights,
+missing off controls, global-noise substitutes, altered cue boundaries, source
+input drift, malformed ROI, and part clock drift. Never apply this exception
+to general/untimed figure image QA.
+
+**Real offline preflight evidence** on the preserved existing private
+17-slide video: 72/72 cue elements measured; 310 genuine nonoverlapping
+source-region off-state samples passed; 16 overlapping active-control samples
+correctly excluded; 41 baseline-calibrated checks; no missing independent
+control. The offline full-candidate preflight temporarily routes the long
+archive as one candidate only to inspect its actual decoded frames. This
+is NOT a formal long-video pass. Private G2 must still re-run the genuine
+transactional two-or-more sub-600-second parts, independently decode all
+part-local cues, and produce an acceptance receipt before PASS.

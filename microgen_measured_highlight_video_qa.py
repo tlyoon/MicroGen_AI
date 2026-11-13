@@ -26,6 +26,22 @@ RECEIPT = ".microgen_visual_highlight_qa.json"
 SIZE = (640, 360)
 MIN_SAMPLE_CUE_SECONDS = 0.45
 MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE = 8.5
+# The decoded H.264 frame and an independently rasterized PDF are not
+# pixel-identical even when no overlay is present. A source ROI with static
+# render bias >8.5 must still show decisive on/off *decoded-frame* contrast,
+# and its off-state signal must be a small fraction of its active signal.
+MIN_CALIBRATED_ON_OFF_GAP_MAE = 20.0
+MIN_DECODED_TEMPORAL_CHANGE_MAE = 25.0
+MAX_OFF_TO_ACTIVE_SIGNAL_RATIO = 0.30
+# Regions shared by separate source-grounded cues are not independent
+# off-controls. Exclude those frames, but require a genuine non-overlapping
+# control for every PDF region on a multi-cue slide.
+MAX_OFF_CONTROL_SOURCE_ROI_OVERLAP_FRACTION = 0.02
+# When an entire highlighted text block covers a substantial fraction of
+# the frame, that overlay also increases whole-frame MAE. The previous
+# fixed 6x ROI/frame threshold can then be mathematically unattainable.
+MIN_TIMED_LARGE_ROI_ACTIVE_MAE = 20.0
+MIN_LARGE_ROI_FRACTION_OF_POSSIBLE_CONTRAST = 0.75
 # The generic media probe allows up to 4% runtime drift. That is too loose
 # for a timed highlight cue audit, so independently bound each part clock.
 MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS = 1.0
@@ -33,6 +49,58 @@ MAX_PART_AUDIO_CLOCK_DRIFT_SECONDS = 1.0
 
 class MeasuredVisualQAError(RuntimeError):
     """Source, elapsed-timing or decoded-MP4 highlights unverified."""
+
+
+def _off_control_verified(*, active:float, inactive:float,
+                          temporal_change:float) -> bool:
+    """Distinguish static PDF/H.264 rasterization bias from a stuck overlay.
+
+    Never approve merely because the inactive PDF-frame score is nonzero:
+    require actual decoded-frame temporal contrast and small off/on ratio.
+    """
+    if not all(math.isfinite(x) and x >= 0 for x in
+               (active,inactive,temporal_change)):
+        return False
+    if inactive <= MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE:
+        return True
+    return (active-inactive >= MIN_CALIBRATED_ON_OFF_GAP_MAE
+            and temporal_change >= MIN_DECODED_TEMPORAL_CHANGE_MAE
+            and inactive <= active*MAX_OFF_TO_ACTIVE_SIGNAL_RATIO)
+
+
+def _timed_source_region_visible(active:float,frame_mae:float,
+                                 roi:tuple[int,int,int,int], *,
+                                 independently_controlled:bool) -> bool:
+    """PDF-vs-decoded localized contrast with an ROI-area-aware ceiling.
+
+    The fallback is permitted only when independent decoded-frame off
+    controls also exist. It cannot approve a static full-frame change or
+    a large ROI with no distinct source control.
+    """
+    if figure_change_visible(active,frame_mae):
+        return True
+    if (not independently_controlled or
+            not math.isfinite(active) or not math.isfinite(frame_mae)
+            or active<MIN_TIMED_LARGE_ROI_ACTIVE_MAE or frame_mae<0):
+        return False
+    area=(roi[2]-roi[0])*(roi[3]-roi[1])
+    if area<=0 or area>SIZE[0]*SIZE[1]:
+        return False
+    required_ratio=min(
+        6.0,MIN_LARGE_ROI_FRACTION_OF_POSSIBLE_CONTRAST*
+        SIZE[0]*SIZE[1]/area)
+    return active>=required_ratio*max(frame_mae,0.01)
+
+
+def _source_roi_overlap_fraction(roi:tuple[int,int,int,int],
+                                 other:tuple[int,int,int,int]) -> float:
+    """How much of this PDF source region is active in another cue?"""
+    width=max(0,min(roi[2],other[2])-max(roi[0],other[0]))
+    height=max(0,min(roi[3],other[3])-max(roi[1],other[1]))
+    area=(roi[2]-roi[0])*(roi[3]-roi[1])
+    if area<=0:
+        raise MeasuredVisualQAError("Invalid source ROI for off-control")
+    return width*height/area
 
 
 def _pdf_reference(page) -> Image.Image:
@@ -183,32 +251,67 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                 if at<0 or at>=video_limit:
                     raise MeasuredVisualQAError("Invalid part-local cue timestamp")
                 snapshots[i]=_frame(ffmpeg,current_video,at)
-            for i,cue in enumerate(elements):
+            # Geometrically shared regions are legitimately highlighted
+            # during each cue that references them; they cannot serve as
+            # independent controls for one another.
+            source_rois=[]
+            for cue in elements:
                 regions=cue.get("pdf_bboxes",[cue["pdf_bbox"]])
                 if not isinstance(regions,list) or not regions:
                     raise MeasuredVisualQAError("Missing grouped highlight regions")
-                rois=[_pixel_box(page,{"pdf_bbox":region}) for region in regions]
+                source_rois.append([
+                    _pixel_box(page,{"pdf_bbox":region}) for region in regions])
+            for i,cue in enumerate(elements):
+                rois=source_rois[i]
                 active_scores=[]
                 frame_scores=[]
                 inactive_scores=[]
+                decoded_transition_scores=[]
+                overlapping_off_control_skips=0
                 for roi in rois:
                     active,frame_mae=frame_difference_metrics(
                         reference,snapshots[i],roi)
-                    if not figure_change_visible(active,frame_mae):
+                    if not _timed_source_region_visible(
+                            active,frame_mae,roi,
+                            independently_controlled=len(elements)>1):
                         raise MeasuredVisualQAError(
                             f"Slide {slide} element {i+1}: one PDF source region "
                             "has no independently visible decoded highlight")
                     active_scores.append(active)
                     frame_scores.append(frame_mae)
                     if len(elements)>1:
-                        candidate=(i+1)%len(elements)
-                        inactive,_=frame_difference_metrics(
-                            reference,snapshots[candidate],roi)
-                        if inactive>MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE:
+                        # Check every truly OFF cue, not only the next. A
+                        # different narration cue which highlights the same
+                        # source region is an ON state, not an off-control.
+                        # The actual decoded temporal transition rejects
+                        # persistent overlays while tolerating static PDF
+                        # rasterization bias.
+                        off_control_count=0
+                        for candidate in range(len(elements)):
+                            if candidate==i:
+                                continue
+                            if any(_source_roi_overlap_fraction(roi,other)
+                                   > MAX_OFF_CONTROL_SOURCE_ROI_OVERLAP_FRACTION
+                                   for other in source_rois[candidate]):
+                                overlapping_off_control_skips+=1
+                                continue
+                            off_control_count+=1
+                            inactive,_=frame_difference_metrics(
+                                reference,snapshots[candidate],roi)
+                            temporal,_=frame_difference_metrics(
+                                snapshots[i],snapshots[candidate],roi)
+                            if not _off_control_verified(
+                                    active=active,inactive=inactive,
+                                    temporal_change=temporal):
+                                raise MeasuredVisualQAError(
+                                    f"Slide {slide} element {i+1}: one grouped "
+                                    "source region remained highlighted outside its PCM cue")
+                            inactive_scores.append(inactive)
+                            decoded_transition_scores.append(temporal)
+                        if not off_control_count:
                             raise MeasuredVisualQAError(
-                                f"Slide {slide} element {i+1}: one grouped "
-                                "source region remained highlighted outside its PCM cue")
-                        inactive_scores.append(inactive)
+                                f"Slide {slide} element {i+1}: no independent "
+                                "nonoverlapping source-region off-control")
                 active_inside=min(active_scores)
                 frame_mae=max(frame_scores)
                 inactive_inside=max(inactive_scores) if inactive_scores else None
@@ -219,6 +322,15 @@ def inspect_visual_timing(stage: Path, *, ffmpeg: Path,
                     "whole_frame_mae":round(frame_mae,3),
                     "inactive_roi_mae":(
                         round(inactive_inside,3) if inactive_inside is not None else None),
+                    "decoded_on_off_min_mae":(
+                        round(min(decoded_transition_scores),3)
+                        if decoded_transition_scores else None),
+                    "calibrated_render_baseline":any(
+                        score>MAX_VISUAL_INSIDE_UNHIGHLIGHTED_MAE
+                        for score in inactive_scores),
+                    "off_control_sample_count":len(inactive_scores),
+                    "overlapping_source_control_exclusions":
+                        overlapping_off_control_skips,
                     "active_localized":True,
                     "off_control_checked":inactive_inside is not None,
                 }

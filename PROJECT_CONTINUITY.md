@@ -480,3 +480,28 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   restarted; new code must use normal verified TTS PCM reuse and strict
   prior-Gemini-evidence replay. G2 remains open until timed video and
   decoded visual/final acceptance actually pass.
+
+
+## 13 Nov 2026 — authentic G2 timed-video block and calibrated QA
+
+- Exact code 3d04f3d acoustic reclassification passed 17/17 genuine dual
+  Gemini transcripts on immutable reused WAVs, followed by 17-source-slide
+  renders in private campaign 20261113_HP_G2_ASR_REPLAY_3D04_PRIVATE.
+  Source expected ~689.36 s and actual full candidate ~689.62 s. Video
+  correctly failed before release while independent visual QA still had
+  generic ROI calibration errors. No accepted MP4 or G2 receipt.
+- 17-slide real independent frame diagnostic exposed 3 general causes:
+  (1) PDF rasterization vs H.264 static baseline MAE ~9 despite strong
+  decoded on/off difference >52; (2) source PDF region shared across
+  distinct correct cues is not an independent OFF control; (3) very large
+  text source ROIs cannot achieve generic figure-localization 6x ratio.
+- Production microgen_measured_highlight_video_qa now requires real decoded
+  on/off controls only from nonoverlapping regions, calibrated dynamic
+  contrast and area-aware localized visibility. The real 689.62-second
+  decoded-candidate-only diagnostic PASSED 72 elements, 310 independent OFF
+  checks, 16 correctly excluded overlapping controls and 41 baseline
+  calibrations. This is NOT a formal multipart acceptance receipt.
+- New tests added; follow up with full HP suite, exact Git commit/Windows CI,
+  fresh source/SHA-bound private G2 (reuse audio and original Gemini blind
+  transcripts only), then genuine sub-600-second video part QA and final
+  source-grounded acceptance. Keep media unpublished; G2 still open.
