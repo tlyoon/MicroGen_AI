@@ -1,6 +1,19 @@
 # MicroGen_AI
 
-**Current QA/development contract (2026-10-20):** unattended technical
+**Controlling development contract (v1.2, amended 13 November 2026):**
+[Release Closure Development Contract](
+docs/RELEASE_CLOSURE_DEVELOPMENT_CONTRACT_20261107.md).
+**Automatic recovery must be part of normal pipeline execution, not depend
+on the owner repeatedly asking the developer to fix the next blocker.**
+Future development MUST encode every verified generalizable blocker remedy
+into the normal stage runner, test the historical failure and counterexamples,
+recheck real QA/provenance, and automatically continue to downstream stages
+within the existing finite authorized scope. No old failed acoustic verdict,
+spent paid campaign, untrusted output or publication approval may be promoted
+as a pass. This requirement governs the original Gemini-API MicroGen_AI
+project on HP Windows, not the Selenium MicroGen_AI_Web project.
+
+**Historical autonomous QA contract (2026-10-20):** unattended technical
 progression requires no manual listening or academic/figure/highlighting
 sign-offs. Technical failures and unavailable acoustic evidence remain blockers;
 optional human review must not be forged or represented as completed.

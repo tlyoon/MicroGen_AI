@@ -1,6 +1,6 @@
 # MicroGen_AI — Release Closure Development Contract
 
-**Version:** 1.1 · **Effective:** 7 November 2026 (Asia/Kuala_Lumpur)
+**Version:** 1.2 · **Effective:** 7 November 2026 (Asia/Kuala_Lumpur)
 **Project:** original Gemini-API `tlyoon/MicroGen_AI`, not Selenium `MicroGen_AI_Web`.
 **Mode:** RELEASE CLOSURE (default for all subsequent project-development invocations).
 
@@ -9,6 +9,11 @@ development authorization, contract version **1.1**. This amendment governs
 conflicting earlier statements requiring renewed human approval for ordinary
 private content/TTS generation. It does not grant publication rights or
 unlimited paid provider usage.
+
+**Owner amendment (13 November 2026):** Contract version **1.2**
+makes **automatic recovery in the normal pipeline** a mandatory, testable
+development requirement. It strengthens the autonomous progression rule without
+expanding provider spending, device scope, publication authority, or QA waivers.
 
 ## 1. Authority, precedence, and objective
 
@@ -30,6 +35,89 @@ acceptance on the current frozen code and new real inputs.
 **Finish the complete private lecture-generation product, then freeze.**
 Success is a reproducible source-PDF-to-accepted-private-video workflow,
 not an ever-growing quantity of code, checks, PRs, or repair attempts.
+
+### Mandatory automatic recovery and forward progression (13 November 2026, v1.2)
+
+**Binding principle (verbatim):**
+
+> Automatic recovery must be part of normal pipeline execution, not depend on
+> the owner repeatedly asking the developer to fix the next blocker.
+
+This is a **release-closure development requirement**, not an aspiration or
+an instruction applicable only to a particular PDF. Every future code change,
+G2/G3 campaign, resumed session, and new recovery implementation MUST follow
+this policy. The developer MUST inspect earlier commits, failure records, test
+fixtures, recovery receipts and previously implemented repair mechanisms before
+treating a familiar blocker as an unsolved case. Search only the **original
+Gemini-API MicroGen_AI** history, not the Selenium MicroGen_AI_Web project,
+unless the owner explicitly authorizes a cross-project comparison.
+
+**Normal-pipeline recovery contract:**
+
+1. **Identify and classify the failure automatically** at the stage where it
+   occurs, preserving its source/code/input SHA256, affected stage and
+   independent evidence. Distinguish deterministic known defects, transient
+   provider failures, untrusted QA observations, missing prerequisites,
+   genuinely changed input/audio, and failures requiring new authority.
+2. **Reuse verified historical remedies automatically.** Connect the remedy to
+   the ordinary production entrypoint (`microgen_batch.py` and its actual
+   stage modules), rather than relying on a standalone troubleshooting script,
+   conversation memory or a manual patch. Remedies must be source- and
+   version-bound, finite, safe to repeat, and compatible with resumed runs.
+3. **Revalidate after each repair.** Require applicable regression tests and
+   actual stage-specific quality/provenance checks. A successful recovery must
+   produce an explicit SHA-bound result/receipt and restore the normal
+   checkpoint state. A previous blocked receipt, model output or WAV is never
+   silently converted into a passing QA result.
+4. **Automatically continue downstream.** After an independently verified
+   repair, the SAME normal runner proceeds to the next eligible stage without
+   owner prompting or redundant manual approval. In particular, successful
+   acoustic QA must trigger slide slicing, synchronized video generation,
+   strict per-video duration checks (each less than 600 seconds), decoded
+   visual/source verification and private final acceptance under the same
+   authorized finite campaign. Do not stop merely to report that a familiar
+   blocker has been resolved.
+5. **Preserve all unaffected verified work.** Use exact dependency
+   fingerprints/checkpoints to reuse figures, slides, narration, scientific
+   reviews, source-grounded cue plans, and original PCM when still valid.
+   Invalidate only the changed inputs and their true dependents. An
+   acoustic-review-only change does not justify resynthesizing byte-identical,
+   source/voice-proven WAVs; a real voice-input change DOES invalidate those
+   WAVs and requires new acoustic/synchronization evidence.
+6. **Generalize any newly discovered remedy.** If an earlier remedy does not
+   exist, reproduce and classify the actual new failure; implement the
+   smallest general-purpose recovery in the codebase, add positive and
+   adversarial historical-failure replay tests, and integrate it with the
+   production stage and dependency fingerprints. Once genuinely verified,
+   future instances of the same recoverable failure must use it by default.
+   No one-off per-slide workaround qualifies as closure.
+7. **Prevent repeated failure loops.** Use finite retries and repair budgets,
+   idempotent or transactional writes, strict stop conditions and deduplicated
+   source/code/provider fingerprints. Do not endlessly retry one PDF, reset a
+   consumed paid grant, regenerate unchanged inputs, fabricate evidence or
+   lower a mathematical/acoustic/visual acceptance threshold merely to move
+   forward.
+
+**Exception, not a loophole:** Automatic recovery cannot guarantee that
+every future defect is solvable. Unknown failures, contradictory independent
+scientific/acoustic evidence, unavailable providers, unsafe or corrupted
+source data, exhausted finite authorizations and unapproved publication MUST
+remain explicit fail-closed holds. Record a typed, actionable root cause and
+the next safe action; keep progressing with any *independently authorized*
+work. Do not treat a hold as successful completion or repeatedly request
+routine manual approval. A new paid campaign, new provider/source scope or
+irreversible release still requires its legitimate authorization.
+
+**Mandatory development acceptance evidence:** For every blocker-recovery PR
+or patch, document (a) the historical failure and its generalized class,
+(b) where automatic detection/recovery is called in the real runner,
+(c) a replay of the original failure and negative counterexamples,
+(d) proof of existing-asset integrity and finite retry/rollback behavior,
+(e) successful resumption to the next stage when the recovered output is
+valid, and (f) any honestly remaining unresolved gate. Unit-test success or
+a ChatGPT claim alone does not establish real G2/G3 video acceptance.
+The release-closure contract itself and the README must remain visible
+entrypoints for future development sessions.
 
 ### Standing autonomous development and bounded campaign continuation (10 November 2026)
 
