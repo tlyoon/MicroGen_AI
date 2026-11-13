@@ -253,3 +253,37 @@ def test_tts_math_voice_receipt_binding_after_semantic_spoken_repair():
     assert status["phoneme_certified"] is False
     assert status["publication_allowed"] is False
     assert status["changed_for_tts_only"] is True
+
+
+def test_old_math_voice_policy_receipt_rejected_before_paid_tts(tmp_path):
+    """Old individually pronounceable voice cannot skip new remedy policy."""
+    stage=tmp_path/"2.5"
+    stage.mkdir()
+    old="We define instantaneous acceleration ay ex as the limit of velocity."
+    # A SHA-valid old artifact alone does not prove current-code compliance.
+    import hashlib
+    old_proof={
+        "schema_version":1,
+        "voice_input_sha256":hashlib.sha256(old.encode()).hexdigest(),
+        "unresolved_source_risk_count":0,
+        "phoneme_certified":False,
+        "publication_allowed":False,
+    }
+    (stage/"script_tts.json").write_text(json.dumps({
+        "slides":[{"slide":1,"tts_text":old,
+                   "tts_math_voice_preflight":old_proof}]
+    }),encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,
+                       match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage)
+    fixed=normalize_scientific_speech(reviewed_math_voice(old))
+    assert fixed!=old
+    (stage/"script_tts.json").write_text(json.dumps({
+        "slides":[{"slide":1,"tts_text":fixed,
+                   "tts_math_voice_preflight":
+                   voice_input_risk_status(fixed,normalize_scientific_speech)}]
+    }),encoding="utf8")
+    checked=preflight_voice_sidecar(stage)
+    assert checked["source_risk_count"]==0
+    assert checked["acoustic_qa_required"] is True
+    assert checked["publication_allowed"] is False

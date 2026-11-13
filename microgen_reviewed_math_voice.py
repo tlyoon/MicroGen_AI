@@ -146,6 +146,20 @@ def preflight_voice_sidecar(stage) -> dict:
         if not isinstance(spoken, str) or not spoken.strip():
             raise VoiceRiskPreflightError("Empty spoken lecture source")
         actual_input = normalize_scientific_speech(spoken)
+        current_reviewed = normalize_scientific_speech(
+            reviewed_math_voice(spoken))
+        if current_reviewed != actual_input:
+            # An old, individually safe narration may use a voice spelling
+            # superseded by a more source-faithful acoustic remedy. The
+            # six-stage prior-campaign import must not treat that old voice
+            # sidecar (or its science receipt) as current-code acceptance.
+            # The importer retains the four independently verified source/
+            # slide stages and rebuilds narration from verified model caches.
+            raise VoiceRiskPreflightError(
+                "STALE_VOICE_ADAPTER_SOURCE_HOLD: current acoustic math "
+                "voice policy changes a prior sidecar; regenerate the "
+                "voice-only narration and independent science QA, do not "
+                "replay or approve old PCM")
         risk_list = find_pronunciation_risks(spoken, actual_input)
         if risk_list:
             blocked.append((row["slide"], len(risk_list)))

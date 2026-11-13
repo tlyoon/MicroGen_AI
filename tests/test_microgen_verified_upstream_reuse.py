@@ -457,3 +457,29 @@ def test_science_reviewer_code_drift_reuses_only_four_trusted_source_stages(
     assert provenance["full_previous_science_verification_current_code"] is False
     assert provenance["new_model_requests"] is False
     assert reuse.verify_import_receipt(stage)["stages"]==list(reuse.FOUR_UPSTREAM)
+
+
+def test_prior_six_stage_math_voice_is_downgraded_to_four_on_new_policy(
+    tmp_path,
+):
+    """An old *valid* science receipt cannot authorize stale spoken notation."""
+    def stale_voice(_base, _campaign, stage, _source):
+        old="We define instantaneous acceleration ay ex as the limit of motion."
+        (stage/"script_tts.json").write_text(json.dumps({
+            "slides":[{"slide":1,"tts_text":old,"narration":old}]
+        }),encoding="utf8")
+    result,work,old=call_fixture(tmp_path,stale_voice)
+    assert result and result["status"]==reuse.FOUR_STATUS
+    assert result["stages"]==list(reuse.FOUR_UPSTREAM)
+    stage=work/"2.5"
+    cp=json.loads((stage/".microgen_checkpoint.json").read_text())
+    assert set(cp["completed"])==set(reuse.FOUR_UPSTREAM)
+    assert (stage/"slides.pdf").is_file()
+    assert not (stage/"script_tts.json").exists()
+    assert not (stage/".microgen_autonomous_science_qa.json").exists()
+    assert not (stage/"slide1.wav").exists()
+    receipt=json.loads((stage/reuse.RECEIPT).read_text())
+    assert receipt["full_previous_science_verification_current_code"] is False
+    assert receipt["new_audio_reused"] is False
+    assert receipt["publication_allowed"] is False
+    assert reuse.verify_import_receipt(stage)["stages"]==list(reuse.FOUR_UPSTREAM)

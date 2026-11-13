@@ -1190,3 +1190,32 @@ source-attested transformations at the narration-to-voice boundary
 BEFORE generating audio, with counterexamples and whole-lecture
 replay tests. Never replace a failed acoustic gate with acceptance
 by guessing what the speaker meant.
+
+
+**Fresh-source six-to-four invalidation after voice-policy upgrades.**
+The private Serway shadow identified an integration defect after introducing
+new voice wording: the old six-stage checkpoint was still considered valid
+because the prior narration and science receipts matched their OLD input
+hashes, even though the CURRENT reviewed voice adapter would transform the
+saved TTS text. This would silently skip the very acoustic remedy being
+introduced.
+
+The normal, pre-provider `preflight_voice_sidecar` now requires a saved
+voice sidecar to be fixed under the CURRENT reviewed voice adapter:
+`normalize(reviewed_math_voice(tts_text)) == normalize(tts_text)`.
+A drift raises `STALE_VOICE_ADAPTER_SOURCE_HOLD` rather than approving an old
+voice input. The private upstream importer catches this specific old-voice
+condition and imports only the FOUR independently validated source/figure/
+slide stages, NOT stale narration, science, TTS or acoustic approval.
+The source-bound, exact-request-key Gemini narration caches remain
+available as UNTRUSTED batches; the current narrator must revalidate
+every batch before rebuilding the voice text. A six-stage science-valid
+receipt is only described as current-code-valid if its voice adapter also
+passes. No replay of an old audio campaign, no fabricated science pass.
+
+A real private source shadow verified exactly **3 voice-only slide edits**
+(4, 5, 17), **14 unchanged slides**, all 3 exact Gemini narration batch
+keys accepted, unchanged visible narration and source, zero residual
+predictable pronunciation source risks, and **0 new model requests**.
+The independent science reviewer, actual two-model acoustic WAV QA and
+video/final release remain mandatory before G2 closure.

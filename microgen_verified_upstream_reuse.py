@@ -414,7 +414,7 @@ def maybe_import_verified_upstream(
             "current_code_revision": commit,
             "stages": list(selected_stages),
             "full_previous_science_verification_current_code":
-                bool(full_six_valid),
+                bool(full_six_valid and selected_stages == UPSTREAM),
             "copied_items": copied,
             "source_bound_narration_response_cache": reuse_cache,
             "new_audio_reused": False,
