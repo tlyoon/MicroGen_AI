@@ -8,7 +8,10 @@ authentication remain separately required.
 from __future__ import annotations
 import hashlib
 from pathlib import Path
-from microgen_tts_acoustic_qa import mismatch_details
+from microgen_tts_acoustic_qa import (
+    mismatch_details, verified_minor_asr_variation,
+    verified_numeric_fragment_tiebreak,
+)
 
 def sha(text:str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -96,12 +99,38 @@ def verify_acoustic_evidence(report:dict|None, stage:Path, spoken:list[str],
                                       "letter_y_yay_red_flags"):
                             if declared.get(field)!=actual[field]:
                                 problems.append(f"comparison_claim_drift_{number}_{i}_{field}")
-                    if any(x["difference_fraction_upper_bound"]>0.05 or
+                    minor=verified_minor_asr_variation(
+                        input_text,transcripts[0],transcripts[1])
+                    witness_ok=False
+                    witness=row.get("third_independent_review")
+                    if witness is not None:
+                        if (isinstance(witness,dict)
+                                and set(witness)=={
+                                    "status","model","transcript","audio_sha256",
+                                    "expected_spoken_sha256","publication_allowed"}
+                                and witness["status"]=="SOURCE_BOUND_MATH_SPLIT_WITNESS"
+                                and isinstance(witness["model"],str)
+                                and witness["model"].strip()
+                                and witness["model"] not in models
+                                and isinstance(witness["transcript"],str)
+                                and 5<=len(witness["transcript"])<=12000
+                                and witness["audio_sha256"]==wav_hash
+                                and witness["expected_spoken_sha256"]==sha(input_text)
+                                and witness["publication_allowed"] is False
+                                and not row.get("source_pronunciation_risks")):
+                            witness_ok=verified_numeric_fragment_tiebreak(
+                                input_text,transcripts[0],transcripts[1],
+                                witness["transcript"])
+                        if not witness_ok:
+                            problems.append(f"invalid_independent_math_witness_{number}")
+                    if (not minor and not witness_ok and any(
+                        x["difference_fraction_upper_bound"]>0.05 or
                         x["sensitive_mismatches"] or x["circa_red_flags"] or
-                        x["letter_y_yay_red_flags"] for x in recalculated):
+                        x["letter_y_yay_red_flags"] for x in recalculated)):
                         problems.append(f"unresolved_mismatch_{number}")
                     disagreement=mismatch_details(transcripts[0],transcripts[1])
-                    if disagreement["difference_fraction_upper_bound"]>0.05:
+                    if (not minor and not witness_ok and
+                            disagreement["difference_fraction_upper_bound"]>0.05):
                         problems.append(f"independent_recognizers_disagree_{number}")
                 except (ValueError,TypeError,KeyError):
                     problems.append(f"cannot_recalculate_transcripts_{number}")
@@ -114,6 +143,21 @@ def verify_acoustic_evidence(report:dict|None, stage:Path, spoken:list[str],
             problems.append(f"missing_source_risk_{number}")
         if status=="ASR_SCREEN_PASS_LISTENING_REQUIRED" and row.get("source_pronunciation_risks"):
             problems.append(f"uncleared_source_risk_{number}")
+    witness_rows=[
+        row.get("slide") for row in rows if isinstance(row,dict)
+        and row.get("third_independent_review") is not None
+    ]
+    witness_trace=report.get("independent_math_tiebreak")
+    if witness_rows or witness_trace is not None:
+        if (not isinstance(witness_trace,dict)
+                or witness_trace.get("resolved_slides")!=witness_rows
+                or witness_trace.get("publication_allowed") is not False
+                or not isinstance(witness_trace.get("witness_model"),str)
+                or any(row.get("third_independent_review",{}).get("model")!=
+                       witness_trace["witness_model"]
+                       for row in rows if isinstance(row,dict)
+                       and row.get("third_independent_review") is not None)):
+            problems.append("independent_math_witness_summary_inconsistent")
     if claimed_review!=derived_review:
         problems.append("acoustic_summary_inconsistent")
     if report.get("publishable") is True or report.get("human_listening_approved") is True:

@@ -242,6 +242,111 @@ def _recover_unavailable_reviewers(
     }
 
 
+MAX_MATH_TIEBREAK_SLIDES=2
+# Exactly one third-model identity is chosen per audit, and never to look
+# for a reviewer that agrees with the target. A mismatch still fails closed.
+MATH_TIEBREAK_MODELS=("gemini-2.5-pro","gemini-3.5-flash","gemini-2.5-flash")
+
+
+def _bounded_independent_math_tiebreak(
+        stage:Path, texts:list[str], report:dict, models:tuple[str,str],
+        *, provider_factory:Callable=_providers)->dict:
+    """Use one extra BLIND Gemini ASR witness for tiny number/letter splits.
+
+    The normal full-source two-model review and its bounded retakes have
+    already run. Only a single 40->4 t type split, one otherwise strict
+    source-matching original reviewer, zero source risk, and at most two
+    slides qualify. One distinct fixed third model gets ONE finite pool
+    attempt per qualifying slide. It never receives the expected text.
+    The original two transcripts are preserved for receipt re-verification.
+    """
+    from microgen_tts_acoustic_qa import (
+        verified_numeric_fragment_tiebreak,_input_snapshot,
+    )
+    original_snapshot=_input_snapshot(stage,len(texts))
+    candidates=[]
+    for row in report.get("slides",[]):
+        if (row.get("assessment")!="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
+                or row.get("source_pronunciation_risks")):
+            continue
+        n=row.get("slide")
+        trans=row.get("transcripts")
+        if (type(n) is int and 1<=n<=len(texts)
+                and isinstance(trans,list) and len(trans)==2
+                and all(isinstance(s,str) and s for s in trans)
+                # This is only a structural candidate. Using expected as
+                # an in-memory hypothetical witness does NOT approve audio.
+                and verified_numeric_fragment_tiebreak(
+                    texts[n-1],trans[0],trans[1],texts[n-1])):
+            candidates.append(n)
+    if not candidates or len(candidates)>MAX_MATH_TIEBREAK_SLIDES:
+        return report
+    alternatives=[m for m in MATH_TIEBREAK_MODELS if m not in models]
+    if not alternatives:
+        return report
+    witness_model=alternatives[0]
+    actual=(models[0],witness_model)
+    attempts=[]
+    resolved=[]
+    # Models are dynamically selected only by distinctness and fixed
+    # fallback priority. Never change model based on a failed third opinion.
+    try:
+        fresh=provider_factory(actual)
+        if fresh[2]!=actual:
+            raise AutonomousAcousticError("Independent math witness model identity drift")
+        recognizer=fresh[1]
+    except (OSError,RuntimeError,ValueError,TypeError,KeyError) as exc:
+        report["independent_math_tiebreak"]={
+            "status":"THIRD_GEMINI_REVIEWER_UNAVAILABLE",
+            "attempted_slides":candidates,"resolved_slides":[],
+            "witness_model":witness_model,"error_class":type(exc).__name__,
+            "publication_allowed":False,
+        }
+        return report
+    for n in candidates:
+        wav=stage/f"slide{n}.wav"
+        try:
+            third=str(recognizer(wav)).strip()
+            if not 5<=len(third)<=12000:
+                raise AutonomousAcousticError("Unreliable independent math witness")
+            if _input_snapshot(stage,len(texts))!=original_snapshot:
+                raise AutonomousAcousticError("Audio/source changed during third ASR review")
+            row=report["slides"][n-1]
+            original=row["transcripts"]
+            ok=verified_numeric_fragment_tiebreak(
+                texts[n-1],original[0],original[1],third)
+            attempts.append({"slide":n,
+                             "status":("SOURCE_BOUND_WITNESS_CORROBORATED" if ok
+                                       else "WITNESS_DISAGREES_OR_INVALID")})
+            if not ok:
+                continue
+            row["third_independent_review"]={
+                "status":"SOURCE_BOUND_MATH_SPLIT_WITNESS",
+                "model":witness_model,
+                "transcript":third,
+                "audio_sha256":digest_file(wav),
+                "expected_spoken_sha256":hashlib.sha256(
+                    texts[n-1].encode("utf8")).hexdigest(),
+                "publication_allowed":False,
+            }
+            row["assessment"]=PASS
+            resolved.append(n)
+        except Exception as exc:
+            attempts.append({"slide":n,"status":"WITNESS_UNAVAILABLE",
+                             "error_class":type(exc).__name__})
+            break
+    report["review_required_slides"]=[
+        row["slide"] for row in report["slides"] if row["assessment"]!=PASS]
+    report["independent_math_tiebreak"]={
+        "status":("VERIFIED_BOUNDED_WITNESS" if resolved else
+                  "MATH_WITNESS_UNRESOLVED"),
+        "attempted_slides":candidates,"resolved_slides":resolved,
+        "witness_model":witness_model,"attempts":attempts,
+        "publication_allowed":False,
+    }
+    return report
+
+
 def _recheck_disagreements(stage:Path, report:dict, texts:list[str],
                            engines:tuple[Callable,Callable],
                            models:tuple[str,str], memo:dict) -> dict:
@@ -327,13 +432,17 @@ def _strict_candidate(candidate:Path, expected:str,
             transcripts.append(value)
         except Exception:
             return False
-    for speech in transcripts:
-        findings=mismatch_details(expected,speech)
-        if (findings["difference_fraction_upper_bound"]>0.05 or
-            findings["sensitive_mismatches"] or findings["circa_red_flags"] or
-            findings["letter_y_yay_red_flags"]):
-            return False
-    return (mismatch_details(*transcripts)["difference_fraction_upper_bound"]<=0.05)
+    from microgen_tts_acoustic_qa import verified_minor_asr_variation
+    minor=verified_minor_asr_variation(expected,*transcripts)
+    if not minor:
+        for speech in transcripts:
+            findings=mismatch_details(expected,speech)
+            if (findings["difference_fraction_upper_bound"]>0.05 or
+                findings["sensitive_mismatches"] or findings["circa_red_flags"] or
+                findings["letter_y_yay_red_flags"]):
+                return False
+    return (minor or
+            mismatch_details(*transcripts)["difference_fraction_upper_bound"]<=0.05)
 
 
 def _render_same_voice(text:str, destination:Path, expected_record:dict) -> None:
@@ -624,6 +733,11 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                   +str(model_failover["status"])+
                   "; actual independent models="+str(models),flush=True)
     report=_recheck_disagreements(stage,report,texts,engines,models,memo)
+    if auto_provider_recovery and report.get("review_required_slides"):
+        # Historical slide-11 shape: a single 40 / 4 t split with one
+        # source-correct model. A third blind Gemini reviewer may confirm,
+        # but no contrary number/sign/exponent or missing passage is waived.
+        report=_bounded_independent_math_tiebreak(stage,texts,report,models)
     if model_failover:
         report["independent_model_failover"]=model_failover
     correction_count=0

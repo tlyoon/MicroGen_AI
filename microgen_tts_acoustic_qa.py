@@ -122,7 +122,29 @@ def mismatch_details(expected: str, heard: str) -> dict:
         changed += max(b-a,d-c)
         missing = e[a:b]
         extra = h[c:d]
-        significant = bool((set(missing) | set(extra)) & SENSITIVE)
+        edits=set(missing) | set(extra)
+        unit_words=set(
+            "meter meters metre metres kilometer kilometers kilometre "
+            "kilometres centimeter centimeters millimeter millimeters "
+            "second seconds minute minutes hour hours newton newtons "
+            "joule joules watt watts hertz volts voltage m km cm mm s".split())
+        unit_aliases={
+            ("meters","m"),("meter","m"),("metres","m"),("metre","m"),
+            ("kilometers","km"),("kilometer","km"),("kilometres","km"),
+            ("seconds","s"),("second","s"),("centimeters","cm"),
+            ("millimeters","mm"),("minutes","min"),("hours","h"),
+        }
+        pair=(" ".join(missing)," ".join(extra))
+        safe_unit_pair=pair in unit_aliases or (pair[1],pair[0]) in unit_aliases
+        significant=bool(
+            edits & SENSITIVE
+            or any(word.isdecimal() for word in edits)
+            or edits & unit_words
+            or edits & set(
+                "eleven twelve thirteen fourteen fifteen sixteen seventeen "
+                "eighteen nineteen twenty thirty forty fifty sixty seventy "
+                "eighty ninety hundred thousand million billion".split())
+        ) and not safe_unit_pair
         issues.append({
             "kind": tag,
             "expected": " ".join(missing),
@@ -146,6 +168,144 @@ def mismatch_details(expected: str, heard: str) -> dict:
         "letter_y_yay_red_flags": len(math_y_to_yay),
         "differences": issues,
     }
+
+
+# Fixed production ceiling for *minor* model-to-model spelling/wording noise.
+# This is a second, tightly scoped pathway; the original strict 5% policy
+# still governs all sensitive maths and genuine phonetic discrepancies.
+MINOR_ASR_SOURCE_WER=0.09
+MINOR_ASR_PAIR_WER=0.15
+MINOR_ASR_MIN_SOURCE_WORDS=30
+_MINOR_MATH_WORDS=set("""
+a b c d t v x y z vee tee see ay ex plus minus divide divided times
+multiplied squared cubed derivative acceleration velocity acceleration
+equation equals equal positive negative zero one two three four five six
+seven eight nine ten meter meters metre metres kilometer kilometers
+kilometre kilometres centimeter centimeters millimeter millimeters
+second seconds minute minutes hour hours kilometer per squared cubed
+newton newtons joule joules watt watts hertz volts voltage
+""".split()) | set(str(x) for x in range(10))
+_MINOR_NUMBER_WORDS=set("""
+eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen
+twenty thirty forty fifty sixty seventy eighty ninety hundred thousand
+million billion
+""".split())
+_MINOR_SAFE_ALIASES={
+    ("vee","v"), ("tee","t"), ("meters","m"), ("meter","m"),
+    ("seconds","s"), ("second","s"),
+    ("t a","ta"), ("t b","tb"), ("t see","tc"), ("t c","tc"),
+    ("v a","va"), ("v b","vb"),
+}
+
+
+def verified_minor_asr_variation(expected:str, heard_a:str, heard_b:str,
+                                 *, max_difference_fraction:float=0.05)->bool:
+    """Source-bound, narrow exception for harmless two-reviewer ASR variation.
+
+    Every original comparison remains in the report. The reviewer is never
+    given expected words. No numerical/mathematical/negation alteration, long
+    omission, unintelligible segment or one-sided phonetic red flag qualifies.
+    Fixed budgets intentionally do NOT grow with user supplied tolerance.
+    """
+    if max_difference_fraction>0.05 or max_difference_fraction<0:
+        return False
+    if len(tokens(expected))<MINOR_ASR_MIN_SOURCE_WORDS:
+        return False
+    if any(x in text.lower() for text in (heard_a,heard_b)
+           for x in ("[unclear]","[inaudible]")):
+        return False
+    comparisons=[mismatch_details(expected,heard_a),
+                 mismatch_details(expected,heard_b)]
+    pair=mismatch_details(heard_a,heard_b)
+    if (any(comp["sensitive_mismatches"] or comp["circa_red_flags"]
+            or comp["letter_y_yay_red_flags"] for comp in (*comparisons,pair))
+            or any(comp["difference_fraction_upper_bound"]>MINOR_ASR_SOURCE_WER
+                   for comp in comparisons)
+            or pair["difference_fraction_upper_bound"]>MINOR_ASR_PAIR_WER):
+        return False
+    for comp in comparisons:
+        # At most 8 changed tokens and 5 short disjoint edits per reviewer.
+        # Avoid accepting missing sentences even on a long slide.
+        if len(comp["differences"])>5:
+            return False
+        changed=0
+        for issue in comp["differences"]:
+            left=issue["expected"].split()
+            right=issue["recognized"].split()
+            changed+=max(len(left),len(right))
+            if max(len(left),len(right))>2:
+                return False
+            words=set(left+right)
+            alias=(" ".join(left)," ".join(right))
+            reverse=(alias[1],alias[0])
+            if alias in _MINOR_SAFE_ALIASES or reverse in _MINOR_SAFE_ALIASES:
+                continue
+            if (words & (_MINOR_MATH_WORDS|_MINOR_NUMBER_WORDS)
+                    or any(word.isdecimal() for word in words)):
+                return False
+            # Non-math wording drift can be tolerated only in one-word edits.
+            if max(len(left),len(right))>1:
+                return False
+        if changed>8:
+            return False
+    return True
+
+
+def verified_numeric_fragment_tiebreak(
+        expected:str,heard_a:str,heard_b:str,third_heard:str)->bool:
+    """Require 2/3 source-BLIND model support for one narrow number/letter split.
+
+    E.g. a model may hear spoken 'forty' as '4 t' while the other spells
+    '40'. This is NOT a general numeric-tolerance policy: '40' -> '50',
+    sign changes, equations/exponents, omissions and two changed numbers
+    all remain blockers even when the third reviewer agrees with source.
+    """
+    import re
+    if len(tokens(expected)) < MINOR_ASR_MIN_SOURCE_WORDS:
+        return False
+    if any(marker in word.lower() for word in (heard_a,heard_b,third_heard)
+           for marker in ("[unclear]","[inaudible]")):
+        return False
+    originals=[mismatch_details(expected,heard_a),
+               mismatch_details(expected,heard_b)]
+    good_indexes=[i for i,comp in enumerate(originals)
+                  if (comp["difference_fraction_upper_bound"]<=0.05
+                      and not (comp["sensitive_mismatches"]
+                               or comp["circa_red_flags"]
+                               or comp["letter_y_yay_red_flags"]))]
+    if len(good_indexes)!=1:
+        return False
+    bad=originals[1-good_indexes[0]]
+    if (bad["difference_fraction_upper_bound"]>MINOR_ASR_SOURCE_WER
+            or bad["circa_red_flags"] or bad["letter_y_yay_red_flags"]
+            or len(bad["differences"])>5
+            or bad["sensitive_mismatches"]!=1):
+        return False
+    fragments=0
+    for issue in bad["differences"]:
+        left=issue["expected"].split()
+        right=issue["recognized"].split()
+        if issue["sensitive"]:
+            # ASR number/letter segmentation only, never a changed value.
+            if (len(left)!=1 or len(right)!=2
+                    or not re.fullmatch(r"[1-9]0",left[0])
+                    or right != [left[0][0],"t"]):
+                return False
+            fragments+=1
+        else:
+            if ((" ".join(left)," ".join(right)) not in _MINOR_SAFE_ALIASES
+                    and (" ".join(right)," ".join(left)) not in _MINOR_SAFE_ALIASES):
+                return False
+    if fragments!=1:
+        return False
+    candidate=mismatch_details(expected,third_heard)
+    agreeing=mismatch_details((heard_a,heard_b)[good_indexes[0]],third_heard)
+    for row in (candidate,agreeing):
+        if (row["difference_fraction_upper_bound"]>0.05
+                or row["sensitive_mismatches"]
+                or row["circa_red_flags"] or row["letter_y_yay_red_flags"]):
+            return False
+    return True
 
 
 def _input_snapshot(folder: Path, count: int) -> dict[str,str]:
@@ -216,17 +376,21 @@ def audit_with_recognizer(
                 consensus = mismatch_details(attempts[0],attempts[1])
                 if any("[unclear]" in t.lower() or "[inaudible]" in t.lower() for t in attempts):
                     status = "REVIEW_REQUIRED_UNCLEAR_SPEECH"
-                elif consensus["difference_fraction_upper_bound"] > max_difference_fraction:
-                    status = "REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
-                elif any(
-                    x["difference_fraction_upper_bound"] > max_difference_fraction or
-                    x["sensitive_mismatches"] or x["circa_red_flags"] or
-                    x["letter_y_yay_red_flags"]
-                    for x in findings
-                ):
-                    status = "REVIEW_REQUIRED_PRONUNCIATION_RISK"
                 else:
-                    status = "ASR_SCREEN_PASS_LISTENING_REQUIRED"
+                    minor = verified_minor_asr_variation(
+                        text,attempts[0],attempts[1],
+                        max_difference_fraction=max_difference_fraction)
+                    if (consensus["difference_fraction_upper_bound"] >
+                            max_difference_fraction and not minor):
+                        status = "REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
+                    elif (any(
+                        x["difference_fraction_upper_bound"] > max_difference_fraction or
+                        x["sensitive_mismatches"] or x["circa_red_flags"] or
+                        x["letter_y_yay_red_flags"] for x in findings
+                    ) and not minor):
+                        status = "REVIEW_REQUIRED_PRONUNCIATION_RISK"
+                    else:
+                        status = "ASR_SCREEN_PASS_LISTENING_REQUIRED"
         source_risks=[asdict(x) for x in find_pronunciation_risks(raw_texts[n-1],text)]
         # Two script-blind recognizers may both silently repair an actually
         # mispronounced variable; consensus never cancels source-derived risk.

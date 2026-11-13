@@ -1420,3 +1420,78 @@ reviewer identities, refusal to switch on genuine speech discrepancies,
 and exhausted/forged-model failure. These tests do not, alone, establish
 live independent audio approval. Actual new G2 model responses must be
 obtained in the later finite campaign.
+
+
+### 13 November 2026 — Source-protected minor acoustic differences and bounded independent adjudication
+
+**Owner decision:** Do not block ordinary lecture generation on harmless
+disagreements between Gemini acoustic reviewers. Still block obvious
+pronunciation defects, incorrect or missing mathematics, numerical values,
+signs, exponents, physical units, negations, major omissions, source-side
+pronunciation risks, corrupt WAVs and unavailable independent evidence.
+No local TTS/ASR model is a substitute for genuine Gemini reviewer evidence.
+
+**Actual SHA-bound failure class:** Private Serway 2.5 G2 at
+`20261113_HP_G2_ASR_FALLBACK_5D96_PRIVATE` generated and source-verified
+17 original slide WAVs + 71 cue WAVs. Its production ASR fallback obtained
+two distinct Gemini reviewer transcripts, but the previous one-size 5%
+threshold blocked slides **6 and 11**. Original confidential reviewer
+words were preserved in a private, hashed, unexported failure trace.
+The original SHA-bound WAV, source TTS sidecar and original model identities
+were verified before reading the trace.
+
+**Implemented in the NORMAL `microgen_batch.py` acoustic production gate:**
+
+1. The shared acoustic comparator and independent release-evidence validator
+   both apply the SAME narrow minor-variation rule. For source narration of
+   at least 30 words, each independent reviewer may have at most **9%**
+   differences from the source, and the two may differ by at most **15%**.
+   Every edit must be short (at most two tokens), with at most 5 edits and
+   8 affected tokens per reviewer. Formula/letter aliases and standard
+   units have explicit safe equivalences; unlisted mathematical changes,
+   numeric/negation/unit changes, phonetic `circa/yay` flags, unintelligible
+   speech and long missing material cannot use this pathway. The ordinary
+   strict 5% rule remains for every genuine sensitive discrepancy.
+2. Shared mathematical detection now catches **all digit-token differences**
+   (not only numerals 0–10), numeric words above ten, and changed physical
+   units. Approved symbol/abbreviation aliases such as `meters`/`m`
+   are not misconstrued as changed units. These protections are enforced
+   in the initial audio screen, candidate recheck and final independent
+   receipt verification, not merely in a troubleshooting script.
+3. After normal bounded dual-model retakes, exactly one additional
+   **source-BLIND, independent Gemini reviewer** may be used on at most
+   two mathematically ambiguous slides if (a) one original reviewer is
+   already strongly source-aligned, (b) the other shows only the *specific*
+   number/letter segmentation artifact `40` vs `4 t` (generalized to
+   a tens digit such as `30`/`3 t`), (c) there are no other sensitive
+   discrepancies or source pronunciation warnings, and (d) the third
+   reviewer independently agrees with both the source and the already
+   source-aligned original transcript under the strict 5% guard.
+   The third model is selected from a fixed distinct-model priority list;
+   it never sees the target script and no further models are shopped after
+   an unfavorable third opinion. Missing evidence keeps the QA blocked.
+4. The complete **original two transcripts remain preserved**, with a
+   distinct SHA-bound third-model witness and its actual model identity,
+   WAV and spoken-input hashes. Final validation recalculates every
+   source/math mismatch and checks the claimed tiebreaker, rather than
+   trusting a changed `assessment` string. A forged `PASS`, changed
+   number, changed unit, missing voice/audio hash or model identity drift
+   never yields acceptance.
+5. After a genuine independent acoustic pass, the standing authorized
+   private runner continues automatically to slide slicing, the correctly
+   timed (<600-second-part) MP4s, decoded visual QA and final acceptance.
+   Source/figure/science/TTS work and the 88 verified WAVs are never
+   regenerated simply because reviewer scoring rules change. All
+   provider calls retain the existing finite authorization and budgets.
+
+**Verified offline historical replay:** With its authentic prior blind
+Gemini transcripts, slide 6 now passes through minor transcript spelling
+variations (`vee`/`v`, `tee`/`t`, `t a`/`ta`).
+Slide 11 is deliberately still blocked by `40` vs `4 t`.
+A **controlled, fabricated third-witness fixture** on the same genuine
+SHA-bound inputs demonstrates the final verifier can accept correct 2/3
+corroboration and reject tampered/source-inconsistent evidence; this is
+TEST EVIDENCE ONLY, not actual third-reviewer approval. A later individually
+authorized private G2 campaign must obtain real Gemini audio-review evidence
+before claiming acoustic/video acceptance. Do not manually label slide 11
+passed or publish old review failures.
