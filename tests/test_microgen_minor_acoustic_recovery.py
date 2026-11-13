@@ -248,3 +248,36 @@ def test_realistic_benign_unit_abbreviation_preserved_as_non_glaring():
     result=mismatch_details(expected,actual)
     assert result["sensitive_mismatches"]==0
     assert result["difference_fraction_upper_bound"]>0
+
+
+@pytest.mark.parametrize("word,value",[
+    ("twenty","20"),("thirty","30"),("forty","40"),
+    ("fifty","50"),("sixty","60"),("seventy","70"),
+    ("eighty","80"),("ninety","90"),
+])
+def test_same_source_number_word_and_written_digit_are_equivalent(word,value):
+    from microgen_tts_acoustic_qa import mismatch_details
+    expected=f"The mathematical constant term is {word} units."
+    heard=f"The mathematical constant term is {value} units."
+    result=mismatch_details(expected,heard)
+    assert result["difference_fraction_upper_bound"]==0
+    assert result["sensitive_mismatches"]==0
+
+
+@pytest.mark.parametrize("heard",[
+    "The constant term 50, then subtract 5 multiplied by time squared",
+    "The constant term 4 t, then subtract 5 multiplied by time squared",
+    "The constant term 40, then add 5 multiplied by time squared",
+    "The constant term 40, then subtract 5 multiplied by time cubed",
+    "The constant term 40, then subtract 6 multiplied by time squared",
+])
+def test_numeric_voice_equivalence_does_not_waive_glaring_math_changes(heard):
+    from microgen_tts_acoustic_qa import mismatch_details
+    expected="The constant term forty, then subtract five multiplied by time squared"
+    result=mismatch_details(expected,heard)
+    assert result["difference_fraction_upper_bound"]>0
+    assert result["sensitive_mismatches"]>0
+    assert not verified_minor_asr_variation(
+        expected+" while studying constant acceleration in this example."*4,
+        heard+" while studying constant acceleration in this example."*4,
+        expected+" while studying constant acceleration in this example."*4)

@@ -29,6 +29,7 @@ continuous continuity discontinuity integral integrals minus plus
 positive negative numerator denominator fraction infinite infinity
 equals equal point zero one two three four five six seven eight nine ten
 not never no greater less negative positive above below minus multiplied divided
+subtract subtracted subtracting add added adding multiply multiplying divide dividing
 squared cubed
 """.split()) | set("0 1 2 3 4 5 6 7 8 9 10".split())
 
@@ -66,7 +67,13 @@ def tokens(text: str) -> list[str]:
                   flags=re.IGNORECASE)
     numbers = {"zero": "0", "one": "1", "two": "2", "three": "3",
                "four": "4", "five": "5", "six": "6", "seven": "7",
-               "eight": "8", "nine": "9", "ten": "10"}
+               "eight": "8", "nine": "9", "ten": "10",
+               # Independent ASR may transcribe the SAME audible exact
+               # mathematical value as a spelled word or digit. Preserve
+               # numerically different values (40 != 50, 40 != 4 t).
+               "twenty": "20", "thirty": "30", "forty": "40",
+               "fifty": "50", "sixty": "60", "seventy": "70",
+               "eighty": "80", "ninety": "90"}
     digits = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|\d+)"
     # "Equation eight point two" and "Equation 8.2" are the same citation.
     # Do not discard "point" from general decimal measurements.

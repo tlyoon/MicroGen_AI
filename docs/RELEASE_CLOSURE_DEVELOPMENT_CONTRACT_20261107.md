@@ -1556,3 +1556,15 @@ same-engine timed-cue synthesis is currently atomic; do not claim only
 one slide is re-billed or attempt an unverified hybrid PCM merge to save
 cost. New verified QA may still legitimately block if the provider or
 actual audio is unavailable. Do not claim G2/G3 complete on tests alone.
+
+
+**Additional acoustic-comparator normalization (same remedy):** A script's
+source-verified mathematical `forty` and a blind model's `40` are
+exactly equivalent in the normal two-model comparator. All tens words from
+twenty through ninety are canonicalized to their exact numeric value;
+`forty` still differs from `fifty`, `4 t`, negation or a changed
+coefficient. Independent numeric source guards are retained. A regression
+also found that `add` versus `subtract` had not been marked as a
+sensitive operator; all elementary add/subtract/multiply/divide verb forms
+are now mandatory mathematical red flags. These fixes have explicit
+positive and negative tests and do not waive an ASR disagreement.
