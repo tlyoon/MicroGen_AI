@@ -1366,3 +1366,57 @@ segments and retesting synchronization. Do not claim G2 closed solely
 because source stages, recovered audio or unit tests pass. Continue through
 independent ASR, correctly synchronized <600-second MP4 parts and final
 private acceptance only when each real check independently verifies.
+
+
+### 13 November 2026 — Automatic second-model ASR recovery after verified key exhaustion
+
+**Actual failure evidence:** The genuine new Serway §2.5 private G2 campaign
+`20261113_HP_G2_AUTORECOVERY_064F_PRIVATE` independently source-reverified
+its 17-slide scientific QA (zero unresolved issues), regenerated and verified
+71 timed cue WAVs plus 17 slide WAVs under the revised math-voice policy,
+and automatically advanced to acoustic QA. The Gemini 3.5 Flash audio
+reviewer returned usable original-audio transcripts; **Gemini 3.8 Flash,
+independent reviewer B, remained unavailable across the finite configured
+API key pool**. The campaign correctly stopped
+`Independent acoustic transcription unavailable for model pass(es) [1]`.
+This is no evidence of erroneous phonemes. Old failed acoustic approvals
+remain invalid, and NO video or publication was generated.
+
+**Permanent normal-path remedy:** Under `microgen_autonomous_acoustic_gate`,
+a completed original transcript screen now detects unavailable *model
+passes*, separate from genuine review disagreement or source pronunciation
+risks. It automatically attempts no more than TWO fixed, independently
+audio-capable Gemini model alternatives (`gemini-2.5-flash`, then
+`gemini-2.5-pro`) on the SAME unchanged WAV files, retaining the
+hash-bound output of the working independent reviewer. A replaced reviewer
+MUST independently transcribe all 17 WAVs; prior partial responses from
+the unavailable model cannot be mixed with its replacement. The actual
+distinct model identities, candidate attempts and finite status are
+recorded in the private acoustic evidence and success/failure receipt.
+The normal strict <5% transcript mismatch/sensitive-token/source-risk
+screens, two-model requirement and correctable-audio repair rules remain
+mandatory. A genuine disagreement or pronunciation discrepancy NEVER
+triggers reviewer-model shopping merely to achieve agreement.
+An alternate model that is unavailable to the user's API account or
+does not support the exact JSON transcript endpoint is simply counted
+as one of two finite unsuccessful candidates. No unbounded retries or
+model/credential substitutions are allowed.
+
+**Dependency-aware resumption:** This is a code change to acoustic
+reviewer logic only. A new, separately authorized source- and code-pinned
+private campaign MUST revalidate and reuse the original 17 slide PCM WAVs,
+71 cue WAVs and source-bound timing/provenance under
+`microgen_verified_tts_reuse`, without charging for a new TTS pass.
+Both genuine independent reviewers still run under the new code before
+video. A successful acoustic receipt automatically continues to
+verified slide slicing, <600s multipart MP4 generation, decoded visual/
+audio synchronization checks and private acceptance. An unavailable
+alternative or genuine phoneme mismatch fails closed with its evidence.
+
+**Development evidence:** Source-free and historical-provider fixture
+tests simulate the original secondary-model key exhaustion, both bounded
+candidate outcomes, reuse of all first-model responses, exact actual
+reviewer identities, refusal to switch on genuine speech discrepancies,
+and exhausted/forged-model failure. These tests do not, alone, establish
+live independent audio approval. Actual new G2 model responses must be
+obtained in the later finite campaign.

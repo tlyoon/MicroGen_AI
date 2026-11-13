@@ -33,6 +33,11 @@ RECEIPT=".microgen_autonomous_acoustic_qa.json"
 MAX_REPAIR_SLIDES=2
 MAX_DISAGREEMENT_RECHECK_SLIDES=2
 DEFAULT_MODELS=("gemini-3.5-flash", "gemini-3.8-flash")
+# Two model-level alternatives, distinct from the primary two. These are
+# only tried on UNAVAILABLE model passes, never to fish for an ASR pass
+# after real scientific/phonetic disagreement. Every candidate still uses
+# the existing per-model bounded Gemini key-pool transport policy.
+BOUNDED_AUDIO_REVIEWER_FALLBACK=("gemini-2.5-flash", "gemini-2.5-pro")
 PASS="ASR_SCREEN_PASS_LISTENING_REQUIRED"
 REPAIRABLE="REVIEW_REQUIRED_PRONUNCIATION_RISK"
 
@@ -55,7 +60,7 @@ def _normalized(stage: Path) -> list[str]:
     return texts
 
 
-def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
+def _providers(models_override:tuple[str,str]|None=None) -> tuple[Callable,Callable,tuple[str,str]]:
     from dotenv import load_dotenv
     from gemini_keys import get_gemini_api_keys
     config=Path(os.environ.get("MICROVID_CONFIG_DIR",
@@ -71,9 +76,11 @@ def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
         raise AutonomousAcousticError("Invalid configured Gemini key preference") from exc
     if not 0<=index<len(keys):
         raise AutonomousAcousticError("Preferred Gemini key index unavailable")
-    models=(os.environ.get("MICROGEN_ACOUSTIC_MODEL_A",DEFAULT_MODELS[0]),
-            os.environ.get("MICROGEN_ACOUSTIC_MODEL_B",DEFAULT_MODELS[1]))
-    if models[0]==models[1] or not all(models):
+    models=(models_override if models_override is not None else
+            (os.environ.get("MICROGEN_ACOUSTIC_MODEL_A",DEFAULT_MODELS[0]),
+             os.environ.get("MICROGEN_ACOUSTIC_MODEL_B",DEFAULT_MODELS[1])))
+    if (not isinstance(models,tuple) or len(models)!=2
+            or models[0]==models[1] or not all(models)):
         raise AutonomousAcousticError("Two distinct Gemini audio reviewers required")
     # Every independent model may use the configured key pool. Preserve
     # distinct model identities while avoiding repeat requests to a key that
@@ -152,6 +159,87 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
     return audit_with_recognizer(
         stage,texts,caching(0),normalize_scientific_speech,
         independent_recognizer=caching(1),recognition_models=models)
+
+
+def _recover_unavailable_reviewers(
+        stage: Path, texts: list[str], engines: tuple[Callable,Callable],
+        models: tuple[str,str], report: dict, memo: dict, *,
+        provider_factory: Callable = _providers,
+) -> tuple[dict, tuple[Callable,Callable], tuple[str,str], dict, dict]:
+    """Automatically replace only an UNAVAILABLE independent Gemini model.
+
+    Recheck the SAME immutable original WAVs using at most two pinned fallback
+    model identities; retain already successful transcripts from the other
+    independent reviewer, but discard all earlier output from the changed
+    model so one reported pass never mixes providers across slides.
+
+    Genuine disagreement, missing math content or phonetic defects are not
+    eligible for model switching. Every final report still has two distinct
+    reviewers and the normal strict discrepancy/sensitive-token gates.
+    """
+    original=models
+    attempted=[]
+    remaining=set(report.get("unavailable_recognizer_passes",[]))
+    if not remaining:
+        return report,engines,models,memo,{}
+    if any(type(i) is not int or i not in (0,1) for i in remaining):
+        raise AutonomousAcousticError("Malformed independent ASR unavailable-model index")
+    for index in (0,1):
+        if index not in remaining:
+            continue
+        recovered=False
+        for candidate in BOUNDED_AUDIO_REVIEWER_FALLBACK:
+            if candidate in models:
+                continue
+            proposed=list(models)
+            proposed[index]=candidate
+            proposed=tuple(proposed)
+            # Do not perform another first-model transcript call: the first
+            # review's SHA-bound answer remains cached under its SAME model.
+            candidate_memo={key:value for key,value in memo.items()
+                            if isinstance(key,tuple) and len(key)==2
+                            and key[0]!=index}
+            try:
+                fresh=provider_factory(proposed)
+                if fresh[2]!=proposed:
+                    raise AutonomousAcousticError("Model identity drift in failover provider")
+                newengines=list(engines)
+                newengines[index]=fresh[index]
+                newengines=tuple(newengines)
+                trial=_transcripts(stage,texts,newengines,proposed,memo=candidate_memo)
+            except (OSError,RuntimeError,ValueError,TypeError,KeyError) as exc:
+                attempted.append({"reviewer_index":index,"model":candidate,
+                                  "status":"UNAVAILABLE",
+                                  "error_class":type(exc).__name__})
+                continue
+            lost=set(trial.get("unavailable_recognizer_passes",[]))
+            attempted.append({"reviewer_index":index,"model":candidate,
+                              "status":("VERIFIED_TRANSCRIPT_RESPONSE"
+                                        if index not in lost
+                                        else "UNAVAILABLE")})
+            if index in lost:
+                continue
+            report,engines,models,memo=trial,newengines,proposed,candidate_memo
+            remaining=lost
+            recovered=True
+            break
+        if not recovered:
+            # No fallback is a pass. Keep original model identities in the
+            # failure result, and retain an explicit exhausted budget trace.
+            return report,engines,models,memo,{
+                "status":"FINITE_GEMINI_REVIEWER_FALLBACK_EXHAUSTED",
+                "original_models":list(original),
+                "actual_models":list(models),
+                "attempts":attempted,
+                "publication_allowed":False,
+            }
+    return report,engines,models,memo,{
+        "status":"UNAVAILABLE_GEMINI_MODEL_REPLACED_FOR_ASR_ONLY",
+        "original_models":list(original),
+        "actual_models":list(models),
+        "attempts":attempted,
+        "publication_allowed":False,
+    }
 
 
 def _recheck_disagreements(stage:Path, report:dict, texts:list[str],
@@ -512,6 +600,7 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
             raise AutonomousAcousticError(
                 f"Slide {n} PCM defects block independent ASR: "
                 +", ".join(evidence["blocking_defects"]))
+    auto_provider_recovery=engines is None
     if engines is None:
         first,second,found=_providers()
         engines=(first,second)
@@ -526,7 +615,17 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     _hold_unchanged_failed_review(stage,texts,models)
     memo={}
     report=_transcripts(stage,texts,engines,models,memo=memo)
+    model_failover={}
+    if auto_provider_recovery and report.get("unavailable_recognizer_passes"):
+        (report,engines,models,memo,model_failover)=_recover_unavailable_reviewers(
+            stage,texts,engines,models,report,memo)
+        if model_failover:
+            print("[Acoustic QA] bounded model-level fallback: "
+                  +str(model_failover["status"])+
+                  "; actual independent models="+str(models),flush=True)
     report=_recheck_disagreements(stage,report,texts,engines,models,memo)
+    if model_failover:
+        report["independent_model_failover"]=model_failover
     correction_count=0
     try:
         # Provider outages are not pronunciation defects. Never spend the
@@ -540,6 +639,8 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 stage,report,texts,engines,
                 synthesize=synthesize or _render_same_voice)
             report=_transcripts(stage,texts,engines,models,memo=memo)
+            if model_failover:
+                report["independent_model_failover"]=model_failover
         _verify(stage,report,texts)
         receipt={
             "schema_version":1,
