@@ -644,6 +644,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         pairs_mode=os.environ.get("MICROGEN_TIMED_CUES","0")
         if pairs_mode not in ("0","1"):
             raise QualityError("Invalid timed-cue opt-in mode")
+    if name in {"tts","acoustic_qa","video","acceptance"}:
+        if (stage/".microgen_verified_audio_reuse.json").is_file():
+            from microgen_verified_tts_reuse import verify_reuse_receipt
+            verify_reuse_receipt(stage)
+            inputs.append(".microgen_verified_audio_reuse.json")
     if name == "acoustic_qa":
         # Changing the script-blind mathematical ASR typography comparator
         # invalidates old acoustic pass/hold evidence, NEVER valid TTS PCM.

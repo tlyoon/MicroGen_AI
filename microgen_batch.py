@@ -326,6 +326,8 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 verify_receipt(stage)
             elif name == "tts":
                 quality.check_wavs(stage, count)
+                from microgen_verified_tts_reuse import verify_reuse_receipt
+                verify_reuse_receipt(stage)
             elif name == "acoustic_qa":
                 from microgen_autonomous_acoustic_gate import verify_receipt
                 verify_receipt(stage)
@@ -1093,6 +1095,28 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
             mark_complete(cp, checkpoint_path, "science_qa", stage)
             print(f"[{subchapter}] recovered exact-source scientific QA receipt",flush=True)
             continue
+
+        if (stage_name == "tts"
+                and getattr(args, "standing_private_development", False)
+                and getattr(args, "bounded_provider_scope_verified", False)
+                and getattr(args, "stop_after", None) == "acceptance"):
+            # A change confined to the independent ASR reviewer should NOT
+            # rebill all previously source/voice/PCM-verified lecture WAVs.
+            # This only recovers original TTS evidence; original failed
+            # acoustic findings and old provider consent are never imported.
+            from microgen_verified_tts_reuse import maybe_reuse_verified_tts
+            reusable = maybe_reuse_verified_tts(
+                stage, work_root=args.work_root,
+                source_sha=quality.sha256(stage / "source.pdf"),
+                mark_complete=mark_complete, cp=cp,
+                checkpoint_path=checkpoint_path,
+                stage_valid=stage_valid, dest=dest)
+            if reusable:
+                print(f"[{subchapter}] verified same-source PCM resumed "
+                      f"from private campaign {reusable['from']}; "
+                      "independent two-model acoustic QA MUST rerun",
+                      flush=True)
+                continue
 
         if unchanged_failure_hold(cp, stage_name, stage):
             raise RuntimeError(

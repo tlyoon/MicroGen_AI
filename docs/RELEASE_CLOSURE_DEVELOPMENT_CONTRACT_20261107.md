@@ -1219,3 +1219,62 @@ keys accepted, unchanged visible narration and source, zero residual
 predictable pronunciation source risks, and **0 new model requests**.
 The independent science reviewer, actual two-model acoustic WAV QA and
 video/final release remain mandatory before G2 closure.
+
+
+### 13 November 2026 — Reusable known-blocker recovery is a normal pipeline dependency
+
+**Motivation:** Owner-required autonomous recovery is NOT satisfied by a
+blocked stage leaving useful evidence for the next ChatGPT conversation.
+A historical remedy must be executed by the ordinary G2 runner, with a
+stable failure identity, finite actions, output SHA binding and regression
+proof. New or contradictory evidence may not be silently considered a pass.
+
+**Established normal-path remedies:** finite Gemini 503/504 key failover,
+source-quote and numbered/adjacent PDF cue reconciliation with exact
+mathematical values, deterministic reviewed mathematical TTS voice input,
+source and narration checkpoint reuse, strict JSON-only independent
+scientific/acoustic model responses, source-blind mathematical transcript
+comparison, bounded rechecks of contaminated recognizer responses and
+verified same-engine/voice candidate repair.
+
+**Additional critical recovery (verified source-bound PCM reuse):** The
+original private G2 runner previously discarded all earlier WAVs when
+only independent acoustic QA implementation changed. It now calls
+`microgen_verified_tts_reuse.maybe_reuse_verified_tts` at the **normal
+TTS stage** in a NEW individually authorized HP private source/commit
+scope, before another billable TTS request. It may copy existing original
+PCM, per-cue chunks, timed-highlight and exact source cue provenance ONLY
+when the source, slides, written/voice narration, 17 original per-slide
+PDFs, prompt-bound cue plan, all producer code modules and provider/voice
+configuration remain byte-identical. SHA and original audio manifest,
+voice-preflight, source cue, audio metadata and measured PCM highlighting
+are independently revalidated twice. A missing cue plan may be restored
+only if it passes current source/PDF cue evidence verification.
+Recovery is transactional, size- and file-inventory-bounded, and stores
+an explicit SHA-bound receipt. It **does not** import the failed prior
+acoustic review, ASR transcripts, paid provider authorization, video,
+release authorization or publisher output. Both independent Gemini
+recognizers MUST run afresh before advancing to video.
+
+**Strict non-reuse cases:** A change to the source PDF, mathematical
+narration, TTS voice policy, code affecting actual synthesis, cue ordering,
+PCM WAVs or provider settings forces normal rerender/QA, never a false
+acoustic pass. The real Serway G2 original PCM and all timed chunks were
+independently validated in a read-only HP replay. The revised math-voice
+policy is deliberately incompatible with its older WAVs; this is NOT an
+acoustic-only change. Source-free regression fixtures prove same-source
+PCM reuse, preservation of the unchanged SHA and denial on eleven
+falsified code/source/voice/evidence cases. An additional real-source
+isolated replay copied the 17 original PCM WAVs and exact chunk inventory
+without any model request, while leaving old acoustic failures excluded.
+
+**Unresolved limits:** Independent ASR can still be genuinely unavailable,
+contradictory, or detect a real phonetic/math error. Finite provider and
+same-voice repair budgets remain mandatory; unknown errors and
+mathematically unsafe evidence fail closed with a typed terminal
+diagnostic. In particular a changed slide WAV in **timed-cue** mode must
+never be accepted without remeasuring corresponding individual cue PCM
+segments and retesting synchronization. Do not claim G2 closed solely
+because source stages, recovered audio or unit tests pass. Continue through
+independent ASR, correctly synchronized <600-second MP4 parts and final
+private acceptance only when each real check independently verifies.
