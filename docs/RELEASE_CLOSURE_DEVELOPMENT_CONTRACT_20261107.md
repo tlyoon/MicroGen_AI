@@ -1138,3 +1138,15 @@ speaker slips and ambiguous source evidence remain blocked. New
 provider calls require fresh finite, owner-authorized HP campaign
 scope. G2 can close only on actual independent acoustic, visual
 synchronization and complete accepted video evidence.
+
+
+**Safety correction after the exact-head HP suite:** The historical
+`test_genuine_sensitive_or_out_of_scope_differences_remain_visible`
+revealed that normalizing every isolated "tee" to a letter `t` was
+too broad. The rule is now restricted to explicitly identified
+mathematical phrases (`time tee`, `versus tee`, `d tee`, or a
+source-grounded signed coefficient such as `minus see tee`). Generic
+`tee` vs `t` remains a visible mismatch. The complete original
+17-slide private transcript replay still yields only **one
+malformed reviewer response** (slide 5) requiring a genuine bounded
+audio-model recheck. This diagnostic is not an acoustic pass.

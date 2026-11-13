@@ -161,3 +161,19 @@ def test_acoustic_fingerprint_tracks_formatter_without_invalidation_of_tts(
     (tmp_path/"microgen_acoustic_math_transcript.py").write_bytes(b"UPDATED")
     assert dependency_fingerprint(tmp_path,"tts")==tts_before
     assert dependency_fingerprint(tmp_path,"acoustic_qa")!=acoustic_before
+
+
+def test_standalone_tee_is_never_automatically_equated_to_time_t():
+    # Preserve the prior source-grounded pronunciation safeguard.
+    assert mismatch_details(
+        "The t variable is positive.",
+        "The tee variable is positive.")["difference_fraction_upper_bound"] > 0
+    assert mismatch_details(
+        "The tee of a golf ball is visible.",
+        "The t of a golf ball is visible.")["difference_fraction_upper_bound"] > 0
+    # But an explicitly named mathematical time variable may be written
+    # differently by independent recognition models.
+    assert mismatch_details(
+        "The slope on the ex versus tee graph is constant.",
+        "The slope on the x versus t graph is constant.")[
+            "difference_fraction_upper_bound"] == 0

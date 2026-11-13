@@ -56,9 +56,13 @@ def canonical_math_transcript(text: str) -> str:
                    "meters per second squared", value, flags=re.I)
     value = re.sub(r"\bm\s*/\s*s\b",
                    "meters per second", value, flags=re.I)
-    # The text 'tee'/'vee' is the phonetic spelling of these two single
-    # mathematical letters. In ordinary prose no other word is changed.
-    value = re.sub(r"\btee\b", "t", value, flags=re.I)
+    # An isolated "tee" may be an ordinary word or a speech defect.
+    # Historical regression requires it remain different from the bare t.
+    # Only an explicit mathematical context permits that equivalence.
+    value = re.sub(r"\b(?:time|versus|d)\s+tee\b",
+                   lambda m: m[0][:-3] + "t", value, flags=re.I)
+    value = re.sub(r"\b(minus|plus)\s+see\s+tee\b",
+                   lambda m: m[1] + " see t", value, flags=re.I)
     # Normalize mathematical squared/cubed exponents without dropping powers.
     # Math polynomial typography retained by a recognizer (bt^3 - ct).
     # Do not rewrite an unrelated word such as chemical abbreviation CT.
