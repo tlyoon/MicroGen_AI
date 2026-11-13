@@ -1720,3 +1720,44 @@ narration cache and cleared all 3 original residual pronunciation-risk flags
 with zero model calls. Two general source-free regression suites passed 66 tests.
 G3 remains open until two additional genuine sources pass all mandatory QA,
 plus genuine long-media and source-hash-bound interruption recovery evidence.
+
+
+### 13 November 2026 — G3 exact textbook cross-reference numeric grounding
+
+The real G3 section 2.6 campaign exposed a second general **zero-provider-cost
+preflight** defect: the fixed PDF printed exact text `Figure 2.10`,
+`Section 2.7.` and `Quick Quiz 2.6`; the independently generated narrator
+said `Figure 2 point 10`, `Section 2 point 7` and
+`Quick Quiz 2 point 6`. The old numeric checker wrongly interpreted the
+printed cross-reference `2.10` as a floating-point `2.1`, treated
+spoken figure/section identifiers as separate scalar numbers, and could
+miss decimal values preceding sentence punctuation. It therefore blocked
+actual source-supported spoken mathematical and teaching references BEFORE
+semantic mapping without issuing a paid model request.
+
+**Normal production remedy:** All source slide, planner, semantic and early
+numeric QA use the one canonical `microgen_cue_semantic_mapping.numbers`
+implementation. That parser now distinguishes **exact numbered textbook
+reference IDs** (Figure/Fig, Section/Sec, Quick Quiz/Quiz,
+Example/Ex, Equation/Eq), and exact figure-panel identities, from physical
+numeric measurement claims. Written `Figure 2.10c` and spoken
+`Figure 2 point 10 panel see` share the same structured ID; a different
+panel, section number, figure number, category or unsupported source number
+never matches. Ordinary quantitative decimals (including valid trailing
+sentence punctuation) remain mathematical numbers; partially parsed
+multilevel numeric labels are not silently accepted. The source PDF,
+visible source text, narration and generated voice are never rewritten
+or treated as proven by an LLM.
+
+**Independent read-only real-source verification:** on the unchanged
+source+slides+voice inputs from the terminal, private section 2.6 campaign,
+all **13 slides and 46 spoken cue units** had **zero** unavailable source
+number/reference identities after normalization. The production full-lecture
+zero-paid preflight, executed on a *private shadow* of the original inputs,
+returned `semantic_budget_admitted` within the pre-existing strict
+4-slide semantic ceiling. **103 focused tests passed, 1 skipped**, covering
+visible reference equivalence, negative wrong-reference cases, physical
+quantitative numbers and existing cue/semantic safety. No audio or media
+stage passed from this read-only check: a fresh finite campaign at a new
+committed revision is still required. Never restart the consumed prior
+authorization or relax source-grounding to force acceptance.

@@ -552,3 +552,41 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   bounded SHA/source/commit pinned section 2.6 real campaign to acceptance,
   followed by independently new section 2.7 long candidate and complete
   G3 3/3 matrix. No manual per-slide edits; no public publication.
+
+
+## 13 Nov 2026 — G3 source-numbered-reference false hold (second cross-section blocker)
+
+- Previous G3 code fa5b45b32fb4b0fd23cb89dbc4aee1d59ff17d1e
+  was tested 2152 passed, 21 skipped, 201 subtests, code clean and pushed
+  to PR #291. New section 2.6 campaign:
+  20261113_HP_G3_SERWAY26_VOICE_FA5B_PRIVATE. Verified reuse of the
+  original FOUR source/figure/slide stages AND both exact-keyed original
+  13-slide Gemini narration model caches worked; source-pronunciation
+  preflight passed. Campaign ended with a genuine source-grounding blocker
+  `UNATTESTED_VISIBLE_NUMERIC_CUE` on slide 4 cue 3, before any further
+  scientific QA requests, and exit 1. This paid scope is consumed; do not
+  re-run unchanged.
+- Authentic frozen source slide 4 contained `Figure 2.10` while narrator
+  rendered `Figure 2 point 10`. Existing numeric parsing incorrectly
+  compared scalar 2.1 versus raw 2 and 10. Read-only analysis of all
+  13 true slides also detected source `Section 2.7.` versus spoken
+  `Section 2 point 7`, and `Quick Quiz 2.6` versus
+  `Quick Quiz 2 point 6`. No invented numbers: all are extractable visible
+  PDF reference text. These are structural categorical-ID vs scalar-decimal
+  errors, not source or narrator errors. Slide/speech were NOT changed.
+- General remedy added to production microgen_cue_semantic_mapping.numbers:
+  exact typed references Figure/Fig(+panel), Section/Sec,
+  Quick Quiz/Quiz, Example/Ex, Equation/Eq all mapped source/speech to
+  the SAME identifier; unrelated printed quantitative values remain scalar.
+  Distinct category/figure/panel/number remains incompatible; decimal
+  punctuation recognized but incomplete multi-dot numbers fail closed.
+- Read-only rerun against unchanged 13 real cached slides/voice confirms
+  46/46 cue units, 0 missing visible number/reference claims. Exact
+  production `preflight_private_timed_acceptance` on an isolated shadow
+  admitted all 13 within the unmodified semantic_max_slides=4 budget.
+  Focused source-free QA: 103 passed / 1 skipped. No Gemini calls, no
+  bypassed or fabricated acceptance or source text changes.
+- **G3 remains open.** Need full HP suite at the new candidate, exact
+  commit and remote PR, then proceed to the second *distinct* source 2.7
+  real private campaign and one fresh source/commit bounded 2.6 retry,
+  preserving terminal previous evidence. Never loop the same one-use grant.

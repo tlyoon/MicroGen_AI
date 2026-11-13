@@ -85,6 +85,40 @@ class SemanticMappingError(RuntimeError):
     pass
 
 
+# A numbered Figure reference is an identifier, not a measured decimal.
+# The PDF prints Figure 2.10 while a voice model may say
+# "Figure 2 point 10". Keep both tied to the *same source figure*, never
+# confuse the label with a numeric 2.1 measurement. An explicitly named
+# subpanel is part of the identity and cannot silently become another panel.
+_FIGURE_REFERENCE = re.compile(
+    r"\b(?:figure|fig\.?)\s+"
+    r"(?P<chapter>\d+)(?:\s*\.\s*|\s+point\s+)"
+    r"(?P<index>\d+)"
+    r"(?:(?:\s+panel\s+(?P<spoken_panel>ay|bee|see|dee|ee|eff)\b)"
+    r"|(?:\s*(?P<printed_panel>[a-f])\b))?",
+    flags=re.IGNORECASE,
+)
+_SPOKEN_PANEL = {
+    "ay":"a", "bee":"b", "see":"c", "dee":"d", "ee":"e", "eff":"f",
+}
+# Exact textbook cross-references have the same identifier-vs-quantity
+# distinction as figures. Never interpret Section 2.7 or Quick Quiz 2.6
+# as decimal physical measurements, nor equate different reference kinds.
+_OTHER_REFERENCE = re.compile(
+    r"\b(?P<kind>section|sec\.?|quick\s+quiz|quiz|example|ex\.?|"
+    r"equation|eq\.?)\s+"
+    r"(?P<chapter>\d+)(?:\s*\.\s*|\s+point\s+)"
+    r"(?P<index>\d+)\b",
+    flags=re.IGNORECASE,
+)
+_REFERENCE_KIND = {
+    "section":"section", "sec":"section",
+    "quick quiz":"quiz", "quiz":"quiz",
+    "example":"example", "ex":"example",
+    "equation":"equation", "eq":"equation",
+}
+
+
 def compact(text: str) -> str:
     return "".join(x for x in unicodedata.normalize("NFKC", text).casefold() if x.isalnum())
 
@@ -97,8 +131,37 @@ def numbers(text: str) -> set[str]:
     Treat numerically equal 2 and 2.0 alike; NEVER infer a computed value
     absent from the printed expression.
     """
-    tokens = re.findall(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", text)
-    values = {format(Decimal(token).normalize(), "f") for token in tokens}
+    # Source-bound figure references are NOT decimal quantities. Keep
+    # chapter, figure and optional panel exact while allowing PDF notation
+    # "Figure 2.10c" and spoken "Figure 2 point 10 panel see" to agree.
+    # This never grants a match to a different figure or panel.
+    references=set()
+    def remove_figure_reference(match: re.Match) -> str:
+        identifier=(f"figure:{int(match['chapter'])}."
+                    f"{int(match['index'])}")
+        panel=(match['printed_panel'] or
+               _SPOKEN_PANEL.get((match['spoken_panel'] or "").lower()))
+        if panel:
+            identifier+=":"+panel.lower()
+        references.add(identifier)
+        return " "
+    def remove_cross_reference(match: re.Match) -> str:
+        raw_kind=match["kind"].casefold().replace("."," ")
+        kind=_REFERENCE_KIND.get(" ".join(raw_kind.split()))
+        if kind is None:
+            raise SemanticMappingError("Unrecognized textbook cross-reference")
+        references.add(
+            f"{kind}:{int(match['chapter'])}.{int(match['index'])}")
+        return " "
+    numerical_text=_FIGURE_REFERENCE.sub(remove_figure_reference,text)
+    numerical_text=_OTHER_REFERENCE.sub(remove_cross_reference,numerical_text)
+    # A decimal followed by normal sentence punctuation is still a printed
+    # numerical literal. Conversely a multi-dot reference such as 2.7.1 is
+    # not a floating-point 2.7, and must not be silently truncated.
+    tokens = re.findall(
+        r"(?<![\d.])\d+(?:\.\d+)?(?!\d|\.\d)",numerical_text)
+    values = references | {
+        format(Decimal(token).normalize(), "f") for token in tokens}
     # Reviewed narration sometimes spells a *mathematical constant* to make
     # it acoustically distinct from adjacent symbolic variables. Extract
     # numerals only within these exact deterministic reviewed-voice phrases;
