@@ -1,7 +1,8 @@
 """Opt-in, crash-safe *private* Flash-Lite TTS producer for measured element cues.
 
-One whole-lecture render_batch() provides consistent fallback engine/voice.
-All cue chunks are concatenated as PCM, SHA-bound to slide text and PDFs,
+One whole-lecture render_batch() provides single-engine, consistent-voice
+Gemini 3.8 Flash-Lite TTS, Gemini 3.8 Flash fallback, and only after both
+fail a bounded, owner-authorized Google Cloud Chirp 3 fallback. All cue chunks are concatenated as PCM, SHA-bound to slide text and PDFs,
 then staged and verified before any output is installed. Existing WAVs and
 receipts are never overwritten. No local model, ASR, or publication.
 """
@@ -39,7 +40,11 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
         if (not isinstance(plan, dict)
                 or plan.get("schema_version") != 1
                 or plan.get("publication_allowed") is not False
-                or plan.get("planning_method") != "source_pdf_overlap_conservative"):
+                or plan.get("semantic_mapping_certified", False) is not False
+                or plan.get("planning_method") not in {
+                    "source_pdf_overlap_conservative",
+                    "source_pdf_grounded_semantic_screen",
+                }):
             raise CueTTSError("Unsupported or untrusted cue plan")
         pdf = stage / "slides.pdf"
         script = stage / "script_tts.json"
@@ -54,6 +59,7 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                     or len(rows) != count or len(narration) != count):
                 raise CueTTSError("Cue plan does not cover all slides")
             all_fragments = []
+            semantic_used = False
             for slide_no, (row, source_row) in enumerate(zip(rows,narration), 1):
                 if (not isinstance(row, dict) or not isinstance(source_row, dict)
                         or row.get("slide") != slide_no
@@ -93,11 +99,119 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             box=fitz.Rect(coords)
                         except (ValueError,TypeError) as exc:
                             raise CueTTSError("Invalid cue bbox") from exc
+                        extracted = _equivalent_text(page.get_textbox(box))
                         if (box.is_empty or box.is_infinite or
                             not page.rect.contains(box) or
-                            _equivalent_text(label) not in
-                            _equivalent_text(page.get_textbox(box))):
+                            _equivalent_text(label) not in extracted):
                             raise CueTTSError("Element not grounded in source PDF")
+                        if "question_context_role" in cue:
+                            from microgen_timed_cue_planner import (
+                                QUESTION_REFLECTION_ROLE,
+                                question_reflection_source_block,
+                                _pdf_text_blocks,
+                            )
+                            if (cue["question_context_role"] != QUESTION_REFLECTION_ROLE
+                                    or "semantic_source_quote" in cue
+                                    or "pdf_bboxes" in cue
+                                    or "semantic_source_quotes" in cue):
+                                raise CueTTSError("Invalid question reflection provenance")
+                            actual_blocks=_pdf_text_blocks(page)
+                            anchor=question_reflection_source_block(
+                                spoken,cue_no,len(cues),actual_blocks)
+                            if (anchor is None
+                                    or label != actual_blocks[anchor][1]
+                                    or any(abs(a-b)>0.01 for a,b in zip(
+                                        coords,actual_blocks[anchor][0]))):
+                                raise CueTTSError(
+                                    "Question reflection not source-grounded")
+                        elif cue_no == len(cues):
+                            # A tampered plan cannot remove the explicit
+                            # contextual (non-claim) provenance marker and
+                            # pretend this was an ordinary lexical match.
+                            from microgen_timed_cue_planner import (
+                                QUESTION_REFLECTION_ROLE,
+                                question_reflection_source_block,
+                                _pdf_text_blocks, _lexical_match,
+                            )
+                            actual_blocks=_pdf_text_blocks(page)
+                            if question_reflection_source_block(
+                                    spoken,cue_no,len(cues),actual_blocks) is not None:
+                                all_spoken=[
+                                    item.get("spoken_text") for item in cues
+                                    if isinstance(item,dict)]
+                                if len(all_spoken)==len(cues) and all(
+                                        isinstance(s,str) for s in all_spoken):
+                                    expected,_=_lexical_match(
+                                        slide_no,all_spoken,actual_blocks,
+                                        allow_unanchored=True)
+                                    expected_cue=expected[-1]
+                                    if (expected_cue is not None and
+                                            expected_cue.get("question_context_role")
+                                            == QUESTION_REFLECTION_ROLE):
+                                        raise CueTTSError(
+                                            "Missing question reflection provenance")
+                        if "pdf_bboxes" in cue:
+                            from microgen_cue_semantic_mapping import (
+                                compact, numbers, MAX_GROUP_BLOCKS,
+                            )
+                            regions = cue["pdf_bboxes"]
+                            labels = cue.get("pdf_texts")
+                            quotes = cue.get("semantic_source_quotes")
+                            if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"
+                                    or "semantic_source_quote" in cue
+                                    or not isinstance(regions,list)
+                                    or not isinstance(labels,list)
+                                    or not isinstance(quotes,list)
+                                    or not 2 <= len(regions) <= MAX_GROUP_BLOCKS
+                                    or len(regions) != len(labels)
+                                    or len(labels) != len(quotes)):
+                                raise CueTTSError("Unsafe multi-element cue provenance")
+                            # Do not accept an arbitrary union rectangle:
+                            # every selected region must contain its own
+                            # quoted, exact PDF text and preserve its location.
+                            checked=[]
+                            for region, item_text, quote in zip(regions, labels, quotes):
+                                if (not isinstance(region,list) or len(region)!=4
+                                        or any(type(v) not in (int,float) for v in region)
+                                        or not isinstance(item_text,str)
+                                        or not 8 <= len(item_text) <= 350
+                                        or not isinstance(quote,str)
+                                        or not 8 <= len(quote) <= 200):
+                                    raise CueTTSError("Malformed source element group")
+                                try:
+                                    region_box=fitz.Rect(region)
+                                except (ValueError,TypeError) as exc:
+                                    raise CueTTSError("Invalid group rectangle") from exc
+                                raw=_equivalent_text(page.get_textbox(region_box))
+                                if (region_box.is_empty or region_box.is_infinite
+                                        or not page.rect.contains(region_box)
+                                        or _equivalent_text(item_text) not in raw
+                                        or len(compact(quote)) < 8
+                                        or compact(quote) not in compact(item_text)):
+                                    raise CueTTSError("Multi-element quote not PDF grounded")
+                                checked.append(region_box)
+                            union=checked[0]
+                            for region_box in checked[1:]:
+                                union |= region_box
+                            if (any(abs(a-b)>0.01 for a,b in zip(union,box))
+                                    or union.width*union.height >
+                                    page.rect.width*page.rect.height*0.40
+                                    or not numbers(spoken).issubset(
+                                        numbers(" ".join(labels)))):
+                                raise CueTTSError("Group bounds or numerical claim unverified")
+                            semantic_used = True
+                        elif "semantic_source_quotes" in cue or "pdf_texts" in cue:
+                            raise CueTTSError("Unpaired multi-element provenance")
+                        elif "semantic_source_quote" in cue:
+                            from microgen_cue_semantic_mapping import compact, numbers
+                            quote = cue["semantic_source_quote"]
+                            if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"
+                                    or not isinstance(quote,str)
+                                    or not 8 <= len(quote) <= 200
+                                    or len(compact(quote)) < 8 or compact(quote) not in extracted
+                                    or not numbers(spoken).issubset(numbers(label))):
+                                raise CueTTSError("Semantic claim lacks exact PDF evidence")
+                            semantic_used = True
                         fragments.append(spoken)
                     original=str(source_row.get("tts_text") or
                                  source_row.get("narration") or "")
@@ -106,6 +220,9 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                     all_fragments.extend(fragments)
             if len(all_fragments) != plan.get("total_cues"):
                 raise CueTTSError("Cue inventory mismatch")
+            if (semantic_used != (plan["planning_method"] ==
+                                  "source_pdf_grounded_semantic_screen")):
+                raise CueTTSError("Semantic cue provenance does not match planning method")
             if not 1 <= len(all_fragments) <= MAX_CUES:
                 raise CueTTSError("Global cue batch is too large for single voice")
     except (KeyError, TypeError, IndexError, ValueError, OSError, json.JSONDecodeError) as exc:
@@ -175,11 +292,36 @@ def produce_measured_cue_audio(stage: Path, *, speak=None) -> dict:
     with tempfile.TemporaryDirectory(prefix=".microgen-cue-tts-",
                                      dir=str(stage)) as temp_dir:
         scratch=Path(temp_dir)
+        # The standing owner contract authorizes TTS as required by private
+        # content generation. Cloud is only the FINAL whole-batch fallback,
+        # and only if a finite character ceiling was signed into the private
+        # provider scope. Standalone/direct calls remain Gemini-only unless
+        # the same bounded Cloud settings are explicitly supplied.
+        cloud_allowed=(os.environ.get("MICROGEN_TTS_ENABLE_CLOUD_FALLBACK")=="1")
+        if cloud_allowed:
+            cap=os.environ.get(
+                "MICROGEN_TTS_CLOUD_FALLBACK_MAX_CHARACTERS","").strip()
+            if not cap.isdigit() or int(cap)<1:
+                raise CueTTSError("Cloud fallback lacks a finite source-bound budget")
+            if sum(len(text) for text in texts)>int(cap):
+                # Cloud has insufficient consent for this long transcript,
+                # but both Gemini 3.8 choices remain fully usable.
+                cloud_allowed=False
+                print("[tts] Cloud-only character budget below source cue "
+                      "inventory; preserving Gemini 3.8 primary/fallback "
+                      "without paid Cloud calls",flush=True)
         report=render_batch(texts,scratch/"ready",voice=voice,
-                            allow_cloud=False,speak=speak)
+                            allow_cloud=cloud_allowed,speak=speak)
         model,provider,actual_voice=report["model"],report["engine"],report["voice"]
-        if (provider not in ("gemini_flash_lite_tts","gemini_flash_tts") or
-                actual_voice!=voice):
+        authorized={
+            "gemini_flash_lite_tts": ("gemini-3.8-flash-lite-tts",voice),
+            "gemini_flash_tts": ("gemini-3.8-flash-tts",voice),
+        }
+        if cloud_allowed:
+            authorized["google_cloud_chirp3"]=(
+                "chirp3-hd",f"en-US-Chirp3-HD-{voice}")
+        if (provider not in authorized
+                or (model,actual_voice)!=authorized[provider]):
             raise CueTTSError("Cue batch returned unauthorized voice/provider")
         prepared=scratch/"prepared"
         prepared.mkdir()

@@ -143,3 +143,54 @@ without switching machines. Do not repeat failed Serway 8.2 PDF-specific
 repairs or authorize external publication without separate rights.
 
 Release tracker: https://github.com/tlyoon/MicroGen_AI/issues/278
+
+## Bounded semantic paraphrase cue mapping (7 November 2026)
+
+The conservative lexical PDF-block matcher is still the default. It can
+correctly refuse a fluent paraphrase that shares too few words with the
+visible slide. This is NOT a reason to retry the same source PDF indefinitely.
+
+On an already authorized *Gemini API* timed-cue production run, a bounded
+alternative may be explicitly enabled with:
+
+```powershell
+$env:MICROGEN_TIMED_CUES = '1'
+$env:MICROGEN_TIMED_SEMANTIC_ASSIST = '1'
+$env:MICROGEN_TIMED_SEMANTIC_MAX_SLIDES = '4'
+```
+
+At most one Gemini 3.8 Flash proposal request is issued per unresolved slide,
+and at most four slides are screened by default. No paid request occurs in
+offline planning, legacy mode or when the opt-in is absent.
+
+**Proposed grouped-cue extension (8 November 2026; subject to branch and
+real-source acceptance):** one spoken narration cue may refer to a contiguous,
+ordered group of 2–5 *real visible PDF text blocks*, rather than falsely
+selecting just one from a multi-element enumeration. Each block needs a
+separate verbatim source quote; the planner records and independently checks
+each exact text box, its original PDF text, numerical claims, combined bounds
+and immutable source hashes. The renderer draws a time-gated highlight around
+each member of the group, not a large invented encompassing element, and the
+independent decoded-frame QA checks **every** highlighted region. All original
+single-block cues retain their previous format and validation. Complete spoken
+script and exact PCM timing remain mandatory. Model proposals remain
+**not semantically certified**, and the SCIENCE, acoustic, decoded-video and
+publication conditions are unchanged.
+
+The existing maximum of four *semantic-assisted slides per campaign* is
+**not** retroactively raised by group support. Before making even one
+semantic Gemini request, the planner performs a read-only, source-hash
+preserving **whole-lecture admission preflight**. It uses the *same*
+source-text block extractor and lexical matcher as the actual planner to
+count slides requiring semantic assistance. If demand exceeds the frozen
+budget it reports exact required/allowed counts and slide IDs **without
+calling any model or creating a partial plan**. This prevents a predictable
+late, charged failure; it does not claim to infer semantic correctness or
+automatically authorize a higher API/cost budget.
+
+The terminal Serway 2.4 run requires eight assisted slides under its frozen
+four-slide setting, so this feature alone does **not** make G2 pass and
+cannot justify a repeat source run. A newly scoped real-source campaign
+requires a separately frozen budget, cost/rights authorization and all
+scientific, acoustic, independent visual and release gates. Existing
+terminal retries remain exhausted; no automatic restart.

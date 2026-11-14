@@ -1,0 +1,365 @@
+"""Regression: recurring source math pronunciation risks must be fixed before billable TTS.
+
+No provider calls, no source mutation, no phonetic approval inferred.
+"""
+import json
+from pathlib import Path
+
+import pytest
+
+from microgen_reviewed_math_voice import (
+    reviewed_math_voice, voice_input_risk_status,
+    preflight_voice_sidecar, VoiceRiskPreflightError,
+)
+from text_to_speech_v25 import normalize_scientific_speech
+from microgen_tts_risk_register import find_pronunciation_risks
+
+
+@pytest.mark.parametrize("raw, fragment", [
+    ("The acceleration a x, is defined here.", "acceleration ay ex,"),
+    ("The instantaneous acceleration a x as the limit appears.",
+     "acceleration along the ex axis as the limit"),
+    ("Later a x becomes negative.", "ay ex becomes negative."),
+    ("The velocity and a x both vanish.", "ay ex both vanish."),
+    ("A velocity increment delta v x equal to minus 10 t.",
+     "delta vee ex equal to minus 10 t"),
+    ("At time t C where the slope changes.", "time tee see where"),
+    ("Velocity v x versus t.", "velocity vee ex versus tee."),
+    ("Position d x over d t.", "position dee ex over d t."),
+    ("Use d squared x over d t squared.", "dee squared ex over d t squared"),
+    ("A v sub x is constant.", "vee sub ex is constant"),
+    ("Later, a sub x equals zero.", "ay sub ex equals zero"),
+    ("The point occurs at time t C.", "time tee see."),
+    ("Position x of t is constant.", "ex of tee is constant"),
+    ("Position b t cubed minus c t.", "minus see tee"),
+    ("Use the x-axis for position.", "ex axis"),
+])
+def test_reviewed_variable_spoken_form_is_explicit_and_not_high_risk(raw, fragment):
+    speech = normalize_scientific_speech(reviewed_math_voice(raw))
+    assert fragment.casefold() in speech.casefold()
+    assert not find_pronunciation_risks(speech, speech)
+    assert normalize_scientific_speech(reviewed_math_voice(speech)) == speech
+
+
+@pytest.mark.parametrize("ordinary", [
+    "A xylitol tablet is sweet.",
+    "The x-ray apparatus is ready.",
+    "The painter made a x mark in the margin.",
+    "Vitamin C is available here.",
+    "The letter C. Smith signed the report.",
+    "This discovery occurred c. 1900.",
+    "We measured a wave with vector components.",
+    "We use a y-shaped junction.",
+])
+def test_no_global_letter_rewrites_in_ordinary_prose(ordinary):
+    assert reviewed_math_voice(ordinary) == ordinary
+
+
+def test_old_unresolved_source_risk_blocks_before_spending(tmp_path):
+    stage = tmp_path / "2.5"
+    stage.mkdir()
+    src = "The variable y approaches zero."
+    (stage / "script_tts.json").write_text(
+        json.dumps({"slides": [{"slide": 1, "tts_text": src}]}),
+        encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError, match="PREPAY_HOLD"):
+        preflight_voice_sidecar(stage)
+
+
+def test_reviewed_source_voice_can_proceed_but_no_audio_pass_is_claimed(tmp_path):
+    stage = tmp_path / "2.5"
+    stage.mkdir()
+    raw = "The acceleration a x, changes as v sub x becomes constant."
+    status = voice_input_risk_status(raw, normalize_scientific_speech)
+    assert status["unresolved_source_risk_count"] == 0
+    assert status["phoneme_certified"] is False
+    speech = normalize_scientific_speech(reviewed_math_voice(raw))
+    (stage / "script_tts.json").write_text(json.dumps({
+        "slides": [{"slide": 1, "tts_text": speech,
+                    "tts_math_voice_preflight": status}]
+    }), encoding="utf8")
+    ready = preflight_voice_sidecar(stage)
+    assert ready["source_risk_count"] == 0
+    assert ready["acoustic_qa_required"] is True
+    assert ready["publication_allowed"] is False
+    assert len(ready["script_tts_sha256"]) == 64
+
+
+def test_forged_or_drifted_voice_evidence_never_accepted(tmp_path):
+    stage = tmp_path / "2.5"
+    stage.mkdir()
+    speech = "Position ex of tee remains constant."
+    status = voice_input_risk_status(speech, normalize_scientific_speech)
+    bad = {**status, "phoneme_certified": True}
+    path = stage / "script_tts.json"
+    path.write_text(json.dumps({"slides": [
+        {"slide": 1, "tts_text": speech, "tts_math_voice_preflight": bad}
+    ]}))
+    with pytest.raises(VoiceRiskPreflightError, match="receipt mismatch"):
+        preflight_voice_sidecar(stage)
+    bad = {**status, "voice_input_sha256": "0" * 64}
+    path.write_text(json.dumps({"slides": [
+        {"slide": 1, "tts_text": speech, "tts_math_voice_preflight": bad}
+    ]}))
+    with pytest.raises(VoiceRiskPreflightError, match="receipt mismatch"):
+        preflight_voice_sidecar(stage)
+
+
+def test_narration_adapter_writes_risk_free_sidecar_but_preserves_narration(
+    tmp_path, monkeypatch,
+):
+    import gen_script_v13 as narration
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "gen_script_prompt_v8_hybrid.md").write_text("Synthetic prompt")
+    monkeypatch.setattr(narration, "_load_runtime_environment", lambda: None)
+    slides = [
+        {"page": 1, "text": "Synthetic Lesson", "lines": ["Synthetic Lesson"]},
+        {"page": 2, "text": "Example of acceleration", "lines": ["Acceleration"]},
+    ]
+    original = ("The instantaneous acceleration a x, is defined by "
+                "d squared x over d t squared.")
+    def fake_extract(path):
+        if Path(path).name == "slides.pdf":
+            return slides
+        return [{"page": 1, "text": "Synthetic textbook evidence",
+                 "lines": ["Synthetic textbook evidence"]}]
+    def fake_generate(items, *_args, **_kwargs):
+        return {
+            items[0]["id"]: {"narration": "Synthetic Lesson",
+                             "tts_text": "Synthetic Lesson"},
+            items[1]["id"]: {"narration": original, "tts_text": original},
+        }
+    monkeypatch.setattr(narration, "_extract_pdf_pages", fake_extract)
+    monkeypatch.setattr(narration, "generate_batched", fake_generate)
+    monkeypatch.setattr(narration, "SCRIPT_FILE", tmp_path / "script.txt")
+    monkeypatch.setattr(narration, "TTS_SIDECAR", tmp_path / "script_tts.json")
+    narration.main()
+    data = json.loads((tmp_path / "script_tts.json").read_text())
+    assert data["slides"][1]["narration"] == original
+    assert "ay ex" in data["slides"][1]["tts_text"]
+    assert "dee squared ex" in data["slides"][1]["tts_text"]
+    assert "a x" in (tmp_path / "script.txt").read_text()
+    assert preflight_voice_sidecar(tmp_path)["source_risk_count"] == 0
+
+
+def test_real_batch_route_rejects_ambiguous_voice_before_provider_send(
+    tmp_path, monkeypatch,
+):
+    """Exercise production process_one, not just the new helper in isolation."""
+    from types import SimpleNamespace
+    import microgen_batch as batch
+
+    repo = tmp_path / "repo"
+    work = tmp_path / "work"
+    stage = work / "2.5"
+    stage.mkdir(parents=True)
+    repo.mkdir()
+    (stage / "script_tts.json").write_text(json.dumps({
+        "slides": [{"slide": 1, "tts_text":
+                    "The variable y approaches zero."}]
+    }), encoding="utf8")
+    initial = batch.STAGES[:batch.STAGES.index("tts")]
+    cp = {
+        "completed": {name: "2026-11-12T00:00:00Z" for name in initial},
+        "dependency_fingerprints": {name: "already-verified" for name in initial},
+        "last_error": None, "inflight_provider_stage": None,
+    }
+    args = SimpleNamespace(
+        standing_private_development=False,
+        bounded_provider_scope_verified=False,
+        stop_after="acceptance",
+        source_root=tmp_path / "source",
+        work_root=work,
+        repo=repo,
+        commit="f" * 40,
+        source_wait=0,
+        main_py="python",
+        docling_py="python",
+        figure_extraction_only=False,
+        multipart=False,
+        rebuild_unverified=False,
+        stage_retries=0,
+    )
+    monkeypatch.setattr(batch, "prepare_stage", lambda *a:
+                        (stage, cp, stage / ".microgen_checkpoint.json"))
+    monkeypatch.setattr(batch, "destination_for", lambda *_:
+                        tmp_path / "source" / "2" / "2.5")
+    monkeypatch.setattr(batch, "stage_valid", lambda *a: True)
+    monkeypatch.setattr(batch.quality, "dependency_fingerprint",
+                        lambda *_: "already-verified")
+    monkeypatch.setattr(batch, "save_checkpoint", lambda *a: None)
+    monkeypatch.setattr(batch, "preflight_private_timed_acceptance",
+                        lambda *_: {"mode": "source_lexical_admitted", "pages": 1})
+    sent = []
+    monkeypatch.setattr(batch, "run_subprocess",
+                        lambda *a, **k: sent.append("paid") or
+                        pytest.fail("The known doomed source risk must never be billed"))
+    with pytest.raises(Exception, match=(
+        "PREDICTABLE_MATH_VOICE_RISK_PREPAY_HOLD|"
+        "STALE_VOICE_ADAPTER_SOURCE_HOLD")):
+        batch.process_one(args, "2.5", [])
+    assert sent == []
+
+
+@pytest.mark.parametrize("raw, expected_fragment", [
+    (
+        "We define instantaneous acceleration ay ex as the limit of average acceleration.",
+        "instantaneous acceleration along the ex axis as the limit",
+    ),
+    (
+        "The tangent line represents average acceleration ay ex avg over the interval.",
+        "represents average acceleration along the ex axis over the interval",
+    ),
+    (
+        "Calculate position ex of tee equals b t cubed minus see tee.",
+        "position ex at time tee equals b multiplied by tee cubed "
+        "minus see multiplied by tee",
+    ),
+    (
+        "Position x of t equals b t cubed minus c t.",
+        "position ex at time tee equals b multiplied by tee cubed "
+        "minus see multiplied by tee",
+    ),
+])
+def test_historical_independent_acoustic_math_phrases_expanded_source_safely(
+    raw, expected_fragment,
+):
+    voice=normalize_scientific_speech(reviewed_math_voice(raw))
+    assert expected_fragment.casefold() in voice.casefold()
+    assert normalize_scientific_speech(reviewed_math_voice(voice))==voice
+    assert not find_pronunciation_risks(voice,voice)
+    assert not voice_input_risk_status(
+        raw, normalize_scientific_speech)["unresolved_source_risk_count"]
+
+
+@pytest.mark.parametrize("source", [
+    "The time tee was discussed in the experiment.",
+    "He described the average acceleration ay ex avg informally.",
+    "We examine b t squared minus see tee.",
+    "The position is b t cubed plus see tee.",
+    "The book cover reads instant acceleration in the x axis.",
+    "Instantaneous acceleration ay ex is a valid quantity.",
+    "The painter draws a line to represent average acceleration ay ex avg.",
+    "The coefficient c was unknown in the equation.",
+])
+def test_acoustic_phrasing_never_rewrites_unrelated_english_or_math(source):
+    assert reviewed_math_voice(source)==source
+
+
+def test_tts_math_voice_receipt_binding_after_semantic_spoken_repair():
+    raw="The graph represents average acceleration ay ex avg over time."
+    status=voice_input_risk_status(raw,normalize_scientific_speech)
+    value=normalize_scientific_speech(reviewed_math_voice(raw))
+    import hashlib
+    assert status["voice_input_sha256"]==hashlib.sha256(value.encode()).hexdigest()
+    assert status["phoneme_certified"] is False
+    assert status["publication_allowed"] is False
+    assert status["changed_for_tts_only"] is True
+
+
+def test_exact_old_spoken_phrase_with_stale_adapter_sha_blocks_before_tts(tmp_path):
+    # A prior sidecar can already be a fixed point of the updated adapter.
+    # Text idempotence alone is not evidence that its voiced wording is current.
+    stage = tmp_path / "2.5"
+    stage.mkdir()
+    spoken = "Velocity vee ex equals the constant term forty."
+    proof = voice_input_risk_status(spoken, normalize_scientific_speech)
+    proof["voice_adapter_code_sha256"] = "0" * 64
+    (stage / "script_tts.json").write_text(json.dumps({
+        "slides": [{"slide": 1, "tts_text": spoken,
+                    "tts_math_voice_preflight": proof}]
+    }), encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,
+                       match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage, require_policy_binding=True)
+
+
+def test_old_math_voice_policy_receipt_rejected_before_paid_tts(tmp_path):
+    """Old individually pronounceable voice cannot skip new remedy policy."""
+    stage=tmp_path/"2.5"
+    stage.mkdir()
+    old="We define instantaneous acceleration ay ex as the limit of velocity."
+    # A SHA-valid old artifact alone does not prove current-code compliance.
+    import hashlib
+    old_proof={
+        "schema_version":1,
+        "voice_input_sha256":hashlib.sha256(old.encode()).hexdigest(),
+        "unresolved_source_risk_count":0,
+        "phoneme_certified":False,
+        "publication_allowed":False,
+    }
+    (stage/"script_tts.json").write_text(json.dumps({
+        "slides":[{"slide":1,"tts_text":old,
+                   "tts_math_voice_preflight":old_proof}]
+    }),encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,
+                       match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage)
+    fixed=normalize_scientific_speech(reviewed_math_voice(old))
+    assert fixed!=old
+    (stage/"script_tts.json").write_text(json.dumps({
+        "slides":[{"slide":1,"tts_text":fixed,
+                   "tts_math_voice_preflight":
+                   voice_input_risk_status(fixed,normalize_scientific_speech)}]
+    }),encoding="utf8")
+    checked=preflight_voice_sidecar(stage)
+    assert checked["source_risk_count"]==0
+    assert checked["acoustic_qa_required"] is True
+    assert checked["publication_allowed"] is False
+
+
+@pytest.mark.parametrize("raw, result", [
+    ("velocity vee ex equals 40 minus 5 t squared",
+     "velocity vee ex equals the constant term forty, a fixed numerical value. Then subtract five multiplied by the square of time"),
+    ("velocity vee ex equals 30 minus 8 tee squared",
+     "velocity vee ex equals the constant term thirty, a fixed numerical value. Then subtract eight multiplied by the square of time"),
+    ("position ex equals 60 minus 2 t squared",
+     "position ex equals the constant term sixty, a fixed numerical value. Then subtract two multiplied by the square of time"),
+    ("acceleration ay ex equals 90 minus 4 t squared",
+     "acceleration ay ex equals the constant term ninety, a fixed numerical value. Then subtract four multiplied by the square of time"),
+])
+def test_general_quadratic_constant_tts_voice_is_unambiguous_and_idempotent(
+    raw,result,
+):
+    spoken=reviewed_math_voice(raw)
+    assert result==spoken
+    assert reviewed_math_voice(spoken)==spoken
+    assert not find_pronunciation_risks(spoken,spoken)
+    status=voice_input_risk_status(raw,normalize_scientific_speech)
+    assert status["changed_for_tts_only"] is True
+    assert status["unresolved_source_risk_count"]==0
+    assert status["phoneme_certified"] is False
+    assert status["publication_allowed"] is False
+
+
+@pytest.mark.parametrize("unrelated", [
+    "velocity vee ex equals 40 plus 5 t squared",
+    "velocity vee ex equals 40 minus 5 t cubed",
+    "velocity vee ex equals 40 minus 5 t",
+    "velocity vee ex equals 40 minus five t squared",
+    "The lesson starts at forty minutes.",
+    "One can choose 40 minus 5 t squared in prose.",
+    "velocity vee ex equals 40 minus 50 t squared at this value",
+    "The field is velocity vee ex equals 140 minus 5 t squared",
+])
+def test_voice_policy_does_not_rewrite_unmatched_equations_or_ordinary_numbers(unrelated):
+    assert reviewed_math_voice(unrelated)==unrelated
+
+
+def test_stale_math_voice_sidecar_detected_before_another_paid_request(tmp_path):
+    stage=tmp_path/"2.5"
+    stage.mkdir()
+    raw="velocity vee ex equals 40 minus 5 t squared"
+    sidecar=stage/"script_tts.json"
+    sidecar.write_text(json.dumps({"slides":[{"slide":1,
+                    "tts_text":raw,"narration":raw}]}),encoding="utf8")
+    with pytest.raises(VoiceRiskPreflightError,match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        preflight_voice_sidecar(stage)
+    changed=normalize_scientific_speech(reviewed_math_voice(raw))
+    proof=voice_input_risk_status(raw,normalize_scientific_speech)
+    sidecar.write_text(json.dumps({"slides":[{"slide":1,
+                    "tts_text":changed,"narration":raw,
+                    "tts_math_voice_preflight":proof}]}),encoding="utf8")
+    result=preflight_voice_sidecar(stage)
+    assert result["source_risk_count"]==0
+    assert result["acoustic_qa_required"] is True

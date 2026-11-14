@@ -203,6 +203,54 @@ def inspect_timed_highlights(stage: Path) -> dict:
                     if not actual or _equivalent_text(label) not in actual:
                         raise HighlightContractError(
                             f"Slide {slide_no} cue {cue_index} is not PDF-text grounded")
+                    group = cue.get("pdf_bboxes")
+                    if group is not None:
+                        # Independently re-check each visible element; union
+                        # bbox alone can conceal fabricated or missing items.
+                        from microgen_cue_semantic_mapping import (
+                            compact, numbers, MAX_GROUP_BLOCKS,
+                        )
+                        texts = cue.get("pdf_texts")
+                        quotes = cue.get("semantic_source_quotes")
+                        if (not isinstance(group,list) or
+                                not 2 <= len(group) <= MAX_GROUP_BLOCKS or
+                                not isinstance(texts,list) or
+                                not isinstance(quotes,list) or
+                                len(group) != len(texts) or
+                                len(texts) != len(quotes) or
+                                "semantic_source_quote" in cue):
+                            raise HighlightContractError("Untrusted PDF element group")
+                        regions=[]
+                        for region, item_text, quote in zip(group,texts,quotes):
+                            if (not isinstance(region,list) or len(region)!=4 or
+                                    any(type(v) not in (int,float) or
+                                        not math.isfinite(v) for v in region) or
+                                    not isinstance(item_text,str) or
+                                    not 8 <= len(item_text) <= 350 or
+                                    not isinstance(quote,str) or
+                                    not 8 <= len(quote) <= 200):
+                                raise HighlightContractError("Malformed grouped PDF element")
+                            part=fitz.Rect(region)
+                            if (part.is_empty or part.is_infinite or
+                                    not page.rect.contains(part) or
+                                    _equivalent_text(item_text) not in
+                                    _equivalent_text(page.get_textbox(part)) or
+                                    len(compact(quote)) < 8 or
+                                    compact(quote) not in compact(item_text)):
+                                raise HighlightContractError("Grouped element not source grounded")
+                            regions.append(part)
+                        group_union=regions[0]
+                        for part in regions[1:]:
+                            group_union |= part
+                        if (any(abs(a-b)>0.01 for a,b in zip(group_union,rect)) or
+                                group_union.width*group_union.height >
+                                page.rect.width*page.rect.height*0.40 or
+                                not numbers(spoken_fragment).issubset(
+                                    numbers(" ".join(texts)))):
+                            raise HighlightContractError(
+                                "Grouped PDF bounds or numerical claim unverified")
+                    elif "pdf_texts" in cue or "semantic_source_quotes" in cue:
+                        raise HighlightContractError("Incomplete grouped element provenance")
                     filename = cue.get("audio_chunk")
                     match = _CHUNK_NAME.fullmatch(filename) if isinstance(filename, str) else None
                     if not match or (int(match.group(1)), int(match.group(2))) != (
@@ -230,12 +278,17 @@ def inspect_timed_highlights(stage: Path) -> dict:
                                 remaining -= len(block) // size
                     except (OSError, ValueError, wave.Error) as exc:
                         raise HighlightContractError("Unreadable PCM timing chunk") from exc
-                    elements.append({
+                    element_timing = {
                         "element_id": element,
                         "pdf_bbox": [x0, y0, x1, y1],
                         "start_seconds": position / params[2],
                         "end_seconds": (position + frames) / params[2],
-                    })
+                    }
+                    if group is not None:
+                        # Independent renderer and decoded MP4 checker must
+                        # prove each highlighted source region, not its union.
+                        element_timing["pdf_bboxes"] = [list(region) for region in group]
+                    elements.append(element_timing)
                     position += frames
                 if spoken_position != len(full_spoken):
                     raise HighlightContractError("Highlight cues omit narrated source text")
@@ -307,21 +360,23 @@ def ffmpeg_highlight_filter(
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=white",
     ]
     for cue in entry["elements"]:
-        x0, y0, x1, y1 = cue["pdf_bbox"]
-        x = max(0, int(round(pad_x + x0 * zoom)))
-        y = max(0, int(round(pad_y + y0 * zoom)))
-        w = min(width - x, max(2, int(round((x1 - x0) * zoom))))
-        h = min(height - y, max(2, int(round((y1 - y0) * zoom))))
         start = float(cue["start_seconds"])
         end = float(cue["end_seconds"])
-        if w < 2 or h < 2 or not 0 <= start < end <= entry["duration_seconds"] + 0.001:
-            raise HighlightContractError("Invalid visual highlight bounds")
+        if not 0 <= start < end <= entry["duration_seconds"] + 0.001:
+            raise HighlightContractError("Invalid visual highlight timing")
         time_gate = f"gte(t,{start:.6f})*lt(t,{end:.6f})"
-        # Both an illuminated region and a border are required so the active
-        # item remains visible against bright and dark textbook diagrams.
-        for color, thickness in (("yellow@0.22", "fill"), ("yellow@0.95", "3")):
-            graph.append(
-                f"drawbox=x={x}:y={y}:w={w}:h={h}:"
-                f"color={color}:t={thickness}:enable='{time_gate}'"
-            )
+        # Illuminate *each* verified source block simultaneously for a
+        # multi-element spoken cue; never highlight a huge union rectangle.
+        for x0, y0, x1, y1 in cue.get("pdf_bboxes", [cue["pdf_bbox"]]):
+            x = max(0, int(round(pad_x + x0 * zoom)))
+            y = max(0, int(round(pad_y + y0 * zoom)))
+            w = min(width - x, max(2, int(round((x1 - x0) * zoom))))
+            h = min(height - y, max(2, int(round((y1 - y0) * zoom))))
+            if w < 2 or h < 2:
+                raise HighlightContractError("Invalid visual highlight bounds")
+            for color, thickness in (("yellow@0.22", "fill"), ("yellow@0.95", "3")):
+                graph.append(
+                    f"drawbox=x={x}:y={y}:w={w}:h={h}:"
+                    f"color={color}:t={thickness}:enable='{time_gate}'"
+                )
     return ",".join(graph)

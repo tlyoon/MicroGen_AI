@@ -326,6 +326,8 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 verify_receipt(stage)
             elif name == "tts":
                 quality.check_wavs(stage, count)
+                from microgen_verified_tts_reuse import verify_reuse_receipt
+                verify_reuse_receipt(stage)
             elif name == "acoustic_qa":
                 from microgen_autonomous_acoustic_gate import verify_receipt
                 verify_receipt(stage)
@@ -388,6 +390,11 @@ def invalidate_from(cp: dict, stage_name: str) -> None:
 def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path) -> None:
     cp.setdefault("completed", {})[stage_name] = utc_now()
     cp.setdefault("dependency_fingerprints", {})[stage_name] = quality.dependency_fingerprint(stage, stage_name)
+    # Atomic checkpoint update: completed output can no longer be mistaken
+    # for an unresolved external submission after a normal return.
+    if (isinstance(cp.get("inflight_provider_stage"), dict)
+            and cp["inflight_provider_stage"].get("stage") == stage_name):
+        cp.pop("inflight_provider_stage")
     cp["last_error"] = None
     cp["updated_utc"] = utc_now()
     save_checkpoint(checkpoint_path, cp)
@@ -890,9 +897,78 @@ def subchapter_ownership(args, subchapter: str):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+def preflight_private_timed_acceptance(stage: Path) -> dict:
+    """Full-lecture, zero-provider-cost admission before accepted G2 TTS.
+
+    Require a real PDF-grounded element plan or evidence that the existing
+    tightly bounded semantic proposal can be requested. This reuses the
+    production planner's exact lexical matcher and semantic budget checker.
+    It never sends prompts, alters scripts/WAVs, publishes a cue plan, or
+    increases the existing Gemini/voice budget.
+    """
+    from microgen_timed_cue_planner import (
+        PLAN_FILE, prepare_slide_pages, propose_plan,
+        _require_budget_preflight, CuePlanningError,
+    )
+    from microgen_timed_cue_tts import _verified_plan
+    stage = Path(stage)
+    pages = prepare_slide_pages(stage)
+    if (stage / PLAN_FILE).exists() or (stage / PLAN_FILE).is_symlink():
+        verified, fragments = _verified_plan(stage)
+        return {"mode": "existing_verified_plan",
+                "pages": len(pages),
+                "cues": verified["total_cues"]}
+    assisted = os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST", "0")
+    if assisted not in ("0", "1"):
+        raise CuePlanningError("Invalid explicit timed semantic assist setting")
+    if assisted == "1":
+        raw = os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "4")
+        try:
+            limit = int(raw)
+        except ValueError as exc:
+            raise CuePlanningError("Invalid bounded semantic slide limit") from exc
+        if not 1 <= limit <= 40:
+            raise CuePlanningError("Invalid bounded semantic slide limit")
+        _require_budget_preflight(stage, semantic_limit=limit,
+                                  max_cues=120)
+        return {"mode": "semantic_budget_admitted",
+                "pages": len(pages), "semantic_max_slides": limit}
+    # The semantic proposal is off; insist the source-grounded lexical
+    # planner covers all slides before starting another provider stage.
+    plan = propose_plan(stage, max_cues=120)
+    return {"mode": "offline_lexical_grounding",
+            "pages": len(pages), "cues": plan["total_cues"]}
+
+
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     if lease is not None:
         lease.assert_held()
+    if (getattr(args, "standing_private_development", False)
+            and getattr(args, "bounded_provider_scope_verified", False)
+            and getattr(args, "stop_after", None) == "acceptance"
+            and not (args.work_root / subchapter).exists()):
+        # An accepted source-PDF/slide/narration/science checkpoint must
+        # not trigger another 20-minute paid generation merely because the
+        # subsequent cue/TTS planner changed. Import only independently
+        # reverified upstream stages from an owner-authorized earlier HP
+        # campaign. No old WAV, failed TTS attempt or approval is copied.
+        from microgen_verified_upstream_reuse import (
+            maybe_import_verified_upstream,
+        )
+        import_evidence = maybe_import_verified_upstream(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, subchapter=subchapter,
+            source_file=source_for(args.source_root, subchapter),
+            dest=destination_for(args.source_root, subchapter),
+            commit=args.commit, source_wait=args.source_wait,
+            prepare_stage=prepare_stage, stage_valid=stage_valid,
+            mark_complete=mark_complete, quality=quality,
+        )
+        if import_evidence:
+            print(f"[{subchapter}] source-bound upstream resume "
+                  f"{import_evidence['stages']} from prior verified "
+                  f"private campaign {import_evidence['from']}; "
+                  "no old TTS/failed provider stage imported", flush=True)
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -904,6 +980,26 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     dest = destination_for(args.source_root, subchapter)
     offline_mapping = bool(getattr(args, "offline_figure_mapping", False))
     log_path = args.work_root / f"{subchapter}.log"
+    pending = cp.get("inflight_provider_stage")
+    if pending is not None:
+        # A crash after a provider Send but before the stage receipt cannot
+        # safely be interpreted as an unused attempt. Preserve originals,
+        # fail before ANY further model request, and never reset the budget.
+        if (isinstance(pending, dict)
+                and pending.get("stage") == "science_qa"
+                and stage_valid(stage, "science_qa", dest)):
+            # Science QA has its own independently source-attested receipt;
+            # recover that exact saved result without another Gemini call.
+            _science_qa_update_upstream_fingerprints(cp, stage, dest)
+            mark_complete(cp, checkpoint_path, "science_qa", stage)
+            print(f"[{subchapter}] recovered independently verified science "
+                  "receipt after interrupted provider stage", flush=True)
+        else:
+            raise RuntimeError(
+                "AMBIGUOUS_PROVIDER_STAGE_HOLD: a previous provider stage may "
+                "have submitted a request before interruption; preserve the "
+                "checkpoint and do not replay an unaccounted paid request"
+            )
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
     bounded = getattr(args, "stop_after", None) is not None
@@ -1000,6 +1096,28 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
             print(f"[{subchapter}] recovered exact-source scientific QA receipt",flush=True)
             continue
 
+        if (stage_name == "tts"
+                and getattr(args, "standing_private_development", False)
+                and getattr(args, "bounded_provider_scope_verified", False)
+                and getattr(args, "stop_after", None) == "acceptance"):
+            # A change confined to the independent ASR reviewer should NOT
+            # rebill all previously source/voice/PCM-verified lecture WAVs.
+            # This only recovers original TTS evidence; original failed
+            # acoustic findings and old provider consent are never imported.
+            from microgen_verified_tts_reuse import maybe_reuse_verified_tts
+            reusable = maybe_reuse_verified_tts(
+                stage, work_root=args.work_root,
+                source_sha=quality.sha256(stage / "source.pdf"),
+                mark_complete=mark_complete, cp=cp,
+                checkpoint_path=checkpoint_path,
+                stage_valid=stage_valid, dest=dest)
+            if reusable:
+                print(f"[{subchapter}] verified same-source PCM resumed "
+                      f"from private campaign {reusable['from']}; "
+                      "independent two-model acoustic QA MUST rerun",
+                      flush=True)
+                continue
+
         if unchanged_failure_hold(cp, stage_name, stage):
             raise RuntimeError(
                 f"{stage_name} has a verified unchanged deterministic-failure "
@@ -1011,12 +1129,46 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
+            if (getattr(args, "stop_after", None) == "acceptance"
+                    and stage_name in {"science_qa", "tts"}):
+                # A private lecture cannot be accepted with static slide
+                # narration and a fabricated cue timeline. Run the same
+                # source/PDF lexical and bounded semantic budget admission
+                # BEFORE the next billable QA or TTS request. Never silently
+                # raise the semantic limit or synthesize an ungrounded cue.
+                admission = preflight_private_timed_acceptance(stage)
+                print(f"[{subchapter}] mandatory private timed grounding "
+                      f"admitted mode={admission['mode']} "
+                      f"slides={admission['pages']}", flush=True)
+                if stage_name == "tts":
+                    # The independent acoustic gate always rejects ambiguous
+                    # raw mathematical letter names even when both ASR models
+                    # appear to agree. Catch this predictable source-only
+                    # hold BEFORE spending on another doomed TTS campaign.
+                    from microgen_reviewed_math_voice import preflight_voice_sidecar
+                    speech_evidence = preflight_voice_sidecar(
+                    stage, require_policy_binding=(args.stop_after == "acceptance"))
+                    print(f"[{subchapter}] private voice source preflight "
+                          f"passed slides={speech_evidence['slide_count']}; "
+                          "independent acoustic QA still mandatory", flush=True)
             if stage_name == "published":
                 if lease is not None:
                     lease.assert_held()
                 publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
+                if (getattr(args, "bounded_provider_scope_verified", False)
+                        and stage_name in (GEMINI_STAGES | {"tts"})):
+                    # Record the *possibility* of a billed external effect
+                    # before launching the child. A kill/crash during Send
+                    # cannot silently reset the original finite campaign.
+                    cp["inflight_provider_stage"] = {
+                        "stage": stage_name,
+                        "created_utc": utc_now(),
+                        "source_sha256": quality.sha256(stage / "source.pdf"),
+                        "runner_sha256": quality.sha256(stage / "microgen_batch.py"),
+                    }
+                    save_checkpoint(checkpoint_path, cp)
                 run_subprocess(
                     py,
                     script,
@@ -1102,7 +1254,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--stop-after", choices=STAGES[:-1],
                     help="Stage-bounded isolated campaign: stop after this verified stage, NEVER publish to source-root.")
     ap.add_argument("--authorize-provider-usage", action="store_true",
-                    help="Explicitly allow Gemini/Cloud TTS requests in a bounded --stop-after campaign.")
+                    help="Authorize a non-standing bounded provider scope. "
+                         "Owner-approved HP single-source PRIVATE G2/TTS "
+                         "development is authorized automatically with "
+                         "finite per-commit ledger and no stage prompts.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
@@ -1125,6 +1280,15 @@ def main() -> int:
     args.repo = args.repo.resolve()
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
+    if args.stop_after == "acceptance":
+        # Private G2/G3 acceptance MUST include measured, active element
+        # highlighting. The legacy static one-WAV-per-slide mode cannot
+        # satisfy the release contract. Set before provider scope is frozen,
+        # so future checkpoint resumes cannot silently turn this back off.
+        if os.environ.get("MICROGEN_TIMED_CUES") != "1":
+            print("[batch] private acceptance requires source-grounded timed "
+                  "cues; enabling mandatory timed TTS",flush=True)
+        os.environ["MICROGEN_TIMED_CUES"] = "1"
     # Unbounded normal production eventually reaches paid Gemini/TTS stages.
     # Enforce the same explicit provider authorization already required for
     # paid --stop-after campaigns; never silently rely on stored credentials.
@@ -1148,6 +1312,30 @@ def main() -> int:
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
+    # Owner standing instruction (12 Nov 2026): ordinary private G2/TTS
+    # development must not pause for repeated human authorizations. This
+    # only applies to one HP-local source, acceptance/TTS endpoint, clean
+    # new campaign work root, exact source/commit, and finite zero retries.
+    # It does not cover unbounded jobs, publication, or replay of a failure.
+    args.standing_private_development = False
+    if (len(targets) == 1
+            and args.stop_after in {"tts", "acceptance"}
+            and not args.authorize_provider_usage):
+        from microgen_private_dev_policy import (
+            eligible_private_development, freeze_standing_environment,
+        )
+        if eligible_private_development(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, stop_after=args.stop_after,
+            stage_retries=0, multipart=args.multipart,
+        ):
+            args.standing_private_development = True
+            args.stage_retries = 0
+            freeze_standing_environment()
+            print("[batch] autonomous HP private development scope selected; "
+                  "Gemini 3.8 Flash-Lite/Kore primary, 3.8 Flash fallback, "
+                  "Cloud fallback last and character-budgeted; no manual "
+                  "stage approval or publication", flush=True)
     if args.lease_bucket:
         raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
     if args.check_assignments and not args.multi_pc:
@@ -1164,9 +1352,40 @@ def main() -> int:
             raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
         offline_safe = (args.offline_figure_mapping and
                         args.stop_after in {"figure_mapping", "figure_merge"})
-        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and
-                not args.authorize_provider_usage and not offline_safe):
-            raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
+        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping")
+                and not offline_safe):
+            # A single, previously authorized *bounded* private campaign can
+            # resume from verified checkpoints without another per-stage or
+            # per-session operator approval. The exact original source,
+            # revision, endpoint stage, model settings and retry ceiling
+            # remain frozen. Never infer new paid authorization from a prompt
+            # or silently extend a one-stage campaign to another stage.
+            if len(targets) == 1:
+                from microgen_campaign_authorization import (
+                    authorize_or_resume, BoundedCampaignAuthorizationError)
+                try:
+                    authorization = authorize_or_resume(
+                        repo=args.repo,
+                        source_root=args.source_root,
+                        work_root=args.work_root,
+                        source_file=destination_for(args.source_root, targets[0])
+                                    / "source.pdf",
+                        stop_after=args.stop_after,
+                        stage_retries=args.stage_retries,
+                        multipart=args.multipart,
+                        explicit_authorization=args.authorize_provider_usage,
+                        standing_private_development=(
+                            args.standing_private_development),
+                    )
+                except BoundedCampaignAuthorizationError as exc:
+                    raise SystemExit(str(exc)) from exc
+                print(f"[batch] provider-scope={authorization['status']}; "
+                      "private campaign only; no publication", flush=True)
+                args.bounded_provider_scope_verified = True
+            elif not args.authorize_provider_usage:
+                raise SystemExit(
+                    "No standing scope for additional targets: never "
+                    "expand a paid campaign without authorization")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
         raise SystemExit(

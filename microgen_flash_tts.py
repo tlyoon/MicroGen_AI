@@ -2,8 +2,9 @@
 
 Only this API-based MicroGen_AI repository is changed. The Web repository is
 reference-only. Gemini 3.8 Flash-Lite (Kore) is the default, Gemini 3.8 Flash
-is first fallback, and Google Cloud Chirp 3 HD is a last-resort *opt-in*
-fallback. Regenerate a WHOLE BATCH on fallback: never mix narrator engines.
+is first fallback, and Google Cloud Chirp 3 HD is the owner's bounded
+last-resort private-development fallback only when both Gemini models fail.
+Regenerate a WHOLE BATCH on fallback: never mix narrator engines.
 Never infers permission to publish from a voice name, WAV hash or API response.
 """
 from __future__ import annotations
@@ -245,7 +246,9 @@ def render_batch(texts: list[str], new_private_output: Path, *,
     """All-or-nothing batch; alternate engine remakes ALL slides for consistent voice.
 
     No output directory is created until every WAV in one engine passes.
-    Caller must independently approve TTS spending and publication decisions.
+    Private G2 development uses the owner's standing finite TTS grant;
+    other callers must supply existing bounded Cloud settings. No provider
+    receipt grants external publication rights.
     """
     output = Path(new_private_output).resolve(strict=False)
     if (output.exists() or output.is_symlink() or not output.parent.is_dir()
