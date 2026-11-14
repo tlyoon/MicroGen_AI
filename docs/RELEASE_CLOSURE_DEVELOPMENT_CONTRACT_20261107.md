@@ -1761,3 +1761,47 @@ quantitative numbers and existing cue/semantic safety. No audio or media
 stage passed from this read-only check: a fresh finite campaign at a new
 committed revision is still required. Never restart the consumed prior
 authorization or relax source-grounding to force acceptance.
+
+### 14 November 2026 — normal-path recovery of non-assertive quiz-reflection cues
+
+**Real G3 failure signature:** In a new, source-hash- and commit-bound Serway §2.6
+private campaign, production figure/slide/narration/science stages passed, but
+timed TTS cue mapping reached an end-of-slide learner reflection on a
+multiple-choice question. The conservative Gemini semantic mapper returned
+`{"matches":[]}`, correctly abstaining from identifying a verbatim quote.
+Production failed closed without TTS or accepted media; the finite, failed
+campaign is terminal and must never be restarted unchanged.
+
+**Permanent general recovery, invoked on EVERY normal pipeline run:**
+`microgen_timed_cue_planner._lexical_match` now calls
+`question_reflection_source_block` before a semantic provider is contacted.
+Only a final, non-assertive "Think about / Reflect on / Consider how/why/which/
+whether … before advancing/continuing/moving on" instruction may be attached
+to the already visible UNIQUE multiple-choice source question. The quiz must
+have a printed quiz/concept-check heading, one unambiguous question and at
+least two ordered visible choices; the instruction must reference a real
+topic appearing in the visible options. Numerical claims, equations,
+declarative assertions, unrelated advice, multiple conflicting questions,
+missing options, and non-final prompts cannot use this route.
+The source PDF, scientific narration and original voice text are NEVER
+changed, and no new source claim or audio is fabricated. The cue records
+`question_context_role=nonassertive_reflection_on_visible_question`,
+not "independent academic semantic entailment."
+
+**Independent enforcement:** The production `_verified_plan` TTS entry gate
+re-checks the exact question text, original extracted PDF bounding box,
+source-grounding role, final cue position and full quiz structure, rejecting
+forged or omitted contextual provenance before ANY paid TTS. The same
+canonical matcher is used in zero-paid full-lecture semantic-budget preflight,
+so this safe case no longer consumes one of the four allowed semantic
+Gemini slide slots. Genuine ambiguous scientific cues still fail closed and
+request bounded human-independent semantic source validation as before; the
+Gemini `[]` model abstention is never changed into a fabricated proposal.
+
+**Regression proof:** focused source-free and actual real-source private
+slide-10 replay tests passed 32/32, including no-Gemini positive path,
+forged/removed marker, changed bbox, mismatched source, numerical claims,
+missing quiz, unrelated reflection and non-final cue. The complete HP suite,
+exact SHA, and hosted CI must be recorded before G3 closure. A fresh
+commit/source-pinned, finite campaign (not unchanged failed-run replay) is
+still mandatory for genuine TTS, acoustic, video and private acceptance.

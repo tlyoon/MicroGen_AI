@@ -590,3 +590,38 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   commit and remote PR, then proceed to the second *distinct* source 2.7
   real private campaign and one fresh source/commit bounded 2.6 retry,
   preserving terminal previous evidence. Never loop the same one-use grant.
+
+## 14 November 2026 — G3 §2.6 semantic abstention: reusable normal-path remediation
+
+- Authorized HP original API-based MicroGen_AI, not MicroGen_AI_Web.
+  Baseline clean pushed PR #291 head fcbd1b391491e092ccd879e476cf453b928d2a32.
+  Existing finite private campaign `20261113_HP_G3_SERWAY26_REFS_FCBD_PRIVATE`
+  had successfully completed figure extraction/mapping/merge, slides, narration
+  and independent science QA but **failed TTS** at `Slide 10: Semantic model
+  returned incomplete proposal (array_length=0)`. Terminal source hash
+  5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032;
+  failure receipt preserved, grant consumed, no accepted media.
+- Genuine PDF/text examination: slide 10 of the 13-slide lecture is a
+  multiple-choice Concept Check with 1 printed question and three printed
+  answer options; the unresolved final cue is a non-assertive "Think about how
+  ... before advancing" prompt, rather than a factual source quotation.
+  Gemini returned an empty response, which was a legitimate fail-closed
+  abstention, NOT a damaged TTS/WAV or provider login issue.
+- Normal code `microgen_timed_cue_planner.question_reflection_source_block`
+  deterministically anchors ONLY sufficiently constrained, final,
+  non-numeric, non-assertive pedagogical prompts to ONE explicitly printed
+  question on a genuine quiz slide. It requires the real quiz heading,
+  one question, >=2 answer options, and topical overlap. All other ungrounded
+  content still follows source-bound semantic QA or terminal hold. New
+  `question_context_role` is enforced, including detection of tamper or
+  marker removal, in the normal `microgen_timed_cue_tts._verified_plan`
+  before ANY billed audio. Audio and visible PDF remain unchanged.
+- New tests `tests/test_microgen_question_reflection_recovery.py` prove
+  production path and fail-closed cases, including genuine §2.6 slide 10:
+  **32 focused tests passed**, zero Gemini calls or media changes. Full
+  repository HP suite currently running. Neither 2.6 nor 2.7 has a new
+  private G3 acceptance receipt yet; G3 must remain IN_PROGRESS.
+- Next: complete suite, commit/push normal pipeline+contract+tests;
+  fresh source/code-pinned 2.6 campaign using normal safe verified upstream
+  reuse and independent scientific/acoustic/timed media QA; then §2.7 second
+  distinct real source, long-video proof, and evidence-based G3 closure.

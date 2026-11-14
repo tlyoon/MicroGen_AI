@@ -210,6 +210,69 @@ def _pdf_text_blocks(page) -> list[tuple]:
     return blocks
 
 
+QUESTION_REFLECTION_ROLE = "nonassertive_reflection_on_visible_question"
+
+
+def question_reflection_source_block(
+    spoken: str, cue_no: int, total_cues: int, blocks: list[tuple],
+) -> int | None:
+    """Bind a final *non-assertive* learner prompt to its actual quiz question.
+
+    This is an existing source-PDF question highlight, not a model-created
+    semantic claim. It never maps numeric assertions, scientific statements,
+    or unrelated teaching advice. Both the cheap whole-lecture preflight
+    and the independent PCM-plan verifier use this identical criterion.
+    """
+    from microgen_cue_semantic_mapping import numbers
+    if (cue_no != total_cues or total_cues < 2
+            or not isinstance(spoken, str)
+            or not 40 <= len(spoken) <= 190
+            or numbers(spoken)
+            or "\n" in spoken
+            or any(ch in spoken for ch in "=<>^{};:")):
+        return None
+    if not re.fullmatch(
+        r"(?:Think about|Reflect on|Consider) "
+        r"(?:how|why|whether|which) [A-Za-z ,'-]{20,140} "
+        r"before (?:advancing|continuing|moving on)\.",
+        spoken, flags=re.IGNORECASE,
+    ):
+        return None
+    # Require exactly one explicit source question, a quiz heading, and
+    # at least two actual answer choices AFTER the source question.
+    questions = [
+        i for i, (_, label, _) in enumerate(blocks)
+        if ("?" in label and re.search(
+            r"\b(?:question|which one|which statement)\b", label,
+            flags=re.IGNORECASE))
+    ]
+    if len(questions) != 1:
+        return None
+    question = questions[0]
+    title = [
+        i for i, (_, label, _) in enumerate(blocks[:question])
+        if re.search(r"\b(?:quiz|concept check|multiple.choice)\b", label,
+                     flags=re.IGNORECASE)
+    ]
+    options = [
+        i for i, (_, label, _) in enumerate(blocks[question + 1:], question + 1)
+        if re.match(r"\s*\([a-dA-D]\)\s+", label)
+    ]
+    if len(title) != 1 or len(options) < 2:
+        return None
+    # The reflection must mention at least one real concept on the visible
+    # question/options; reject unrelated "think about" hallucinations.
+    topic = salient(spoken) - {
+        "think", "reflect", "consider", "advancing", "continuing",
+        "before", "moving", "relate", "about", "which", "whether", "vectors",
+    }
+    source_topics = set().union(
+        *(blocks[i][2] for i in [question, *options]))
+    if not topic.intersection(source_topics):
+        return None
+    return question
+
+
 def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
                    *, allow_unanchored: bool) -> tuple[list, list[tuple]]:
     """Identical matching logic for private full-lecture admission and cue planning."""
@@ -251,6 +314,7 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
             _, evidence, overlap, winner = max(
                 scored, key=lambda candidate: (candidate[1], candidate[2],
                                                candidate[0]))
+        contextual_question=False
         if not terms or overlap < 2 or evidence < 0.32:
             # A single-block title/card may be spoken verbatim even when it
             # contains only one salient word (e.g. a numbered section title).
@@ -279,8 +343,17 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
                 winner = mathematical
             if not verbatim_single and mathematical is None and (
                     not terms or overlap < 2 or evidence < 0.32):
-                unresolved.append((cue_number, spoken))
-                continue
+                # A final reflection on an explicitly printed quiz question
+                # is presentation guidance, not a new numerical/scientific
+                # source claim. Anchor only a uniquely verified question;
+                # all other unsupported content still requires semantic QA.
+                context_index=question_reflection_source_block(
+                    spoken,cue_number,len(texts),blocks)
+                if context_index is None:
+                    unresolved.append((cue_number, spoken))
+                    continue
+                winner=context_index
+                contextual_question=True
         used.add(winner)
         box, label, _ = blocks[winner]
         cues[cue_number - 1] = {
@@ -288,6 +361,8 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
             "pdf_text": label, "spoken_text": spoken,
             "pdf_bbox": box,
         }
+        if contextual_question:
+            cues[cue_number-1]["question_context_role"]=QUESTION_REFLECTION_ROLE
     return cues, unresolved
 
 

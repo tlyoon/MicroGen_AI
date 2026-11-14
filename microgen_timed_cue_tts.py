@@ -104,6 +104,52 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             not page.rect.contains(box) or
                             _equivalent_text(label) not in extracted):
                             raise CueTTSError("Element not grounded in source PDF")
+                        if "question_context_role" in cue:
+                            from microgen_timed_cue_planner import (
+                                QUESTION_REFLECTION_ROLE,
+                                question_reflection_source_block,
+                                _pdf_text_blocks,
+                            )
+                            if (cue["question_context_role"] != QUESTION_REFLECTION_ROLE
+                                    or "semantic_source_quote" in cue
+                                    or "pdf_bboxes" in cue
+                                    or "semantic_source_quotes" in cue):
+                                raise CueTTSError("Invalid question reflection provenance")
+                            actual_blocks=_pdf_text_blocks(page)
+                            anchor=question_reflection_source_block(
+                                spoken,cue_no,len(cues),actual_blocks)
+                            if (anchor is None
+                                    or label != actual_blocks[anchor][1]
+                                    or any(abs(a-b)>0.01 for a,b in zip(
+                                        coords,actual_blocks[anchor][0]))):
+                                raise CueTTSError(
+                                    "Question reflection not source-grounded")
+                        elif cue_no == len(cues):
+                            # A tampered plan cannot remove the explicit
+                            # contextual (non-claim) provenance marker and
+                            # pretend this was an ordinary lexical match.
+                            from microgen_timed_cue_planner import (
+                                QUESTION_REFLECTION_ROLE,
+                                question_reflection_source_block,
+                                _pdf_text_blocks, _lexical_match,
+                            )
+                            actual_blocks=_pdf_text_blocks(page)
+                            if question_reflection_source_block(
+                                    spoken,cue_no,len(cues),actual_blocks) is not None:
+                                all_spoken=[
+                                    item.get("spoken_text") for item in cues
+                                    if isinstance(item,dict)]
+                                if len(all_spoken)==len(cues) and all(
+                                        isinstance(s,str) for s in all_spoken):
+                                    expected,_=_lexical_match(
+                                        slide_no,all_spoken,actual_blocks,
+                                        allow_unanchored=True)
+                                    expected_cue=expected[-1]
+                                    if (expected_cue is not None and
+                                            expected_cue.get("question_context_role")
+                                            == QUESTION_REFLECTION_ROLE):
+                                        raise CueTTSError(
+                                            "Missing question reflection provenance")
                         if "pdf_bboxes" in cue:
                             from microgen_cue_semantic_mapping import (
                                 compact, numbers, MAX_GROUP_BLOCKS,
