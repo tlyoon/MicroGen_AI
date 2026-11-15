@@ -1897,3 +1897,25 @@ All such fixes must be integrated into normal production, tested against the exa
 ### 15 November 2026 — Bound cache discovery by authorized campaign directories
 
 A genuine second-subsection HP production campaign showed that a checkpoint storage root containing hundreds of ordinary file receipts caused the automatic historical Gemini cache search to return \`TOO_MANY_CAMPAIGNS_ABSTAINED\`, even though the number of genuine campaign directories was well below the configured finite limit and all ten previous identical source/prompt/image-key response files were safe. The previous condition incorrectly counted all root filesystem entries, not only potential campaign directories. Normal-path \`microgen_mapping_cache_recovery.py\` now filters directory entries (never symlinks) before its finite campaign cap and retains strict SHA/grant checks and current-prompt rehash. A source-immutable real HP shadow imported ten previously verified Gemini responses without a model call. Regression must include many (>400) non-campaign files and a separate actual-excess-directory refusal; no new bypass for invalid grants or stale response keys. Do not manually modify an active private campaign or claim provider avoidance for the already-running old-code attempt. Source-bound recovery must persist across future sessions and be automatically used on new runs.
+
+### 15 November 2026 — Recovery must be followed by autonomous forward progress
+
+A successful fix is not a terminal milestone. After a source/commit/grant-bound
+production stage recovers and passes its required validation, the normal batch
+orchestration must automatically move to the next eligible stage without a
+ChatGPT prompt or manual per-stage approval. The recovered failure signature,
+repair recipe, source/code fingerprints, finite retry counts and passed receipts
+must survive interruption and new sessions. Unresolved deterministic failures
+must remain held instead of entering identical retry loops.
+
+A real G3 Serway section 2.7 campaign encountered Gemini HTTP transport
+`ReadTimeout` during an eight-slide narration batch after key failover.
+The production narration batch helper now permits **one bounded subdivision**
+of only the timed-out request into two smaller, source/prompt-keyed batches.
+It persists a split decision and each verified response atomically, avoids
+repeating the oversized request after restart, and reassembles output only
+after exact slide-ID/content checks. Non-timeout failures, invalid response
+shapes, unapproved provider budget and ambiguous source evidence still stop.
+This is an offline-tested recovery mechanism, **not** evidence that a
+consumed paid campaign or G3 has passed. A fresh, separately authorized private
+campaign is required for any further paid provider requests.
