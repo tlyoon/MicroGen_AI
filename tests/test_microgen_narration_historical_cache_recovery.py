@@ -39,8 +39,8 @@ class NarrationHistoryCacheRecovery(unittest.TestCase):
     def test_reuses_exact_completed_request_without_provider(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            old = create_stage(root, "old", b"original verified PDF", "a" * 64)
-            new = create_stage(root, "new", b"original verified PDF", "b" * 64)
+            old = create_stage(root, "old", b"original verified PDF", "a" * 40)
+            new = create_stage(root, "new", b"original verified PDF", "b" * 40)
             existing = old / ".microgen_narration_batches"
             generate_batched(self.slides, self.source_blocks, self.generate,
                              cache_dir=existing, model="flash")
@@ -56,8 +56,8 @@ class NarrationHistoryCacheRecovery(unittest.TestCase):
     def test_different_composed_prompt_is_never_trusted(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            old = create_stage(root, "old", b"PDF", "a" * 64)
-            new = create_stage(root, "new", b"PDF", "b" * 64)
+            old = create_stage(root, "old", b"PDF", "a" * 40)
+            new = create_stage(root, "new", b"PDF", "b" * 40)
             generate_batched(self.slides, self.source_blocks, self.generate,
                              cache_dir=old / ".microgen_narration_batches",
                              model="flash", prompt_hash="OLD")
@@ -75,8 +75,8 @@ class NarrationHistoryCacheRecovery(unittest.TestCase):
     def test_source_mismatch_and_unverified_authorization_abstain(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            old = create_stage(root, "old", b"ORIGINAL", "a" * 64)
-            new = create_stage(root, "new", b"DIFFERENT", "b" * 64)
+            old = create_stage(root, "old", b"ORIGINAL", "a" * 40)
+            new = create_stage(root, "new", b"DIFFERENT", "b" * 40)
             generate_batched(self.slides, self.source_blocks, self.generate,
                              cache_dir=old / ".microgen_narration_batches",
                              model="flash")
@@ -101,8 +101,8 @@ class NarrationHistoryCacheRecovery(unittest.TestCase):
     def test_corrupt_historical_payload_never_copied(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            old = create_stage(root, "old", b"PDF", "a" * 64)
-            new = create_stage(root, "new", b"PDF", "b" * 64)
+            old = create_stage(root, "old", b"PDF", "a" * 40)
+            new = create_stage(root, "new", b"PDF", "b" * 40)
             cache = old / ".microgen_narration_batches"
             cache.mkdir()
             (cache / "batch_0000.json").write_text(

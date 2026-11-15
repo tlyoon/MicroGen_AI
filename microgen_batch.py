@@ -1210,6 +1210,18 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 )
                 if lease is not None:
                     lease.assert_held()
+                if (stage_name == "narration"
+                        and getattr(args, "stop_after", None) == "acceptance"
+                        and getattr(args, "bounded_provider_scope_verified", False)):
+                    # Repair only a literal source/PDF-verified wrapped
+                    # title after Gemini narration succeeds. A validator
+                    # remains mandatory; this is not a waiver of its gate.
+                    from microgen_narration_title_recovery import recover_title_card
+                    title_recovery = recover_title_card(stage)
+                    print(f"[{subchapter}] source title-card postflight "
+                          f"status={title_recovery['status']}; "
+                          "independent narration gate still mandatory",
+                          flush=True)
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
             if stage_name == "science_qa":

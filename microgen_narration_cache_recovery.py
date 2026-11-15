@@ -18,6 +18,7 @@ import socket
 
 CACHE_NAME = re.compile(r"batch_\d{4}\.json\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
+COMMIT_SHA = re.compile(r"[a-f0-9]{40}\Z")
 MAX_CAMPAIGNS = 400
 MAX_CACHED_BATCHES = 16
 MAX_JSON_BYTES = 65536
@@ -53,7 +54,7 @@ def _scope(stage: Path, source_sha: str):
         and s.get("host") == "hp"
         and s.get("stop_after") == "acceptance"
         and s.get("source_sha256") == source_sha
-        and SHA.fullmatch(str(s.get("code_revision", "")))
+        and COMMIT_SHA.fullmatch(str(s.get("code_revision", "")))
         and cp.get("package_commit") == s.get("code_revision")
     )
 
