@@ -305,6 +305,8 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
             source_caption_provenance = validate_source_caption_vector_recovery(stage)
         except CaptionVectorRecoveryError as exc:
             raise QualityError(f"Source-caption figure provenance invalid: {exc}") from exc
+    from microgen_source_kinematics_graph_guard import require_graph_source_evidence
+    source_graph_provenance = require_graph_source_evidence(stage)
     lateral_source_provenance = None
     if (stage/".microgen_lateral_vector_figure_recovery.json").is_file():
         from microgen_lateral_vector_figure_recovery import (
@@ -354,6 +356,11 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
             imported["receipt_sha256"]
         )
         result["verified_upstream_import_stages"] = imported["stages"]
+    if source_graph_provenance is not None:
+        result["source_kinematic_graph_audit_receipt_sha256"] = (
+            source_graph_provenance["receipt_sha256"]
+        )
+        result["source_kinematic_graph_matching"] = source_graph_provenance["matching"]
     if lateral_source_provenance is not None:
         result["lateral_vector_figure_recovery_receipt_sha256"] = (
             lateral_source_provenance["receipt_sha256"]
@@ -419,6 +426,17 @@ def published_manifest_valid(dest: Path) -> bool:
             if (receipt is None
                     or receipt["stages"] != data.get("verified_upstream_import_stages")):
                 return False
+        if "source_kinematic_graph_audit_receipt_sha256" in data:
+            name = ".microgen_source_kinematic_graph_audit.json"
+            if sha256(dest / name) != data["source_kinematic_graph_audit_receipt_sha256"]:
+                return False
+            from microgen_source_kinematics_graph_guard import (
+                require_graph_source_evidence,
+            )
+            verified = require_graph_source_evidence(dest)
+            if (verified is None
+                    or verified["matching"] != data.get("source_kinematic_graph_matching")):
+                return False
         if "lateral_vector_figure_recovery_receipt_sha256" in data:
             name = ".microgen_lateral_vector_figure_recovery.json"
             if sha256(dest / name) != data["lateral_vector_figure_recovery_receipt_sha256"]:
@@ -480,6 +498,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         files.append(".microgen_source_caption_vector_recovery.json")
     if info.get("lateral_vector_figure_recovery_receipt_sha256"):
         files.append(".microgen_lateral_vector_figure_recovery.json")
+    if info.get("source_kinematic_graph_audit_receipt_sha256"):
+        files.append(".microgen_source_kinematic_graph_audit.json")
     if info.get("figure_composition_receipt_sha256"):
         files.append("figure_composition_receipt.json")
     if info.get("figure_review_approval_sha256"):
@@ -631,9 +651,19 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         # A changed auto-recovery path must invalidate old slide-stage
         # acceptance, without breaking legacy minimal offline fixtures.
         for optional in ("microgen_missing_source_figure_candidates.py",
-                         "microgen_source_caption_vector_recovery.py"):
+                         "microgen_source_caption_vector_recovery.py",
+                         "microgen_source_kinematics_graph_guard.py"):
             if (stage / optional).is_file():
                 inputs.append(optional)
+    if name in {"slides", "narration", "science_qa", "tts",
+                "acoustic_qa", "video", "acceptance", "published"}:
+        if (stage / ".microgen_source_kinematic_graph_audit.json").is_file():
+            from microgen_source_kinematics_graph_guard import (
+                require_graph_source_evidence,
+            )
+            if require_graph_source_evidence(stage) is None:
+                raise QualityError("Source-derived kinematic graph evidence missing")
+            inputs.append(".microgen_source_kinematic_graph_audit.json")
     if name in {"slides", "science_qa", "tts", "acoustic_qa",
                 "video", "acceptance", "published", "figure_mapping", "figure_merge"}:
         if (stage / ".microgen_lateral_vector_figure_recovery.json").is_file():

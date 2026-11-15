@@ -42,6 +42,8 @@ def _snap(stage:Path, count:int)->dict[str,str]:
         names.append("figure_composition_receipt.json")
     if (stage/".microgen_lateral_vector_figure_recovery.json").is_file():
         names.append(".microgen_lateral_vector_figure_recovery.json")
+    if (stage/".microgen_source_kinematic_graph_audit.json").is_file():
+        names.append(".microgen_source_kinematic_graph_audit.json")
     if (stage/".microgen_autonomous_parts.json").is_file():
         names.append(".microgen_autonomous_parts.json")
         names += sorted(x.name for x in stage.glob("slides_part_*.mp4") if x.is_file())
@@ -141,6 +143,10 @@ def inspect_stage(stage:Path)->dict:
         verify_lateral_figure_receipt,
     )
     lateral_provenance=verify_lateral_figure_receipt(stage)
+    from microgen_source_kinematics_graph_guard import (
+        require_graph_source_evidence,
+    )
+    source_graph_provenance=require_graph_source_evidence(stage)
     unmapped=audit_unmapped_source_crops(stage,receipt=source_figures)
     video=check_video(stage/"slides.mp4",expected_seconds=wavs["total_seconds"])
     timed_visual=_verified_timed_visual(stage,count)
@@ -187,6 +193,13 @@ def inspect_stage(stage:Path)->dict:
         "human_approval_required":False,
         "publication_allowed":False,
     }
+    if source_graph_provenance is not None:
+        evidence["source_kinematic_graph_audit_receipt_sha256"] = (
+            source_graph_provenance["receipt_sha256"]
+        )
+        evidence["source_kinematic_graph_matching"] = (
+            source_graph_provenance["matching"]
+        )
     # Source-vector recovery is proof of literal caption/graph provenance,
     # not a blanket scientific or publication approval.
     if lateral_provenance is not None:

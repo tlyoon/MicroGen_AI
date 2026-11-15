@@ -109,6 +109,58 @@ def reviewed_math_voice(text: str) -> str:
     # Physically readable coefficient c times t, not a general c/C match.
     value = re.sub(r"\bminus\s+c\s+t\b", "minus see tee", value)
 
+    # Explicit positional subscripts in the spoken scientific equation are
+    # variable names, never the unrelated English x or a random standalone
+    # letter. Convert only the formula role: "x sub i / f", "x sub B",
+    # "x car / x trooper", and "v x car / v x i / v x f".
+    # Preserve symbols, labels and equation values in source/narration.
+    subscript_letter_names = {
+        "i": "eye", "f": "eff", "b": "bee",
+        "car": "car", "trooper": "trooper",
+    }
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<axis>x|y)\s+sub\s+"
+        r"(?P<index>i|f|B|car|trooper)\b",
+        lambda m: _NAMES[m["axis"].lower()] + " sub " +
+                  subscript_letter_names[m["index"].lower()],
+        value,
+    )
+    value = re.sub(
+        r"(?<![A-Za-z])v\s+x\s+(?P<index>i|f|B|car|trooper)\b",
+        lambda m: "vee ex " + subscript_letter_names[m["index"].lower()],
+        value,
+    )
+    value = re.sub(
+        r"(?<![A-Za-z])x\s+(?P<index>B|car|trooper)\b"
+        r"(?=\s*(?:equals?|plus|minus|times|to|aligns|[,.:;!?]|$))",
+        lambda m: "ex " + subscript_letter_names[m["index"].lower()],
+        value,
+    )
+
+    # Graph panel labels printed a-f are letters ("Graph c" is NOT the
+    # coefficient c, nor 'circa'). Only in explicitly graphical references
+    # or a labelled a,b,c graph sequence do we read panel names aloud.
+    value = re.sub(
+        r"\b(?P<graph>graphs?)\s+(?P<letter>[a-f])\b",
+        lambda m: m["graph"] + " panel " +
+                  panel_names[m["letter"].lower()],
+        value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"\b(?P<stem>(?:graphs?\s+)?labeled\s+)a\s*,\s*b\s*,\s*"
+        r"(?:and\s+)?c\b",
+        lambda m: m["stem"] + "panel ay, panel bee, and panel see",
+        value, flags=re.IGNORECASE,
+    )
+    # For "graphs a, b, and c" all labels refer to the same printed
+    # multi-panel source figure. Accept both the raw list and the form
+    # already handled by the singular graph-label expression above.
+    value = re.sub(
+        r"\bgraphs\s+(?:panel\s+ay|a)\s*,\s*b\s*,\s*(?:and\s+)?c\b",
+        "graphs panel ay, panel bee, and panel see",
+        value, flags=re.IGNORECASE,
+    )
+
     # Authentic G2 independent TWO-MODEL acoustic failures demonstrated that
     # compact variable names adjacent to ordinary grammar can sound like a
     # different equation ("ay ex as" -> "ay equals"). Prefer the same

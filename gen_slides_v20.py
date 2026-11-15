@@ -410,6 +410,14 @@ for attempt in range(1, 5):
     _tex_path.write_text("\n".join(_tex_lines) + "\n", encoding="utf-8")
     check_graphics_with_source_candidates(Path(tex_file))
     clean_pause_in_place(tex_file)
+    # Independent original-PDF vector calculus derivative checks prevent
+    # fluent but scientifically false graph-matching solution bullets from
+    # entering accepted lessons. Generic strict geometry only; ambiguous
+    # graphs abstain. No additional Gemini request or source-PDF edit.
+    from microgen_source_kinematics_graph_guard import (
+        auto_repair_source_graph_reasoning,
+    )
+    auto_repair_source_graph_reasoning(Path.cwd())
     result = subprocess.run(
         ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', '-file-line-error', tex_file],
         stdout=subprocess.PIPE,

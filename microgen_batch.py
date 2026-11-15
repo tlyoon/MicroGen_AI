@@ -322,6 +322,10 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
                 quality.check_graphics(stage / "slides.tex")
+                from microgen_source_kinematics_graph_guard import (
+                    require_graph_source_evidence,
+                )
+                require_graph_source_evidence(stage)
                 return True
             count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
             if name == "narration":

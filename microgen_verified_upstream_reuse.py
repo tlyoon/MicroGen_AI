@@ -35,6 +35,7 @@ ALLOW_FILES = {
     "figure_composition_receipt.json",
     ".microgen_source_caption_vector_recovery.json",
     ".microgen_lateral_vector_figure_recovery.json",
+    ".microgen_source_kinematic_graph_audit.json",
     ".microgen_structural_reflow_receipt.json",
     ".microgen_autonomous_science_qa.json",
     "slides.pdf", "slides.tex", "slides.log",
@@ -118,6 +119,18 @@ def verify_import_receipt(stage: Path, *, require_cache: bool = True) -> dict | 
         if (lateral_receipt.is_symlink() or _sha(lateral_receipt)!=lateral_sha
                 or verify_lateral_figure_receipt(stage) is None):
             raise UpstreamReuseError("Imported lateral vector recovery drifted")
+    semantic_receipt = stage / ".microgen_source_kinematic_graph_audit.json"
+    semantic_sha = data.get("source_kinematic_graph_audit_receipt_sha256")
+    if bool(semantic_sha) != semantic_receipt.exists():
+        raise UpstreamReuseError("Imported source graph semantics absent or unexpected")
+    if semantic_sha:
+        from microgen_source_kinematics_graph_guard import (
+            require_graph_source_evidence,
+        )
+        verified = require_graph_source_evidence(stage)
+        if (semantic_receipt.is_symlink() or _sha(semantic_receipt)!=semantic_sha
+                or verified is None or verified["receipt_sha256"]!=semantic_sha):
+            raise UpstreamReuseError("Imported source-graph semantic repair drifted")
     cached = data.get("source_bound_narration_response_cache")
     if cached is not None:
         if (expected != FOUR_STATUS or not isinstance(cached, dict)
@@ -426,6 +439,10 @@ def maybe_import_verified_upstream(
             "lateral_vector_figure_recovery_receipt_sha256": (
                 _sha(stage / ".microgen_lateral_vector_figure_recovery.json")
                 if (stage / ".microgen_lateral_vector_figure_recovery.json").is_file()
+                else None),
+            "source_kinematic_graph_audit_receipt_sha256": (
+                _sha(stage / ".microgen_source_kinematic_graph_audit.json")
+                if (stage / ".microgen_source_kinematic_graph_audit.json").is_file()
                 else None),
             "current_code_revision": commit,
             "stages": list(selected_stages),
