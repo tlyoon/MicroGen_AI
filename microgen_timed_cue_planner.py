@@ -193,8 +193,18 @@ def _pdf_text_blocks(page) -> list[tuple]:
             continue
         label = str(block[4]).strip()
         terms = salient(label)
+        # PDF math typesetting frequently splits one genuine numerical
+        # equation into short, separately positioned text blocks. Keep
+        # compact *two-number equality* fragments such as
+        # "3.00 = 15.0 +" and "255 = 31.0 s" as literal visible evidence;
+        # never infer a number or accept a page counter as an equation.
+        from microgen_cue_semantic_mapping import numbers
+        compact_equation = (
+            "=" in label and len(normalized(label)) >= 6
+            and len(numbers(label)) >= 2
+        )
         math_text = (
-            len(normalized(label)) >= 8
+            (len(normalized(label)) >= 8 or compact_equation)
             and bool(re.search(r"[=+−×÷∆Δ∂∫√≤≥<>]", label))
             and bool(re.search(r"\d|[A-Za-zα-ωΑ-Ω]", label))
         )
