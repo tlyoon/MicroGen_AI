@@ -1139,6 +1139,24 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
+            if (stage_name == "narration"
+                    and getattr(args, "standing_private_development", False)
+                    and getattr(args, "bounded_provider_scope_verified", False)
+                    and getattr(args, "stop_after", None) == "acceptance"):
+                # A prior FAILED whole-lecture stage can still hold valid,
+                # individually source/prompt/model-attested provider replies.
+                # Transfer only immutable cache records, never an old paid
+                # grant, checkpoint acceptance, or raw source content.
+                # gen_script_v13.generate_batched rehashes each complete
+                # composed request BEFORE trusting any imported response.
+                from microgen_narration_cache_recovery import (
+                    reuse_verified_narration_batches,
+                )
+                reuse = reuse_verified_narration_batches(stage)
+                print(f"[{subchapter}] source-bound narration reply recovery "
+                      f"status={reuse['status']} copied={reuse['copied']}; "
+                      "complete request SHA revalidation remains mandatory",
+                      flush=True)
             if (getattr(args, "stop_after", None) == "acceptance"
                     and stage_name in {"science_qa", "tts"}):
                 # A private lecture cannot be accepted with static slide

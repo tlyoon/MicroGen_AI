@@ -1919,3 +1919,14 @@ shapes, unapproved provider budget and ambiguous source evidence still stop.
 This is an offline-tested recovery mechanism, **not** evidence that a
 consumed paid campaign or G3 has passed. A fresh, separately authorized private
 campaign is required for any further paid provider requests.
+
+
+### 15 November 2026 — Normal-path G3 mathematical speech and accepted narration replay
+
+A genuine new HP Serway 2.7 private campaign completed all three Gemini narration batches for 21 slides after normal bounded key rotation (ReadTimeout/504). Its next deterministic TTS-only speech preflight correctly stopped at unspoken mathematical x-component and initial/final positional indices before any new TTS. Do not repurchase source-grounded narration merely to repair voice orthography; do not bypass the risk register or weaken acoustic/academic verification.
+
+The regular `microgen_reviewed_math_voice.reviewed_math_voice` normalizes only attested compact kinematic variable roles (a_x, v_x, initial/final x coordinates, explicit derivatives), without changing the original PDF, visible equations, raw narration, model outputs, or source identity. The existing all-slide speech-risk gate must still reject unsupported forms and independent actual WAV review remains mandatory. The real 21 cached slide voice inputs passed zero residual predictable-risk checks under this rule; this is not phoneme certification.
+
+The normal `microgen_batch.process_one` narration stage automatically invokes `microgen_narration_cache_recovery.reuse_verified_narration_batches` for a new standing-authorized, strictly scoped HP private campaign. The loader copies only bounded, independently SHA/source/permit-backed completed per-request JSON responses from one previous same-source authorized campaign, never a failed whole-stage receipt or an expired paid grant. `gen_script_v13.generate_batched` independently checks the exact complete source+slides+model+composed-prompt+generator SHA before using any copied response. Preserve this generator request fingerprint when changing only downstream speech code, rather than allowing a local TTS policy repair to force repeat billed Gemini generation. No automatic authorization expansion, unbounded retries, reuse of ambiguous in-flight requests, source modification, publication, or claim of independent acceptance is permitted.
+
+After successful source, pronunciation, independent scientific, acoustic, timing and video gates, normal `microgen_batch` must advance to the next eligible stage and finally private technical acceptance without another chat prompt. G3 remains open until two distinct G3 sources have genuine accepted media, a genuine >=600s new source has verified <600s parts, and original H264 interruption/recovery evidence re-verifies. Commit and hosted CI plus new privately authorized exact-source run are prerequisites to claiming this new repair deployed.

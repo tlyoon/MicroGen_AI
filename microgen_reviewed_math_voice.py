@@ -43,6 +43,78 @@ def reviewed_math_voice(text: str) -> str:
         raise TypeError("TTS voice input must be text")
     value = text
 
+    # Source-form kinematics indices appear in narrated math as a-sub-x,
+    # v-sub-x-final, x-initial, x f, and a x t. These are variable
+    # roles, not ordinary English letters. Only these explicit structured
+    # forms are rewritten, and only for speech; visible mathematics and
+    # the original narration are never altered.
+    hyphen = r"[-\u2010-\u2015]"
+    component_form = re.compile(
+        rf"(?<![A-Za-z])(?P<component>[av]){hyphen}sub{hyphen}"
+        rf"(?P<axis>[xy])(?P<index>{hyphen}(?:initial|final|average|avg))?\b",
+        flags=re.IGNORECASE,
+    )
+    def speak_component(m):
+        index = m["index"]
+        suffix = (" " + index[1:].lower()) if index else ""
+        return (_COMPONENT[m["component"].lower()] + " sub "
+                + _NAMES[m["axis"].lower()] + suffix)
+    value = component_form.sub(speak_component, value)
+
+    value = re.sub(
+        rf"(?<![A-Za-z])(?P<axis>[xy]){hyphen}(?P<index>initial|final)\b",
+        lambda m: _NAMES[m["axis"].lower()] + " " + m["index"].lower(),
+        value, flags=re.IGNORECASE,
+    )
+    # Bare i/f can only be expanded when the immediately following token
+    # is an equation operator or punctuation, rather than arbitrary prose.
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<axis>[xy])\s+(?P<index>[if])\b"
+        r"(?=\s*(?:equals?|plus|minus|times|[,.:;!?]|$))",
+        lambda m: _NAMES[m["axis"].lower()] +
+        (" initial" if m["index"].lower() == "i" else " final"),
+        value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<component>[av])\s+(?P<axis>[xy])"
+        r"\s+(?P<average>average|avg)\b",
+        lambda m: _COMPONENT[m["component"].lower()] + " sub "
+        + _NAMES[m["axis"].lower()] + " average",
+        value, flags=re.IGNORECASE,
+    )
+    # Compact equation factors: a_x*t, v_x*t, a_x*(x_f-x_i).
+    # Requiring a following mathematical operand prevents global 'a x'
+    # or single-letter English rewrites.
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<component>[av])\s+(?P<axis>[xy])"
+        r"\s+(?P<operand>t|times)\b",
+        lambda m: _COMPONENT[m["component"].lower()] + " sub "
+        + _NAMES[m["axis"].lower()]
+        + (" times tee" if m["operand"].lower() == "t" else " times"),
+        value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"(?<![A-Za-z])(?P<component>[av])\s+(?P<axis>[xy])"
+        r"(?=\s+[xy]\s+(?:[if]|initial|final)\b)",
+        lambda m: _COMPONENT[m["component"].lower()] + " sub "
+        + _NAMES[m["axis"].lower()] + " times",
+        value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"\bd\s+v\s+(?P<axis>[xy])\s+d\s+t\b",
+        lambda m: "dee vee sub " + _NAMES[m["axis"].lower()]
+        + " over dee tee", value, flags=re.IGNORECASE,
+    )
+
+    # Equation operators also attest that bare x i / x f are compact
+    # initial/final position indices, even when an English verb follows.
+    value = re.sub(
+        r"(?P<operator>\b(?:times|minus|plus|equals?|by)\s+)"
+        r"(?P<axis>[xy])\s+(?P<index>[if])\b",
+        lambda m: m["operator"] + _NAMES[m["axis"].lower()]
+        + (" initial" if m["index"].lower() == "i" else " final"),
+        value, flags=re.IGNORECASE,
+    )
     # General physics displacement/time increments: the spoken source
     # variables in "delta x", "delta y" and "delta t" are letter names,
     # not English words. Correct only this explicit math-prefix context.
