@@ -625,3 +625,41 @@ New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, syn
   fresh source/code-pinned 2.6 campaign using normal safe verified upstream
   reuse and independent scientific/acoustic/timed media QA; then §2.7 second
   distinct real source, long-video proof, and evidence-based G3 closure.
+
+## 15 Nov 2026 — G3 real acoustic three-slide blocker decomposed and code recovery
+
+- Correct original API-based MicroGen_AI on HP only. Last accepted G2
+  `ad74678`; current prior PR #291 head `b3364f2`, draft/unmerged.
+  20261114_HP_G3_SERWAY26_CONTEXT_B336_PRIVATE/2.6 terminal after
+  13-slide / 46-source-grounded-PCM TTS. Acoustic failure
+  `REPAIR_CANDIDATE_BUDGET_HOLD` 3 flagged slides [2,11,13] vs existing
+  max 2 safe rerenders; zero videos, NO acceptance. Do not restart old
+  one-use grant or fabricate three audio repairs.
+- Actual SHA-bound two-Gemini original blind ASR transcripts were reviewed
+  directly on HP from
+  `.microgen_private_acoustic_failed_b417adcc9541395cc15a.json`;
+  the source original SHA is 5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032.
+  Slide 2 only roadmap/road map and antiparallel/anti parallel.
+  Slide 11 only nonzero/non zero; both reviewers same actual meaning.
+  New script-blind exact lexical compound normalizer makes 2/11 zero
+  mismatched words (original two recognizer transcripts unchanged).
+  NEGATION 'non' added to sensitive tokens: nonzero->zero remains a hard
+  failure even inside an otherwise very long passage.
+- Slide 13 **real audible script expansion**, not harmless disagreement:
+  both Gemini reviewers show ~double expected content. The actual
+  `slide13_cue2.wav` lasted **50.04 seconds** for 38 source tokens,
+  versus typical 82–144 WPM elsewhere. Under source+WAV offline replay
+  1/46 candidate chunks failed new severely overlong threshold.
+- Normal production `microgen_flash_tts.render_batch` rejects such a
+  clip after actual PCM validation and retries ONLY through existing
+  finite same-provider/model/voice attempt slots; whole-batch fallback
+  is used only as already authorized, never voice mixing or paid infinite
+  loops. The final candidate and original voice, mathematical source,
+  2-model acoustic, video and acceptance gates remain independently
+  mandatory. Private receipt records per-cue retry counts.
+- New tests `tests/test_microgen_g3_acoustic_compound_duration.py`:
+  128 focused source-free related tests passed; opt-in 18/18 source+WAV
+  + original dual Gemini trace checks passed. No source change or model
+  calls for these offline tests. Full HP tests/commit/remote integration
+  and fresh private 2.6 campaign needed next, then genuine independent
+  §2.7 long-video campaign before G3 closes.

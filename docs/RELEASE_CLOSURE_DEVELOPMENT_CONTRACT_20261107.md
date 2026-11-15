@@ -1805,3 +1805,73 @@ missing quiz, unrelated reflection and non-final cue. The complete HP suite,
 exact SHA, and hosted CI must be recorded before G3 closure. A fresh
 commit/source-pinned, finite campaign (not unchanged failed-run replay) is
 still mandatory for genuine TTS, acoustic, video and private acceptance.
+
+### 15 November 2026 — G3 independent acoustic dual-review + severe TTS overspeech automatic recovery
+
+**Failure observed on genuinely generated source and WAV (NOT a synthetic diagnosis):**
+Original API-based MicroGen_AI on authorized HP, Serway section 2.6, original
+`source.pdf` SHA256 `5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032`.
+Terminal private campaign `20261114_HP_G3_SERWAY26_CONTEXT_B336_PRIVATE`
+finished 7 source/science/TTS stages with 46 actually measured source-bound
+PCM cues and 13 rendered slide WAVs, then two real independent Gemini
+recognizers blocked slide 2, 11, 13 under fixed two-slide repair ceiling;
+no final acceptance/video or public publication. Immutable original two-
+reviewer blind transcripts were SHA-saved, and the spent finite provider
+campaign is protected.
+
+**Independent root cause, mathematically safe disaggregation:** Exact
+source/WAV-bound offline replay found slides 2 and 11 contain ONLY ASR word
+segmentation differences: `roadmap`/`road map`,
+`antiparallel`/`anti parallel`, `nonzero`/`non zero`.
+The shared script-blind `microgen_acoustic_math_transcript` now canonicalizes
+only these exact whole compounds. The shared acoustic-sensitive token set
+includes `non`: omission of mathematical nonzero/negation NEVER becomes
+acceptable merely due to an otherwise low word-error fraction. This leaves
+all signed numbers, units, operations, exponents and genuine scientific
+errors checked by BOTH independently recorded Gemini ASR reviewers.
+Offline replay of original **unmodified** blind transcripts yielded zero
+source mismatches for slides 2 and 11 without provider calls.
+
+**Slide 13 was a real overspeech defect, NOT a cosmetic ASR issue:**
+Both Gemini reviewers independently transcribed a substantial additional
+passage beyond the expected source-bound cue. Source chunk 13/2 has 38
+source tokens and **50.04 s** actual PCM (~46 words/minute), whereas the
+other 45 actual source-bound clips are above the conservative 60 WPM
+triage threshold. The source text itself is unchanged and correct.
+This old WAV and its source-bound acoustic failure must NEVER be waived or
+claimed accepted based solely on duration.
+
+**Normal-path automated recovery and bounded enforcement:** The existing
+`microgen_flash_tts.render_batch` now calls
+`severe_duration_outlier(source_text, actual_pcm_seconds)` immediately
+after each authentic decoded WAV, **before any output is installed**.
+Only a clip with at least 16 source words, at least 20 measured seconds,
+and fewer than 60 source words/minute is a gross duration outlier.
+Such a candidate triggers a fresh request ONLY within the existing
+finite per-clip `MICROGEN_TTS_QUEUE_ROUNDS` retry loop, retaining the
+identical provider/model/voice. An exhausted provider triggers only the
+already-authorized whole-lecture same-engine-family fallback, preserving
+the existing Cloud attempt-character ceiling. If the finite engine
+inventory is exhausted, reject the whole batch atomically and preserve
+all previously accepted outputs. The private batch receipt records
+`severe_duration_screen_passed` and actual number of bounded retries
+for each cue; source text, source PDF and academic decisions are never
+rewritten. No mixing of voice/provider within an accepted batch.
+
+This duration QA is only a conservative *pre-screen* for gross overspeech;
+a normal-duration clip is NOT certified phonetic-accurate, and mandatory
+independent two-Gemini acoustic review, source voice manifest, measured
+PCM cue reconstruction, decoded source highlights, and eventual private
+technical acceptance are unchanged.
+
+**Verification:** The regression file
+`tests/test_microgen_g3_acoustic_compound_duration.py` exercises exact
+math-negation fail-closed cases, independent source-blind orthographic
+equivalence, mocked single-voice bounded retry, provider exhaustion,
+no partial installation, and authentic source+two-Gemini historical
+evidence with source/WAV SHA pins. 128 focused regression tests and
+18 explicit real-source acoustic/duration tests passed. The 46 frozen
+source-bound genuine cue WAVs yielded **one and only one severe outlier,
+slide 13 cue 2**. A changed source/voice candidate still requires an
+entire fresh authorized private acceptance campaign and two-model
+independent acoustic QA; no G3 passage or G4 readiness is inferred.

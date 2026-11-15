@@ -28,7 +28,7 @@ circa limit limits theorem intermediate value derivative derivatives
 continuous continuity discontinuity integral integrals minus plus
 positive negative numerator denominator fraction infinite infinity
 equals equal point zero one two three four five six seven eight nine ten
-not never no greater less negative positive above below minus multiplied divided
+not never no non greater less negative positive above below minus multiplied divided
 subtract subtracted subtracting add added adding multiply multiplying divide dividing
 squared cubed
 """.split()) | set("0 1 2 3 4 5 6 7 8 9 10".split())

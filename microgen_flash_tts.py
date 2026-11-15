@@ -240,6 +240,22 @@ def _valid_wav(payload: bytes) -> dict:
         raise FlashTTSError("Invalid WAV data") from exc
 
 
+def severe_duration_outlier(text: str, seconds: float) -> bool:
+    """Detect grossly overlong candidate speech BEFORE any WAV is installed.
+
+    The source word count/PCM seconds is a *triage* signal, not evidence of
+    correct pronunciation. Requiring a long >=20s clip with >=16 source
+    words and fewer than 60 source words per minute avoids ordinary small
+    mathematical pauses. A caught outlier retries within the NORMAL bounded
+    same-provider request loop and still requires independent dual ASR later.
+    """
+    if (not isinstance(text, str) or not isinstance(seconds, (int, float))
+            or not math.isfinite(seconds) or seconds <= 0):
+        raise FlashTTSError("Invalid source/duration for TTS preflight")
+    words=len(re.findall(r"\b[\w]+(?:'[\w]+)?\b",text))
+    return words >= 16 and seconds >= 20 and words * 60 / seconds < 60
+
+
 def render_batch(texts: list[str], new_private_output: Path, *,
                  voice: str = DEFAULT_VOICE, allow_cloud: bool = False,
                  speak=None) -> dict:
@@ -275,6 +291,7 @@ def render_batch(texts: list[str], new_private_output: Path, *,
         try:
             for index, text in enumerate(texts, 1):
                 last_error = None
+                duration_retries = 0
                 for attempt in range(1, max(1, int(os.environ.get("MICROGEN_TTS_QUEUE_ROUNDS", "3"))) + 1):
                     try:
                         if spec["provider"] == "google_cloud_chirp3":
@@ -284,6 +301,15 @@ def render_batch(texts: list[str], new_private_output: Path, *,
                             cloud_char_attempts += len(text)
                         wav = call(text, spec)
                         details = _valid_wav(wav)
+                        if severe_duration_outlier(text, details["seconds"]):
+                            duration_retries += 1
+                            print("[TTS] severe measured duration/source-word "
+                                  "rate outlier; bounded same-provider retry "
+                                  f"chunk={index} attempt={attempt}",flush=True)
+                            raise FlashTTSError(
+                                "TTS_SEVERE_DURATION_OUTLIER: candidate may "
+                                "contain repeated or invented narration; "
+                                "audio not accepted")
                         break
                     except Exception as exc:
                         last_error = exc
@@ -296,6 +322,8 @@ def render_batch(texts: list[str], new_private_output: Path, *,
                 rows.append({"slide": index, "wav_filename": name,
                              "text_sha256": hashlib.sha256(text.encode("utf8")).hexdigest(),
                              "wav_sha256": hashlib.sha256(wav).hexdigest(),
+                             "severe_duration_screen_passed": True,
+                             "bounded_duration_recovery_attempts": duration_retries,
                              **details})
             if len(rows) != len(texts):
                 raise FlashTTSError("Incomplete TTS batch")

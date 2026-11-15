@@ -23,6 +23,14 @@ def canonical_math_transcript(text: str) -> str:
     if not isinstance(text, str):
         raise TypeError("Acoustic transcript must be text")
     value = text
+    # Orthographic segmentation is not a phonetic change: two independent
+    # ASR systems may transcribe "roadmap"/"road map", "antiparallel"/
+    # "anti parallel", or "nonzero"/"non zero". Only exact whole lexical
+    # compounds qualify. Preserve the NON negation as an explicit token;
+    # a missing "non" is mathematically material and still blocking.
+    value = re.sub(r"\broad[\s-]?map\b", "roadmap", value, flags=re.I)
+    value = re.sub(r"\banti[\s-]?parallel\b", "antiparallel", value, flags=re.I)
+    value = re.sub(r"\bnon[\s-]?(?:zero|0)\b", "non zero", value, flags=re.I)
     # Reviewers must remain blind to expected speech. Do not delete malformed
     # assistant deliberation or output markup to hide a failed recognizer.
     value = value.replace("\u2212", "-")
