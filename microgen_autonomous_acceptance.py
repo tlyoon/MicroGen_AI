@@ -40,6 +40,8 @@ def _snap(stage:Path, count:int)->dict[str,str]:
     names += sorted(x.name for x in stage.glob("Figure*.png") if x.is_file())
     if (stage/"figure_composition_receipt.json").is_file():
         names.append("figure_composition_receipt.json")
+    if (stage/".microgen_lateral_vector_figure_recovery.json").is_file():
+        names.append(".microgen_lateral_vector_figure_recovery.json")
     if (stage/".microgen_autonomous_parts.json").is_file():
         names.append(".microgen_autonomous_parts.json")
         names += sorted(x.name for x in stage.glob("slides_part_*.mp4") if x.is_file())
@@ -135,6 +137,10 @@ def inspect_stage(stage:Path)->dict:
     if acoustic_receipt["independent_report"]["review_required_slides"]:
         raise AutonomousAcceptanceError("Unresolved acoustic mismatch")
     source_figures=validate_figure_receipt(stage)
+    from microgen_lateral_vector_figure_recovery import (
+        verify_lateral_figure_receipt,
+    )
+    lateral_provenance=verify_lateral_figure_receipt(stage)
     unmapped=audit_unmapped_source_crops(stage,receipt=source_figures)
     video=check_video(stage/"slides.mp4",expected_seconds=wavs["total_seconds"])
     timed_visual=_verified_timed_visual(stage,count)
@@ -181,6 +187,13 @@ def inspect_stage(stage:Path)->dict:
         "human_approval_required":False,
         "publication_allowed":False,
     }
+    # Source-vector recovery is proof of literal caption/graph provenance,
+    # not a blanket scientific or publication approval.
+    if lateral_provenance is not None:
+        evidence["lateral_source_figure_recovery_receipt_sha256"] = (
+            lateral_provenance["receipt_sha256"]
+        )
+        evidence["lateral_source_vector_figures"] = lateral_provenance["figures"]
     # Preserve the byte-for-byte legacy static acceptance shape. Old private
     # receipts remain valid, but measured-cue stages need a new, bound field.
     if timed_visual is not None:

@@ -34,6 +34,7 @@ ALLOW_FILES = {
     "figure_extraction_receipt.json",
     "figure_composition_receipt.json",
     ".microgen_source_caption_vector_recovery.json",
+    ".microgen_lateral_vector_figure_recovery.json",
     ".microgen_structural_reflow_receipt.json",
     ".microgen_autonomous_science_qa.json",
     "slides.pdf", "slides.tex", "slides.log",
@@ -106,6 +107,17 @@ def verify_import_receipt(stage: Path, *, require_cache: bool = True) -> dict | 
     if vector_sha and (vector_receipt.is_symlink() or not vector_receipt.is_file()
                        or _sha(vector_receipt) != vector_sha):
         raise UpstreamReuseError("Imported source-caption provenance drifted")
+    lateral_receipt = stage / ".microgen_lateral_vector_figure_recovery.json"
+    lateral_sha = data.get("lateral_vector_figure_recovery_receipt_sha256")
+    if bool(lateral_sha) != lateral_receipt.exists():
+        raise UpstreamReuseError("Imported lateral vector provenance missing or unexpected")
+    if lateral_sha:
+        from microgen_lateral_vector_figure_recovery import (
+            verify_lateral_figure_receipt,
+        )
+        if (lateral_receipt.is_symlink() or _sha(lateral_receipt)!=lateral_sha
+                or verify_lateral_figure_receipt(stage) is None):
+            raise UpstreamReuseError("Imported lateral vector recovery drifted")
     cached = data.get("source_bound_narration_response_cache")
     if cached is not None:
         if (expected != FOUR_STATUS or not isinstance(cached, dict)
@@ -410,6 +422,10 @@ def maybe_import_verified_upstream(
             "source_caption_vector_recovery_receipt_sha256": (
                 _sha(stage / ".microgen_source_caption_vector_recovery.json")
                 if (stage / ".microgen_source_caption_vector_recovery.json").is_file()
+                else None),
+            "lateral_vector_figure_recovery_receipt_sha256": (
+                _sha(stage / ".microgen_lateral_vector_figure_recovery.json")
+                if (stage / ".microgen_lateral_vector_figure_recovery.json").is_file()
                 else None),
             "current_code_revision": commit,
             "stages": list(selected_stages),

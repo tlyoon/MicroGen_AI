@@ -306,6 +306,12 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
         try:
             from microgen_figure_composition import validate_figure_receipt
             validate_figure_receipt(stage)
+            # Reconstruct every recovered lateral-captioned vector graph from
+            # the immutable original PDF; no unverified source crop import.
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            verify_lateral_figure_receipt(stage)
             return True
         except (OSError, ValueError, RuntimeError):
             return False

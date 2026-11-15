@@ -305,6 +305,14 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
             source_caption_provenance = validate_source_caption_vector_recovery(stage)
         except CaptionVectorRecoveryError as exc:
             raise QualityError(f"Source-caption figure provenance invalid: {exc}") from exc
+    lateral_source_provenance = None
+    if (stage/".microgen_lateral_vector_figure_recovery.json").is_file():
+        from microgen_lateral_vector_figure_recovery import (
+            verify_lateral_figure_receipt,
+        )
+        lateral_source_provenance = verify_lateral_figure_receipt(stage)
+        if lateral_source_provenance is None:
+            raise QualityError("Source vector figure receipt was not verified")
     if provenance_file.is_file():
         from microgen_figure_composition import validate_figure_receipt
         # Source-crop integrity is not equivalent to composite-panel approval.
@@ -346,6 +354,11 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
             imported["receipt_sha256"]
         )
         result["verified_upstream_import_stages"] = imported["stages"]
+    if lateral_source_provenance is not None:
+        result["lateral_vector_figure_recovery_receipt_sha256"] = (
+            lateral_source_provenance["receipt_sha256"]
+        )
+        result["lateral_vector_figures"] = lateral_source_provenance["figures"]
     if source_caption_provenance is not None:
         result["source_caption_vector_recovery_receipt_sha256"] = (
             source_caption_provenance["receipt_sha256"]
@@ -406,6 +419,17 @@ def published_manifest_valid(dest: Path) -> bool:
             if (receipt is None
                     or receipt["stages"] != data.get("verified_upstream_import_stages")):
                 return False
+        if "lateral_vector_figure_recovery_receipt_sha256" in data:
+            name = ".microgen_lateral_vector_figure_recovery.json"
+            if sha256(dest / name) != data["lateral_vector_figure_recovery_receipt_sha256"]:
+                return False
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            verified = verify_lateral_figure_receipt(dest)
+            if (verified is None
+                    or verified["figures"] != data.get("lateral_vector_figures")):
+                return False
         if "source_caption_vector_recovery_receipt_sha256" in data:
             name = ".microgen_source_caption_vector_recovery.json"
             if sha256(dest / name) != data["source_caption_vector_recovery_receipt_sha256"]:
@@ -454,6 +478,8 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         files.append(".microgen_verified_upstream_import.json")
     if info.get("source_caption_vector_recovery_receipt_sha256"):
         files.append(".microgen_source_caption_vector_recovery.json")
+    if info.get("lateral_vector_figure_recovery_receipt_sha256"):
+        files.append(".microgen_lateral_vector_figure_recovery.json")
     if info.get("figure_composition_receipt_sha256"):
         files.append("figure_composition_receipt.json")
     if info.get("figure_review_approval_sha256"):
@@ -564,6 +590,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         "figure_extraction": ("source.pdf", "crop_figs_v3.py"),
         "figure_mapping": ("source.pdf", "map_and_rename_v5.py",
                            "microgen_figure_composition.py",
+                           "microgen_mapping_cache_recovery.py",
+                           "microgen_lateral_vector_figure_recovery.py",
                            "figure_composition_receipt.json"),
         "figure_merge": ("source.pdf", "merge_lettered_figs_v2.py",
                          "figure_composition_receipt.json"),
@@ -606,6 +634,15 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                          "microgen_source_caption_vector_recovery.py"):
             if (stage / optional).is_file():
                 inputs.append(optional)
+    if name in {"slides", "science_qa", "tts", "acoustic_qa",
+                "video", "acceptance", "published", "figure_mapping", "figure_merge"}:
+        if (stage / ".microgen_lateral_vector_figure_recovery.json").is_file():
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            if verify_lateral_figure_receipt(stage) is None:
+                raise QualityError("Missing source-vector figure provenance")
+            inputs.append(".microgen_lateral_vector_figure_recovery.json")
     if name in {"slides", "science_qa", "acceptance", "published"}:
         if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
             inputs.append(".microgen_source_caption_vector_recovery.json")
