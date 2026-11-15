@@ -69,7 +69,14 @@ def reuse_verified_mapping_cache(stage: Path, *, checkpoint_root:Path|None=None,
             or current_cp.get("package_commit")!=current_grant["scope"].get("code_revision")):
         return {"responses_copied":0,"status":"UNVERIFIED_CAMPAIGN_ABSTAINED"}
     eligible=[]
-    children=sorted(root.iterdir(),key=lambda p:p.name)
+    # This OS-local checkpoint root also contains thousands of normal
+    # JSON/PNG/log evidence FILES. They are not campaigns; counting them
+    # against MAX_SCAN_DIRS silently defeated valid Gemini-cache recovery.
+    # Bound only real directories, leaving symlink and grant validation below.
+    children=sorted(
+        (p for p in root.iterdir() if p.is_dir() and not p.is_symlink()),
+        key=lambda p:p.name,
+    )
     if len(children)>MAX_SCAN_DIRS:
         return {"responses_copied":0,"status":"TOO_MANY_CAMPAIGNS_ABSTAINED"}
     for parent in children:
