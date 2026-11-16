@@ -225,6 +225,53 @@ def _pdf_text_blocks(page) -> list[tuple]:
 QUESTION_REFLECTION_ROLE = "nonassertive_reflection_on_visible_question"
 
 
+def graph_slope_reflection_source_block(
+    spoken: str, cue_no: int, total_cues: int, blocks: list[tuple],
+) -> int | None:
+    """Exact printed multi-panel graph question as a final reflection anchor.
+
+    This is not scientific interpretation: it is a nonassertive request to
+    examine the already visible graph-matching question. No invented answer,
+    assertion about a specific slope, or generic weak-keyword match qualifies.
+    """
+    from microgen_cue_semantic_mapping import numbers
+    if (not isinstance(spoken, str) or cue_no != total_cues
+            or total_cues < 2 or numbers(spoken) or "\n" in spoken
+            or not re.fullmatch(
+                r"(?:Consider|Reflect on|Think about) "
+                r"(?:what|how) (?:each|the|these) "
+                r"(?:slope|slopes|graph|graphs) "
+                r"(?:implies?|shows?|indicates?|means?|relates? to) "
+                r"(?:about )?(?:acceleration|velocity)\.",
+                spoken, flags=re.IGNORECASE)):
+        return None
+    headers = [i for i, (_, label, _) in enumerate(blocks)
+               if re.search(r"\bconcept check\s*:\s*matching graphs\b",
+                            label, re.I)]
+    questions = [i for i, (_, label, _) in enumerate(blocks)
+                 if re.search(r"\bquestion\s*:\s*match\b", label, re.I)
+                 and re.search(r"velocity.{0,170}acceleration", label,
+                               re.I | re.S)]
+    if len(headers) != 1 or len(questions) != 1 or headers[0] >= questions[0]:
+        return None
+    question = questions[0]
+    source_panels = []
+    for i, (_, label, _) in enumerate(blocks):
+        m = re.match(r"\s*Graph\s*\(([abcABC])\)\s*:", label)
+        if m:
+            source_panels.append((i, m[1].lower(), label))
+    if (len(source_panels) != 3
+            or [key for _, key, _ in source_panels] != ["a","b","c"]
+            or any(i <= question for i, _, _ in source_panels)
+            or not all(re.search(r"\b(?:slope|velocity|horizontal|line)\b",
+                                 label, re.I)
+                       for _, _, label in source_panels)
+            or sum(bool(re.search(r"\bslope\b", label, re.I))
+                   for _, _, label in source_panels) < 2):
+        return None
+    return question
+
+
 def question_reflection_source_block(
     spoken: str, cue_no: int, total_cues: int, blocks: list[tuple],
 ) -> int | None:
@@ -236,6 +283,10 @@ def question_reflection_source_block(
     and the independent PCM-plan verifier use this identical criterion.
     """
     from microgen_cue_semantic_mapping import numbers
+    graphic_anchor = graph_slope_reflection_source_block(
+        spoken, cue_no, total_cues, blocks)
+    if graphic_anchor is not None:
+        return graphic_anchor
     if (cue_no != total_cues or total_cues < 2
             or not isinstance(spoken, str)
             or not 40 <= len(spoken) <= 190
