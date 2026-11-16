@@ -70,6 +70,32 @@ def canonical_math_transcript(text: str) -> str:
         rhs = _NUMBER_NAMES.get(m[2].lower(), m[2])
         return f"{lhs} point {rhs}"
     value = decimal.sub(decimal_repl, value)
+    # Real two-Gemini ASR recurrence: the same spoken "one half" is
+    # typeset as 1/2. Recognizers receive only WAV, not the source.
+    # Restrict the equivalence to the exact one-half fraction; never
+    # silently rewrite 1/3, 2/3, 1/20, 12 or a changed magnitude.
+    value = re.sub(r"(?<![A-Za-z0-9])1\s*/\s*2(?![A-Za-z0-9])",
+                   "one half", value)
+    # Only canonical mathematical velocity subscripts, with the ORIGINAL
+    # initial/final index preserved. No generic i/f letter conversions.
+    value = re.sub(r"\bvxi\b", "vee ex eye", value, flags=re.I)
+    value = re.sub(r"\bvxf\b", "vee ex eff", value, flags=re.I)
+    value = re.sub(r"\bvex\s+(?:initial|eye|i)\b",
+                   "vee ex eye", value, flags=re.I)
+    value = re.sub(r"\bvex\s+(?:final|eff|f)\b",
+                   "vee ex eff", value, flags=re.I)
+    # A spoken index name "initial" denotes the same printed x_i;
+    # this does NOT equate initial with final or remove a subscript.
+    value = re.sub(r"\bvee\s+ex\s+initial\b",
+                   "vee ex eye", value, flags=re.I)
+    value = re.sub(r"\bvee\s+ex\s+i\b",
+                   "vee ex eye", value, flags=re.I)
+    value = re.sub(r"\bvee\s+ex\s+f\b",
+                   "vee ex eff", value, flags=re.I)
+    # A named mathematical factor "times t" / "over t" may be spelled
+    # as the letter name tee, but ordinary text "tea" remains untouched.
+    value = re.sub(r"\b(times|over)\s+t\b",
+                   lambda m: m[1] + " tee", value, flags=re.I)
     # Preserve minus as an explicit token. No mathematics operation removed.
     value = re.sub(r"(?<![A-Za-z])-\s*(?=[\d])", " minus ", value)
     value = re.sub(r"(?<=[txyav])\s*-\s*(?=\d)", " minus ",
