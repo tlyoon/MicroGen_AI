@@ -94,7 +94,7 @@ def test_normal_timed_cue_planner_rechecks_real_pdf_geometry(
     planner.prepare_slide_pages(stage)
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES","1")
     monkeypatch.setattr(planner,"_lexical_match",
-        lambda slide_no,units,blocks,allow_unanchored=False:
+        lambda slide_no,units,blocks,allow_unanchored=False,page=None:
         ([None],[(1,CUE)]))
     def source_only_model(slide_no,missing,blocks):
         assert slide_no==1 and missing==MISSING
