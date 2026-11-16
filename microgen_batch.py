@@ -234,6 +234,23 @@ def prepare_stage(
     stage = work_root / subchapter
     checkpoint_path = stage / ".microgen_checkpoint.json"
 
+    # A vanished checkpoint inside an *existing nonempty* work directory
+    # cannot be interpreted as a brand-new stage: figure/model/TTS outputs
+    # or an in-flight provider send may have survived the lost metadata.
+    # This check happens before copying code, accepting receipts or
+    # launching another billable operation. An empty directory is the only
+    # safe previously created directory that can initialize normally.
+    if stage.is_symlink() or (stage.exists() and not stage.is_dir()):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe preexisting stage directory"
+        )
+    if (stage.is_dir() and not checkpoint_path.exists()
+            and not checkpoint_path.is_symlink()
+            and any(stage.iterdir())):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: prior stage artifacts exist but "
+            "its execution checkpoint is missing; no implicit paid replay"
+        )
     if stage.exists():
         cp = load_checkpoint(checkpoint_path)
         old_sig = cp.get("source_signature")

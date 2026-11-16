@@ -155,3 +155,61 @@ def test_existing_corrupted_workdir_is_blocked_before_stage_copy_or_paid_call(
     assert calls==[]
     assert not (stage/"source.pdf").exists()
     assert cp.read_bytes()==b'{"completed":{"tts":'
+
+
+@pytest.mark.parametrize("surviving_artifact",[
+    "script_tts.json", "slides.pdf", "slide1.wav",
+    ".microgen_tts_provenance.json", "source.pdf",
+])
+def test_existing_nonempty_stage_without_checkpoint_blocks_implicit_replay(
+        tmp_path,monkeypatch,surviving_artifact):
+    src=tmp_path/"sources"
+    (src/"2"/"2.7").mkdir(parents=True)
+    (src/"2"/"2.7"/"source.pdf").write_bytes(b"source_fixture")
+    work=tmp_path/"runs"
+    stage=work/"2.7"
+    stage.mkdir(parents=True)
+    survivor=stage/surviving_artifact
+    survivor.write_bytes(b"protected_surviving_output")
+    called=[]
+    monkeypatch.setattr(batch,"copy_repo_into_stage",
+                        lambda *args:called.append("copy"))
+    with pytest.raises(batch.CheckpointIntegrityError,match="checkpoint is missing"):
+        batch.prepare_stage(tmp_path,src,work,"2.7",0,"f"*40)
+    assert called==[]
+    assert survivor.read_bytes()==b"protected_surviving_output"
+    assert not (stage/".microgen_checkpoint.json").exists()
+
+
+def test_preexisting_empty_directory_can_initialize_unpaid_stage(tmp_path,monkeypatch):
+    src=tmp_path/"sources"
+    (src/"2"/"2.7").mkdir(parents=True)
+    (src/"2"/"2.7"/"source.pdf").write_bytes(b"source_fixture")
+    work=tmp_path/"runs"
+    stage=work/"2.7"
+    stage.mkdir(parents=True)
+    called=[]
+    monkeypatch.setattr(batch,"copy_repo_into_stage",
+                        lambda *args:called.append("source-code"))
+    returned,cp,path=batch.prepare_stage(
+        tmp_path,src,work,"2.7",0,"f"*40)
+    assert returned==stage
+    assert cp["completed"]=={}
+    assert called==["source-code"]
+    assert batch.load_checkpoint(path)["package_commit"]=="f"*40
+    assert (stage/"source.pdf").read_bytes()==b"source_fixture"
+
+
+def test_actual_empty_new_directory_starts_normally(tmp_path,monkeypatch):
+    src=tmp_path/"sources"
+    (src/"2"/"2.7").mkdir(parents=True)
+    (src/"2"/"2.7"/"source.pdf").write_bytes(b"source_fixture")
+    work=tmp_path/"runs"
+    monkeypatch.setattr(batch,"copy_repo_into_stage",
+                        lambda *args:None)
+    stage,cp,path=batch.prepare_stage(
+        tmp_path,src,work,"2.7",0,"e"*40)
+    assert path.exists()
+    assert stage.exists()
+    assert "inflight_provider_stage" not in cp
+    assert cp["completed"]=={}
