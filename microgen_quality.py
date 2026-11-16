@@ -646,6 +646,14 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                       "script_tts.json", "slides.mp4"),
     }
     inputs = list(dependencies.get(name, ("source.pdf",)))
+    # The V6 recovery policy and classifier are executable dependencies
+    # of every model/scientific stage it can classify. When their source
+    # changes, old QA fingerprints must not quietly retain acceptance.
+    if name in {"science_qa", "tts", "acoustic_qa", "video", "acceptance"}:
+        for policy in ("microgen_recovery_registry.py",
+                       "microgen_recovery_registry_v6.json"):
+            if (stage / policy).is_file():
+                inputs.append(policy)
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
         # A changed auto-recovery path must invalidate old slide-stage

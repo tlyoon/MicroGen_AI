@@ -1,0 +1,95 @@
+{
+  "schema_version": 6,
+  "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
+  "entries": [
+    {
+      "id": "MGA-20261116-ACOUSTIC-ASR",
+      "classification": "scientific_qa",
+      "stages": [
+        "acoustic_qa"
+      ],
+      "exception": "AutonomousAcousticError",
+      "message_marker": "ASR_DISAGREEMENT_HOLD",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_autonomous_acoustic_gate.audit_stage",
+      "preconditions": "Unresolved independent blind-Gemini acoustic discrepancy; no unchanged TTS/ASR replay",
+      "verification": "Independent source/WAV SHA and two-Gemini report; third witness only with fresh finite authorization",
+      "historical_evidence": "20261116_HP_G3_SERWAY27_SOURCE_0F8B_PRIVATE/2.7",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-CUE-PLANNING",
+      "classification": "scientific_qa",
+      "stages": [
+        "science_qa",
+        "tts"
+      ],
+      "exception": "CuePlanningError",
+      "message_marker": "",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_timed_cue_planner.preflight",
+      "preconditions": "Actual source-PDF math/semantic cue grounding fails; check relevant source/code change before trying again",
+      "verification": "PDF-grounded cue-plan and independent PCM/TTS proof",
+      "historical_evidence": "Serway 2.7 timed cue preflight in G3",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-SEMANTIC-MAPPING",
+      "classification": "scientific_qa",
+      "stages": [
+        "science_qa",
+        "tts"
+      ],
+      "exception": "SemanticMappingError",
+      "message_marker": "",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_cue_semantic_mapping",
+      "preconditions": "Model proposal absent or ungrounded; no automatic approval of empty output",
+      "verification": "Independent text/bbox/numeric checks",
+      "historical_evidence": "Serway 2.7 empty Gemini proposal during G3",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-MATH-VOICE-PREFLIGHT",
+      "classification": "scientific_qa",
+      "stages": [
+        "science_qa",
+        "tts"
+      ],
+      "exception": "PronunciationPreflightError",
+      "message_marker": "",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_reviewed_math_voice.preflight_voice_sidecar",
+      "preconditions": "Ambiguous spoken math; preserve original narration and auditable policy",
+      "verification": "Source-bound voice-sidecar preflight",
+      "historical_evidence": "G2/G3 math voice preflight",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-PDF-HIGHLIGHT-CONTRACT",
+      "classification": "scientific_qa",
+      "stages": [
+        "video",
+        "acceptance"
+      ],
+      "exception": "HighlightContractError",
+      "message_marker": "",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_timed_highlight_contract",
+      "preconditions": "PDF region/timed PCM evidence drift; no fabricated cue",
+      "verification": "Recompute exact source+bbox+PCM+video binding",
+      "historical_evidence": "G2/G3 timed highlight contract",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    }
+  ]
+}

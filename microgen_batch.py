@@ -715,6 +715,7 @@ def run_subprocess(
     gemini_stage: bool,
     retries: int,
     lease=None,
+    stage_name: str | None = None,
 ) -> None:
     attempt = 0
     while True:
@@ -742,6 +743,34 @@ def run_subprocess(
             log.write(f"\n[{label}] exit={returncode}\n")
         if returncode == 0:
             return
+        # Diagnose science/QA holds before treating a coincident provider
+        # circuit outage as permission to repeat the whole failed stage.
+        # V6: consult version-controlled historical failure signatures in
+        # the normal executable runner. Only actual traceback exceptions
+        # qualify. An unresolved science/acoustic defect is a durable hold,
+        # never a fresh paid retry or an implicit QA acceptance.
+        if (stage_name and
+                (stage / "microgen_recovery_registry_v6.json").is_file()):
+            from microgen_recovery_registry import (
+                classify_log_attempt, persist_stage_decision,
+            )
+            with log_path.open("rb") as evidence:
+                evidence.seek(attempt_offset)
+                current_attempt = evidence.read(1024 * 1024)
+            decision = classify_log_attempt(
+                stage_name, current_attempt, registry_folder=stage,
+            )
+            if decision is not None:
+                persist_stage_decision(
+                    stage, decision, attempt_number=attempt + 1,
+                )
+                if decision["disposition"] == "DETERMINISTIC_HOLD":
+                    raise RuntimeError(
+                        f"{label} failed with non-retryable "
+                        f"{decision['exception']} after {attempt + 1} "
+                        f"attempt(s); recovery_id={decision['failure_id']}; "
+                        "source-bound scientific/QA evidence still required"
+                    )
 
         # If the request tripped the shared circuit, this is an external pause,
         # not a stage failure and must not consume the retry count.
@@ -1128,6 +1157,18 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                       flush=True)
                 continue
 
+        # V6: reconcile the source-bound known-failure receipt BEFORE
+        # attempting the next provider stage. A crash may have occurred
+        # immediately after the registry receipt was atomically written but
+        # before the outer checkpoint recorded last_error.
+        if (stage / ".microgen_recovery_v6.json").exists():
+            from microgen_recovery_registry import verified_stage_hold
+            if verified_stage_hold(stage, stage_name):
+                raise RuntimeError(
+                    f"{stage_name} has an immutable registry-confirmed "
+                    "DETERMINISTIC_HOLD; cannot silently replay an unchanged "
+                    "scientific/QA failure after process restart"
+                )
         if unchanged_failure_hold(cp, stage_name, stage):
             raise RuntimeError(
                 f"{stage_name} has a verified unchanged deterministic-failure "
@@ -1207,6 +1248,7 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                                   (offline_mapping and stage_name == "figure_mapping")),
                     retries=args.stage_retries,
                     lease=lease,
+                    stage_name=stage_name,
                 )
                 if lease is not None:
                     lease.assert_held()
@@ -1234,6 +1276,24 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 "message": str(exc),
                 "utc": utc_now(),
             }
+            # Copy only structured, source-bound registry metadata to
+            # the checkpoint. Never copy raw Gemini transcripts or log text
+            # into generic recovery history.
+            registry_receipt = stage / ".microgen_recovery_v6.json"
+            if registry_receipt.is_file():
+                try:
+                    from microgen_recovery_registry import verified_stage_hold
+                    if verified_stage_hold(stage, stage_name):
+                        saved = json.loads(
+                            registry_receipt.read_text(encoding="utf-8"))
+                        failure["recovery_id"] = saved["decision"]["failure_id"]
+                        failure["recovery_disposition"] = "DETERMINISTIC_HOLD"
+                        failure["recovery_registry_sha256"] = (
+                            saved["decision"]["registry_sha256"])
+                        failure["next_eligible_operation"] = (
+                            saved["next_eligible_operation"])
+                except (OSError, ValueError, KeyError, RuntimeError):
+                    failure["recovery_disposition"] = "RECOVERY_EVIDENCE_HOLD"
             # Only fingerprint independently identified deterministic QA
             # rejections. An external outage is not a permanent source hold.
             if "failed with non-retryable " in str(exc):
