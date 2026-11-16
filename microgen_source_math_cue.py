@@ -121,7 +121,8 @@ def exact_source_math_span(spoken: str, blocks: list[tuple], page) -> tuple[int,
     if len(signatures) < 3 or not re.search(
             r"\b(?:equals?|equation|fraction|divided|plus|minus)\b",
             spoken, re.I):
-        return None
+        from microgen_worked_equation_recovery import unique_printed_worked_math_span
+        return unique_printed_worked_math_span(spoken, blocks, page)
     claim_nums = numbers(spoken)
     results = []
     for start in range(len(blocks)):
@@ -162,7 +163,12 @@ def exact_source_math_span(spoken: str, blocks: list[tuple], page) -> tuple[int,
                     continue
                 results.append((stop-start, start, stop))
     if not results:
-        return None
+        # Literal worked-example statements can be source-attested even
+        # without three named symbolic variables (e.g. the isolated signed
+        # result). This second path remains uniquely PDF-anchored, requiring
+        # exact printed values/signs/units and real adjacent geometry.
+        from microgen_worked_equation_recovery import unique_printed_worked_math_span
+        return unique_printed_worked_math_span(spoken, blocks, page)
     minimal = min(r[0] for r in results)
     winners = {(start, stop) for count,start,stop in results if count == minimal}
     return tuple(range(*next(iter(winners)))) if len(winners)==1 else None
@@ -209,17 +215,37 @@ def build_exact_source_math_cue(
 
 
 def source_math_quote_valid(label: str) -> bool:
-    """Exception only for genuine, two-variable, printed compact equations.
+    """Permit only source-exact short algebra factors and radical glyphs.
 
-    Such as xf=xi+1: normalized length 5 but physically distinct from a
-    meaningless fragment. Only legal alongside re-derived math provenance.
+    The plan/PCM independent verifier REQUIRES additional exact-source
+    mathematical provenance before these are accepted as quote exceptions.
     """
     from microgen_cue_semantic_mapping import compact
-    return (isinstance(label, str) and 8 <= len(label) <= 350
-            and ((len(compact(label[:200])) >= 8)
-                 or (5 <= len(compact(label[:200])) < 8
-                     and "=" in label
-                     and len(math_signature(label, spoken=False)) >= 2)))
+    if not isinstance(label, str):
+        return False
+    if label.strip() == "\u221a":
+        return True
+    if re.fullmatch(r"2\s*a\s*x\s*t(?:2|\u00b2)", label.strip(), re.I):
+        return True
+    # Compact numeric equations are trusted only under independently
+    # reconstructed exact source-math provenance (e.g. a printed radical
+    # across three short PDF text blocks). This does not grant a free pass
+    # to arbitrary short numeric references or non-equations.
+    compact_label = " ".join(label.split())
+    if re.fullmatch(
+            r"\d+(?:\.\d+)?\s*=\s*\d+(?:\.\d+)?\s*\+", compact_label):
+        return True
+    if re.fullmatch(
+            r"\d+(?:\.\d+)?\s*=\s*\d+(?:\.\d+)?\s*s", compact_label):
+        return True
+    return (8 <= len(label) <= 350 and
+            (len(compact(label[:200])) >= 8
+             or (5 <= len(compact(label[:200])) < 8
+                 and "=" in label
+                 and len(math_signature(label, spoken=False)) >= 2)
+             or (re.search(r"(?<![A-Za-z])t\s*\n?\s*=\s*0\s*[-\u2212]",label)
+                 is not None and re.search(r"\d+\s*m\s*/\s*s",label)
+                 is not None)))
 
 
 def verified_source_math_row(

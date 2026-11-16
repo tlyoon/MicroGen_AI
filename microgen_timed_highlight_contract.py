@@ -238,9 +238,16 @@ def inspect_timed_highlights(stage: Path) -> dict:
                                     any(type(v) not in (int,float) or
                                         not math.isfinite(v) for v in region) or
                                     not isinstance(item_text,str) or
-                                    not 8 <= len(item_text) <= 350 or
+                                    not (8 <= len(item_text) <= 350 or
+                                        (cue.get("source_math_evidence") ==
+                                         "EXACT_SOURCE_MATH_V1" and
+                                         source_math_quote_valid(item_text))) or
                                     not isinstance(quote,str) or
-                                    not 8 <= len(quote) <= 200):
+                                    not (8 <= len(quote) <= 200 or
+                                        (cue.get("source_math_evidence") ==
+                                         "EXACT_SOURCE_MATH_V1" and
+                                         source_math_quote_valid(item_text) and
+                                         quote == item_text[:200]))):
                                 raise HighlightContractError("Malformed grouped PDF element")
                             part=fitz.Rect(region)
                             if (part.is_empty or part.is_infinite or

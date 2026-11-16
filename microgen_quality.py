@@ -703,7 +703,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                           "microgen_timed_cue_tts.py",
                           "microgen_timed_cue_planner.py",
                           "microgen_cue_semantic_mapping.py",
-                          "microgen_source_math_cue.py"):
+                          "microgen_source_math_cue.py",
+                          "microgen_worked_equation_recovery.py"):
             if (stage/candidate).is_file():
                 inputs.append(candidate)
         if (stage/PLAN_FILE).exists():
@@ -717,6 +718,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
             # The final PCM/video math-region auditor uses this same
             # source-PDF rule. Code changes invalidate old media receipts.
             inputs.append("microgen_source_math_cue.py")
+        if (stage/"microgen_worked_equation_recovery.py").is_file():
+            inputs.append("microgen_worked_equation_recovery.py")
     if name in {"tts","acoustic_qa","video","acceptance"}:
         if (stage/".microgen_verified_audio_reuse.json").is_file():
             from microgen_verified_tts_reuse import verify_reuse_receipt

@@ -185,9 +185,16 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                                 if (not isinstance(region,list) or len(region)!=4
                                         or any(type(v) not in (int,float) for v in region)
                                         or not isinstance(item_text,str)
-                                        or not 8 <= len(item_text) <= 350
+                                        or not (8 <= len(item_text) <= 350
+                                            or (cue.get("source_math_evidence") ==
+                                                "EXACT_SOURCE_MATH_V1" and
+                                                source_math_quote_valid(item_text)))
                                         or not isinstance(quote,str)
-                                        or not 8 <= len(quote) <= 200):
+                                        or not (8 <= len(quote) <= 200
+                                            or (cue.get("source_math_evidence") ==
+                                                "EXACT_SOURCE_MATH_V1" and
+                                                source_math_quote_valid(item_text) and
+                                                quote == item_text[:200]))):
                                     raise CueTTSError("Malformed source element group")
                                 try:
                                     region_box=fitz.Rect(region)
@@ -254,6 +261,8 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                         or claimed.get("source_pdf_sha256") != _sha(pdf)
                         or claimed.get("math_policy_sha256") !=
                         _sha(stage / "microgen_source_math_cue.py")
+                        or claimed.get("worked_math_policy_sha256") !=
+                        _sha(stage / "microgen_worked_equation_recovery.py")
                         or type(claimed.get("semantic_budget_limit")) is not int
                         or not 1 <= claimed["semantic_budget_limit"] <= 40
                         or type(claimed.get("semantic_assistance_remaining")) is not int

@@ -205,12 +205,19 @@ def _pdf_text_blocks(page) -> list[tuple]:
             and (len(numbers(label)) >= 2
                  or len(math_signature(label, spoken=False)) >= 2)
         )
+        # The fragment '2axt2' can be the exact second source block
+        # containing the denominator of an already printed 1/2 a_x t^2
+        # equation; keep the text, without inferring a missing expression.
+        compact_quadratic_factor = re.fullmatch(
+            r"2\s*a\s*x\s*t(?:2|²)", label, re.IGNORECASE) is not None
         math_text = (
-            (len(normalized(label)) >= 8 or compact_equation)
-            and bool(re.search(r"[=+−×÷∆Δ∂∫√≤≥<>]", label))
-            and bool(re.search(r"\d|[A-Za-zα-ωΑ-Ω]", label))
+            ((len(normalized(label)) >= 8 or compact_equation)
+             and bool(re.search(r"[=+−×÷∆Δ∂∫√≤≥<>]", label))
+             and bool(re.search(r"\d|[A-Za-zα-ωΑ-Ω]", label)))
+            or compact_quadratic_factor
+            or label == "√"
         )
-        if (len(label) < 3 or (not terms and not math_text)
+        if ((len(label) < 3 and label != "√") or (not terms and not math_text)
                 or re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", label)):
             continue
         box = list(map(float, block[:4]))
@@ -700,6 +707,8 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                         if cue.get("source_math_evidence") == "EXACT_SOURCE_MATH_V1"],
             "source_pdf_sha256": sha(pdf),
             "math_policy_sha256": sha(stage / "microgen_source_math_cue.py"),
+            "worked_math_policy_sha256": sha(
+                stage / "microgen_worked_equation_recovery.py"),
             "semantic_budget_limit": semantic_limit,
             "semantic_assistance_remaining": semantic_slides,
             "additional_provider_requests_for_math_recovery": 0,
