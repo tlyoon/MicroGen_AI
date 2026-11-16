@@ -132,24 +132,76 @@ def source_signature(path: Path) -> dict[str, int]:
     return {"size": int(st.st_size), "mtime_ns": int(st.st_mtime_ns)}
 
 
+class CheckpointIntegrityError(RuntimeError):
+    """An uncertain checkpoint must not silently authorize fresh paid work."""
+
+
 def load_checkpoint(path: Path) -> dict:
-    if not path.is_file():
+    """Read saved progress without mistaking corruption for a fresh run.
+
+    A newly absent checkpoint is fine ONLY when no interrupted atomic write
+    exists. Existing invalid JSON, unexpected types, symlinks, or an
+    interrupted .tmp save must block until evidence is reconciled.
+    """
+    path = Path(path)
+    tmp = path.with_suffix(".tmp")
+    if path.is_symlink() or tmp.exists() or tmp.is_symlink():
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe link or uncommitted atomic write"
+        )
+    if not path.exists():
         return {"completed": {}}
+    if not path.is_file():
+        raise CheckpointIntegrityError("AMBIGUOUS_CHECKPOINT_HOLD: not a file")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return {"completed": {}}
-        data.setdefault("completed", {})
-        return data
-    except (OSError, json.JSONDecodeError):
-        return {"completed": {}}
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unreadable or malformed checkpoint"
+        ) from exc
+    if (not isinstance(data, dict)
+            or not isinstance(data.get("completed", {}), dict)
+            or any(not isinstance(k, str) or not isinstance(v, str)
+                   for k, v in data.get("completed", {}).items())
+            or not isinstance(data.get("dependency_fingerprints", {}), dict)
+            or (data.get("last_error") is not None
+                and not isinstance(data["last_error"], dict))
+            or (data.get("inflight_provider_stage") is not None
+                and not isinstance(data["inflight_provider_stage"], dict))):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: invalid checkpoint schema"
+        )
+    data.setdefault("completed", {})
+    return data
 
 
 def save_checkpoint(path: Path, data: dict) -> None:
+    """Crash-safe checkpoint publication, refusing an uncertain prior save.
+
+    The owning subchapter worker already holds the kernel lock. Opening the
+    fixed temp with x mode prevents silently overwriting another/incomplete
+    transaction; readers fail closed while any such temp exists.
+    """
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    if (path.is_symlink() or tmp.exists() or tmp.is_symlink()
+            or (path.exists() and not path.is_file())):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe or unfinished prior checkpoint"
+        )
+    if not isinstance(data, dict) or not isinstance(data.get("completed", {}), dict):
+        raise CheckpointIntegrityError("Cannot persist malformed checkpoint")
+    try:
+        with tmp.open("x", encoding="utf-8") as out:
+            json.dump(data, out, indent=2)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+    except FileExistsError as exc:
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: concurrent checkpoint writer"
+        ) from exc
 
 
 def copy_repo_into_stage(repo: Path, stage: Path) -> None:

@@ -90,6 +90,23 @@
       "last_validated": "2026-11-16",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-CHECKPOINT-CORRUPTION",
+      "classification": "orchestration",
+      "stages": [
+        "checkpoint"
+      ],
+      "exception": "CheckpointIntegrityError",
+      "message_marker": "AMBIGUOUS_CHECKPOINT_HOLD",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_batch.load_checkpoint",
+      "preconditions": "Existing invalid, unreadable, symlinked, or interrupted atomic checkpoint; never reset completed paid stage state",
+      "verification": "Independently restore exact valid checkpoint and reconcile provider in-flight status before a new bounded campaign",
+      "historical_evidence": "November 16 HP source-bound G3 checkpoint corruption shadow test; original unchanged",
+      "last_validated": "2026-11-16",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }

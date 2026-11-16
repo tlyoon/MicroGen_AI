@@ -243,3 +243,23 @@ def test_known_scientific_hold_wins_over_simultaneous_gemini_circuit(
     # second sleep/retry after an independently grounded QA hold.
     assert calls==["before_first_submission"]
     assert (root/DECISION_NAME).is_file()
+
+
+def test_newly_discovered_checkpoint_corruption_is_registered_for_future_reuse(
+        tmp_path):
+    root=stage(tmp_path)
+    traceback=(
+        "Traceback (most recent call last):\n"
+        '  File "microgen_batch.py", line 180, in load_checkpoint\n'
+        "CheckpointIntegrityError: AMBIGUOUS_CHECKPOINT_HOLD: malformed saved state\n"
+    )
+    rule=classify_log_attempt("checkpoint",traceback.encode("utf8"),
+                              registry_folder=root)
+    assert rule is not None
+    assert rule["failure_id"]=="MGA-CHECKPOINT-CORRUPTION"
+    assert rule["category"]=="orchestration"
+    assert rule["handler"]=="microgen_batch.load_checkpoint"
+    assert rule["disposition"]=="DETERMINISTIC_HOLD"
+    assert rule["max_unmodified_retries"]==0
+    assert classify_log_attempt("acoustic_qa",traceback.encode("utf8"),
+                                registry_folder=root) is None

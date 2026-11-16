@@ -26,3 +26,18 @@ The genuine private Serway 2.7 campaign `20261116_HP_G3_SERWAY27_SOURCE_0F8B_PRI
 ## Recovery policy
 
 New failure classes must first be captured in the persistent checkpoint, classified and verified, then added as **version-controlled registry entries and executable handlers with regression tests**. Update or retire outdated entries and validate environmental applicability before reuse. This is finite, safety-preserving learning, not permission for an LLM to modify paid workloads or scientific standards unreviewed.
+
+
+## Follow-on v6 milestone: corrupted-checkpoint fail-closed recovery
+
+**Newly discovered failure class:** The pre-existing `microgen_batch.load_checkpoint` silently returned `{"completed":{}}` for malformed JSON, non-dictionary contents and unreadable saved progress. This could accidentally replay previously completed / externally billed work after a damaged or partially written file, bypassing the existing finite provider-stage checkpoint.
+
+**Normal production code correction:** `load_checkpoint` now distinguishes a genuinely new absent checkpoint from a damaged *existing* checkpoint. The latter produces `CheckpointIntegrityError: AMBIGUOUS_CHECKPOINT_HOLD`, including malformed content, malformed stage maps, unexpected types, symlinks and a surviving `.tmp` from an interrupted save. It does not delete or reset evidence. The existing `prepare_stage` calls `load_checkpoint` **before copying stage code, preparing source assets or launching any model**, so the hold is automatic and early.
+
+`save_checkpoint` retains local atomic replace semantics but now creates its temp exclusively with `open("x")`, flushes and `fsync`s the JSON before replacement, and refuses to overwrite a pre-existing ambiguous temp. This does **not** certify ambiguous remote filesystem durability or magically reconcile a provider operation whose final status is unknown. An operator or separately authorized recovery must verify/restore a known-good source-bound checkpoint before the runner advances.
+
+The newly learned failure is registered as `MGA-CHECKPOINT-CORRUPTION` in `microgen_recovery_registry_v6.json`; its existing executable remedy is `microgen_batch.load_checkpoint` (fail closed), classification `orchestration`, maximum unchanged retries zero. The production pathway needs no ChatGPT conversation history.
+
+**Actual HP stress test:** Created an **isolated shadow** of the real November 16 Serway section 2.7 batch checkpoint. A fresh Python process loaded all seven accepted stages (through TTS), deliberately corrupted only the shadow JSON, and was held by the normal loader before any paid call. Exact original saved bytes were restored in the shadow and the seven accepted stages became readable again. Original Serway source, TTS, reviewer WAVs and campaign were not modified. Adversarial tests exercise malformed JSON/types, interrupted atomic write with/without committed checkpoint, restart without resetting paid progress, same-stage repeated updates, forged state, symlink or checkpoint-directory errors, and actual `prepare_stage` refusing to start a previously corrupted work directory. This evidence demonstrates **safe failure and recovery from independently restored state**, not autonomous repair of arbitrary corrupted data.
+
+**Scope:** A damaged paid-provider checkpoint is a terminal evidence/authorization dependency, never a temporary network issue. Passing this recovery milestone does not change the existing nine flagged genuine G3 acoustic findings or certify the required independent acoustic/video/second-subsection gates.
