@@ -11,6 +11,7 @@ from pathlib import Path
 from microgen_tts_acoustic_qa import (
     mismatch_details, verified_minor_asr_variation,
     verified_numeric_fragment_tiebreak,
+    verified_isolated_decimal_asr_witness,
 )
 
 def sha(text:str) -> str:
@@ -108,7 +109,9 @@ def verify_acoustic_evidence(report:dict|None, stage:Path, spoken:list[str],
                                 and set(witness)=={
                                     "status","model","transcript","audio_sha256",
                                     "expected_spoken_sha256","publication_allowed"}
-                                and witness["status"]=="SOURCE_BOUND_MATH_SPLIT_WITNESS"
+                                and witness["status"] in (
+                                    "SOURCE_BOUND_MATH_SPLIT_WITNESS",
+                                    "SOURCE_BOUND_ISOLATED_DECIMAL_WITNESS")
                                 and isinstance(witness["model"],str)
                                 and witness["model"].strip()
                                 and witness["model"] not in models
@@ -118,7 +121,11 @@ def verify_acoustic_evidence(report:dict|None, stage:Path, spoken:list[str],
                                 and witness["expected_spoken_sha256"]==sha(input_text)
                                 and witness["publication_allowed"] is False
                                 and not row.get("source_pronunciation_risks")):
-                            witness_ok=verified_numeric_fragment_tiebreak(
+                            checker=(verified_numeric_fragment_tiebreak
+                                     if witness["status"]==
+                                     "SOURCE_BOUND_MATH_SPLIT_WITNESS" else
+                                     verified_isolated_decimal_asr_witness)
+                            witness_ok=checker(
                                 input_text,transcripts[0],transcripts[1],
                                 witness["transcript"])
                         if not witness_ok:

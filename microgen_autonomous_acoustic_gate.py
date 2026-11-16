@@ -242,6 +242,87 @@ def _recover_unavailable_reviewers(
     }
 
 
+def _authorized_finite_math_witness(stage:Path)->bool:
+    """Only an actively version-pinned HP private campaign can bill one ASR.
+
+    An exhausted prior run or manually-invoked CLI on an arbitrary folder
+    cannot obtain permission from this method. An injection-test provider
+    is not a paid request and is verified by the caller's mocked tests.
+    """
+    try:
+        import socket
+        stage=Path(stage).resolve()
+        root=Path(os.environ.get("LOCALAPPDATA","/missing"))/"MicroGen_AI_Checkpoints"
+        if (os.name!="nt" or socket.gethostname().casefold()!="hp"
+                or stage.parent.parent!=root or not stage.is_dir()
+                or stage.is_symlink() or stage.parent.is_symlink()
+                or (stage/"source.pdf").is_symlink()
+                or any(stage.glob(".microgen_acoustic_blocked_*.json"))
+                or (stage/RECEIPT).exists()):
+            return False
+        grant=json.loads((stage.parent/
+            ".microgen_bounded_provider_authorization.json").read_text(
+                encoding="utf8"))
+        checkpoint=json.loads((stage/".microgen_checkpoint.json").read_text(
+                encoding="utf8"))
+        scope=grant.get("scope",{})
+        if (grant.get("schema_version")!=1
+                or grant.get("status")!=
+                "BOUNDED_PRIVATE_PROVIDER_SCOPE_AUTHORIZED"
+                or grant.get("publication_authorized") is not False
+                or not isinstance(scope,dict)
+                or scope.get("host")!="hp"
+                or scope.get("stop_after")!="acceptance"
+                or scope.get("code_revision")!=checkpoint.get("package_commit")
+                or not checkpoint.get("completed",{}).get("tts")
+                or checkpoint.get("completed",{}).get("acoustic_qa")
+                or scope.get("work_root")!=str(stage.parent)
+                or scope.get("source_sha256")!=digest_file(stage/"source.pdf")):
+            return False
+        return True
+    except (OSError,ValueError,KeyError,TypeError,AttributeError):
+        return False
+
+
+def _reserve_finite_math_witness(stage:Path, candidates:list[int],
+                                 model:str, snapshot:dict)->bool:
+    """One restart-safe, atomic paid-call intent. Never replay unknown calls.
+
+    The reservation is created BEFORE requesting the third Gemini reviewer.
+    If the process or provider fails ambiguously, the same campaign cannot
+    reissue that model request, even from a new ChatGPT conversation.
+    Content and private ASR are not written into this bounded receipt.
+    """
+    if (not isinstance(stage,Path) or not isinstance(candidates,list)
+            or not 1<=len(candidates)<=MAX_MATH_TIEBREAK_SLIDES
+            or any(type(n) is not int or n<1 for n in candidates)
+            or len(set(candidates))!=len(candidates)
+            or not isinstance(model,str) or not model.startswith("gemini-")
+            or not isinstance(snapshot,dict)
+            or not snapshot or any(not isinstance(v,str) or len(v)!=64
+                    for v in snapshot.values())):
+        return False
+    path=stage/".microgen_independent_math_witness_attempt.json"
+    if path.exists() or path.is_symlink():
+        return False
+    decision={
+        "schema_version":1,
+        "status":"RESERVED_PAID_THIRD_REVIEWER_NO_IMPLICIT_RETRY",
+        "candidate_slides":candidates,
+        "chosen_model":model,
+        "source_snapshot_sha256":hashlib.sha256(
+            json.dumps(snapshot,sort_keys=True).encode("utf8")).hexdigest(),
+        "max_paid_third_asr_calls":len(candidates),
+        "publication_allowed":False,
+    }
+    try:
+        with path.open("x",encoding="utf8") as file:
+            file.write(json.dumps(decision,sort_keys=True,indent=2))
+        return True
+    except (OSError,FileExistsError):
+        return False
+
+
 MAX_MATH_TIEBREAK_SLIDES=2
 # Exactly one third-model identity is chosen per audit, and never to look
 # for a reviewer that agrees with the target. A mismatch still fails closed.
@@ -261,31 +342,54 @@ def _bounded_independent_math_tiebreak(
     The original two transcripts are preserved for receipt re-verification.
     """
     from microgen_tts_acoustic_qa import (
-        verified_numeric_fragment_tiebreak,_input_snapshot,
+        verified_numeric_fragment_tiebreak, verified_isolated_decimal_asr_witness,
+        _input_snapshot,
     )
     original_snapshot=_input_snapshot(stage,len(texts))
     candidates=[]
+    kinds={}
     for row in report.get("slides",[]):
         if (row.get("assessment")!="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
                 or row.get("source_pronunciation_risks")):
             continue
         n=row.get("slide")
         trans=row.get("transcripts")
-        if (type(n) is int and 1<=n<=len(texts)
+        if not (type(n) is int and 1<=n<=len(texts)
                 and isinstance(trans,list) and len(trans)==2
-                and all(isinstance(s,str) and s for s in trans)
-                # This is only a structural candidate. Using expected as
-                # an in-memory hypothetical witness does NOT approve audio.
-                and verified_numeric_fragment_tiebreak(
-                    texts[n-1],trans[0],trans[1],texts[n-1])):
+                and all(isinstance(t,str) and t for t in trans)):
+            continue
+        # A hypothetical source-correct third string is ONLY an offline
+        # structural eligibility screen. It NEVER proves an acoustic pass.
+        if verified_numeric_fragment_tiebreak(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="math_fragment"
+        elif verified_isolated_decimal_asr_witness(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="isolated_decimal"
+        if n in kinds:
             candidates.append(n)
     if not candidates or len(candidates)>MAX_MATH_TIEBREAK_SLIDES:
+        return report
+    if provider_factory is _providers and not _authorized_finite_math_witness(stage):
+        report["independent_math_tiebreak"]={
+            "status":"PAID_WITNESS_SCOPE_UNAUTHORIZED",
+            "attempted_slides":[],"resolved_slides":[],
+            "eligible_slides":candidates,"publication_allowed":False,
+        }
         return report
     alternatives=[m for m in MATH_TIEBREAK_MODELS if m not in models]
     if not alternatives:
         return report
     witness_model=alternatives[0]
     actual=(models[0],witness_model)
+    if provider_factory is _providers and not _reserve_finite_math_witness(
+            Path(stage),candidates,witness_model,original_snapshot):
+        report["independent_math_tiebreak"]={
+            "status":"PAID_WITNESS_ALREADY_RESERVED_OR_INVALID",
+            "attempted_slides":[],"resolved_slides":[],
+            "eligible_slides":candidates,"publication_allowed":False,
+        }
+        return report
     attempts=[]
     resolved=[]
     # Models are dynamically selected only by distinctness and fixed
@@ -313,15 +417,21 @@ def _bounded_independent_math_tiebreak(
                 raise AutonomousAcousticError("Audio/source changed during third ASR review")
             row=report["slides"][n-1]
             original=row["transcripts"]
-            ok=verified_numeric_fragment_tiebreak(
-                texts[n-1],original[0],original[1],third)
-            attempts.append({"slide":n,
+            if kinds[n]=="math_fragment":
+                ok=verified_numeric_fragment_tiebreak(
+                    texts[n-1],original[0],original[1],third)
+            else:
+                ok=verified_isolated_decimal_asr_witness(
+                    texts[n-1],original[0],original[1],third)
+            attempts.append({"slide":n,"kind":kinds[n],
                              "status":("SOURCE_BOUND_WITNESS_CORROBORATED" if ok
                                        else "WITNESS_DISAGREES_OR_INVALID")})
             if not ok:
                 continue
             row["third_independent_review"]={
-                "status":"SOURCE_BOUND_MATH_SPLIT_WITNESS",
+                "status":("SOURCE_BOUND_MATH_SPLIT_WITNESS"
+                          if kinds[n]=="math_fragment" else
+                          "SOURCE_BOUND_ISOLATED_DECIMAL_WITNESS"),
                 "model":witness_model,
                 "transcript":third,
                 "audio_sha256":digest_file(wav),

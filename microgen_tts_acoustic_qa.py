@@ -580,3 +580,107 @@ def main(argv: list[str] | None=None) -> int:
 
 if __name__=="__main__":
     raise SystemExit(main())
+
+
+def verified_isolated_decimal_asr_witness(
+    expected: str, heard_a: str, heard_b: str, third_heard: str,
+) -> bool:
+    """Exact, source-blind 2-of-3 corroboration for a single ASR decimal slip.
+
+    This is *not* a numerical tolerance: 32 and 3.2 remain mathematically
+    different, and must fail until an actually independent, source-BLIND third
+    recognizer supports the otherwise source-faithful original reviewer.
+    The bad reviewer may contain ONE integer->decimal substitution only;
+    additional sensitive changes, signs, powers, multiple numbers,
+    omission of a sentence, or an unavailable witness all remain blocked.
+    This produces an acoustic screening result, never phonetic certification.
+    """
+    import re
+    from decimal import Decimal
+    if (len(tokens(expected)) < MINOR_ASR_MIN_SOURCE_WORDS or
+            any(not isinstance(t, str) or not t.strip() or
+                any(marker in t.lower() for marker in
+                    ("[unclear]", "[inaudible]", "[silence]", "[uncertain]"))
+                for t in (heard_a, heard_b, third_heard))):
+        return False
+    originals = [mismatch_details(expected, heard_a),
+                 mismatch_details(expected, heard_b)]
+    good = [i for i, row in enumerate(originals)
+            if row["difference_fraction_upper_bound"] <= 0.05 and
+            not (row["sensitive_mismatches"] or row["circa_red_flags"] or
+                 row["letter_y_yay_red_flags"])]
+    if len(good) != 1:
+        return False
+    bad = originals[1-good[0]]
+    if (bad["sensitive_mismatches"] != 1 or
+            bad["circa_red_flags"] or bad["letter_y_yay_red_flags"] or
+            bad["difference_fraction_upper_bound"] > 0.10 or
+            len(bad["differences"]) > 5):
+        return False
+    material_changes = 0
+    for change in bad["differences"]:
+        left = change["expected"].split()
+        right = change["recognized"].split()
+        if change["sensitive"]:
+            # Only an integer printed as a genuinely DIFFERENT decimal,
+            # e.g. "32" versus "3 point 2". Do not conflate their values.
+            # Same-unit abbreviations may be merged into the numeric edit:
+            # 32 meters versus 3 point 2 m is ONE changed number, not a
+            # changed physical unit. Changes of units or powers still block.
+            units = {"meters":"m","meter":"m","m":"m",
+                     "seconds":"s","second":"s","s":"s"}
+            if (len(left)==2 and len(right)==4 and
+                    left[-1] in units and right[-1] in units and
+                    units[left[-1]]==units[right[-1]]):
+                left=left[:-1]
+                right=right[:-1]
+            if (len(left) != 1 or len(right) != 3 or
+                    not re.fullmatch(r"[1-9][0-9]{1,3}", left[0]) or
+                    not re.fullmatch(r"[0-9]+", right[0]) or
+                    right[1] != "point" or
+                    not re.fullmatch(r"[0-9]+", right[2]) or
+                    Decimal(left[0]) == Decimal(right[0]+"."+right[2])):
+                return False
+            material_changes += 1
+        else:
+            # Minor one- or two-token typography only. Any inserted sign,
+            # negation, numerical value, operator, or scientific assertion
+            # is disqualifying even if the witness coincidentally agrees.
+            if max(len(left),len(right)) > 2:
+                return False
+            banned = {"minus","negative","plus","equals","equal",
+                      "squared","cubed","zero","non","not",
+                      "over","divide","divided","greater","less"}
+            if banned.intersection(left+right):
+                return False
+            if any(re.fullmatch(r"[0-9]+",word) for word in left+right):
+                return False
+            # The bad ASR may differ in one of these fixed, known
+            # letter-name or SI-abbreviation renderings only. A *changed*
+            # physics sentence or ordinary noun is never cleared by the
+            # third-reviewer numerical witness.
+            aliases = {
+                ("eye","i"), ("eff","f"), ("vee","v"),
+                ("tee","t"), ("meters","m"), ("meter","m"),
+                ("seconds","s"), ("second","s"),
+                ("eye",""),  # bad recognizer omitted an index name
+            }
+            alias = (" ".join(left), " ".join(right))
+            if alias not in aliases and (alias[1],alias[0]) not in aliases:
+                return False
+    if material_changes != 1:
+        return False
+    # The independently selected third recognizer is blind to source text.
+    # BOTH its agreement with the source and with the original good model
+    # must hold; merely reproducing a mathematical value is insufficient.
+    corroboration = [
+        mismatch_details(expected, third_heard),
+        mismatch_details((heard_a,heard_b)[good[0]], third_heard),
+    ]
+    return all(
+        row["difference_fraction_upper_bound"] <= 0.05 and
+        row["sensitive_mismatches"] == 0 and
+        row["circa_red_flags"] == 0 and
+        row["letter_y_yay_red_flags"] == 0
+        for row in corroboration
+    )
