@@ -60,6 +60,7 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                 raise CueTTSError("Cue plan does not cover all slides")
             all_fragments = []
             semantic_used = False
+            recovered_math_ids = []
             for slide_no, (row, source_row) in enumerate(zip(rows,narration), 1):
                 if (not isinstance(row, dict) or not isinstance(source_row, dict)
                         or row.get("slide") != slide_no
@@ -104,6 +105,15 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             not page.rect.contains(box) or
                             _equivalent_text(label) not in extracted):
                             raise CueTTSError("Element not grounded in source PDF")
+                        if "source_math_evidence" in cue:
+                            recovered_math_ids.append(cue["element_id"])
+                            from microgen_source_math_cue import verified_source_math_row
+                            from microgen_timed_cue_planner import _pdf_text_blocks
+                            if not verified_source_math_row(
+                                    cue, slide_no, cue_no,
+                                    _pdf_text_blocks(page), page):
+                                raise CueTTSError(
+                                    "Deterministic equation cue changed or lacks PDF evidence")
                         if "question_context_role" in cue:
                             from microgen_timed_cue_planner import (
                                 QUESTION_REFLECTION_ROLE,
@@ -154,6 +164,7 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             from microgen_cue_semantic_mapping import (
                                 compact, numbers, MAX_GROUP_BLOCKS,
                             )
+                            from microgen_source_math_cue import source_math_quote_valid
                             regions = cue["pdf_bboxes"]
                             labels = cue.get("pdf_texts")
                             quotes = cue.get("semantic_source_quotes")
@@ -186,7 +197,11 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                                 if (region_box.is_empty or region_box.is_infinite
                                         or not page.rect.contains(region_box)
                                         or _equivalent_text(item_text) not in raw
-                                        or len(compact(quote)) < 8
+                                        or (len(compact(quote)) < 8 and not (
+                                            cue.get("source_math_evidence") ==
+                                            "EXACT_SOURCE_MATH_V1" and
+                                            source_math_quote_valid(item_text) and
+                                            compact(quote) == compact(item_text[:200])))
                                         or compact(quote) not in compact(item_text)):
                                     raise CueTTSError("Multi-element quote not PDF grounded")
                                 checked.append(region_box)
@@ -204,11 +219,17 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
                             raise CueTTSError("Unpaired multi-element provenance")
                         elif "semantic_source_quote" in cue:
                             from microgen_cue_semantic_mapping import compact, numbers
+                            from microgen_source_math_cue import source_math_quote_valid
                             quote = cue["semantic_source_quote"]
                             if (plan["planning_method"] != "source_pdf_grounded_semantic_screen"
                                     or not isinstance(quote,str)
                                     or not 8 <= len(quote) <= 200
-                                    or len(compact(quote)) < 8 or compact(quote) not in extracted
+                                    or (len(compact(quote)) < 8 and not (
+                                        cue.get("source_math_evidence") ==
+                                        "EXACT_SOURCE_MATH_V1" and
+                                        source_math_quote_valid(label) and
+                                        compact(quote) == compact(label[:200])))
+                                    or compact(quote) not in extracted
                                     or not numbers(spoken).issubset(numbers(label))):
                                 raise CueTTSError("Semantic claim lacks exact PDF evidence")
                             semantic_used = True
@@ -223,6 +244,26 @@ def _verified_plan(stage: Path) -> tuple[dict, list[str]]:
             if (semantic_used != (plan["planning_method"] ==
                                   "source_pdf_grounded_semantic_screen")):
                 raise CueTTSError("Semantic cue provenance does not match planning method")
+            claimed = plan.get("automatic_math_recovery")
+            if recovered_math_ids:
+                if (not isinstance(claimed, dict)
+                        or claimed.get("schema_version") != 1
+                        or claimed.get("status") !=
+                        "SOURCE_EXACT_CUE_RECOVERED_AWAITING_INDEPENDENT_QA"
+                        or claimed.get("cue_ids") != recovered_math_ids
+                        or claimed.get("source_pdf_sha256") != _sha(pdf)
+                        or claimed.get("math_policy_sha256") !=
+                        _sha(stage / "microgen_source_math_cue.py")
+                        or type(claimed.get("semantic_budget_limit")) is not int
+                        or not 1 <= claimed["semantic_budget_limit"] <= 40
+                        or type(claimed.get("semantic_assistance_remaining")) is not int
+                        or not 0 <= claimed["semantic_assistance_remaining"] <=
+                        claimed["semantic_budget_limit"]
+                        or claimed.get("additional_provider_requests_for_math_recovery") != 0
+                        or claimed.get("publication_authorized") is not False):
+                    raise CueTTSError("Missing/drifted restart-safe mathematical recovery decision")
+            elif claimed is not None:
+                raise CueTTSError("Unsubstantiated math recovery receipt")
             if not 1 <= len(all_fragments) <= MAX_CUES:
                 raise CueTTSError("Global cue batch is too large for single voice")
     except (KeyError, TypeError, IndexError, ValueError, OSError, json.JSONDecodeError) as exc:

@@ -702,7 +702,8 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                           "microgen_tts_provenance.py",
                           "microgen_timed_cue_tts.py",
                           "microgen_timed_cue_planner.py",
-                          "microgen_cue_semantic_mapping.py"):
+                          "microgen_cue_semantic_mapping.py",
+                          "microgen_source_math_cue.py"):
             if (stage/candidate).is_file():
                 inputs.append(candidate)
         if (stage/PLAN_FILE).exists():
@@ -711,6 +712,11 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         pairs_mode=os.environ.get("MICROGEN_TIMED_CUES","0")
         if pairs_mode not in ("0","1"):
             raise QualityError("Invalid timed-cue opt-in mode")
+    if name in {"video", "acceptance"}:
+        if (stage/"microgen_source_math_cue.py").is_file():
+            # The final PCM/video math-region auditor uses this same
+            # source-PDF rule. Code changes invalidate old media receipts.
+            inputs.append("microgen_source_math_cue.py")
     if name in {"tts","acoustic_qa","video","acceptance"}:
         if (stage/".microgen_verified_audio_reuse.json").is_file():
             from microgen_verified_tts_reuse import verify_reuse_receipt

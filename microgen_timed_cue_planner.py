@@ -199,9 +199,11 @@ def _pdf_text_blocks(page) -> list[tuple]:
         # "3.00 = 15.0 +" and "255 = 31.0 s" as literal visible evidence;
         # never infer a number or accept a page counter as an equation.
         from microgen_cue_semantic_mapping import numbers
+        from microgen_source_math_cue import math_signature
         compact_equation = (
-            "=" in label and len(normalized(label)) >= 6
-            and len(numbers(label)) >= 2
+            "=" in label and len(normalized(label)) >= 5
+            and (len(numbers(label)) >= 2
+                 or len(math_signature(label, spoken=False)) >= 2)
         )
         math_text = (
             (len(normalized(label)) >= 8 or compact_equation)
@@ -284,7 +286,7 @@ def question_reflection_source_block(
 
 
 def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
-                   *, allow_unanchored: bool) -> tuple[list, list[tuple]]:
+                   *, allow_unanchored: bool, page=None) -> tuple[list, list[tuple]]:
     """Identical matching logic for private full-lecture admission and cue planning."""
     used = set()
     cues = [None] * len(texts)
@@ -357,6 +359,16 @@ def _lexical_match(slide_no: int, texts: list[str], blocks: list[tuple],
                 # is presentation guidance, not a new numerical/scientific
                 # source claim. Anchor only a uniquely verified question;
                 # all other unsupported content still requires semantic QA.
+                # Deterministic recovery for a contiguous, uniquely
+                # identifiable equation spanning multiple *real* PDF text
+                # elements. No model calls, inferred numbers, or relaxation
+                # of the independent per-region PDF/PCM verification.
+                from microgen_source_math_cue import build_exact_source_math_cue
+                source_math = build_exact_source_math_cue(
+                    slide_no, cue_number, spoken, blocks, page)
+                if source_math is not None:
+                    cues[cue_number - 1] = source_math
+                    continue
                 context_index=question_reflection_source_block(
                     spoken,cue_number,len(texts),blocks)
                 if context_index is None:
@@ -446,7 +458,8 @@ def _require_budget_preflight(stage: Path, *, semantic_limit: int,
                     raise CuePlanningError("Cue inventory exceeds one global voice batch")
                 _require_visible_numeric_evidence(slide_no, texts, blocks)
                 _, unresolved = _lexical_match(
-                    slide_no, texts, blocks, allow_unanchored=True)
+                    slide_no, texts, blocks, allow_unanchored=True,
+                    page=page)
                 if unresolved:
                     assisted_slides.append(slide_no)
             if len(assisted_slides) > semantic_limit:
@@ -492,6 +505,7 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                 raise CuePlanningError("Narration/PDF page counts differ")
             inventory = []
             total_cues = 0
+            deterministic_math_used = False
             for slide_no, (row, page) in enumerate(zip(source, doc), 1):
                 if not isinstance(row, dict) or row.get("slide") != slide_no:
                     raise CuePlanningError("Narration slide order changed")
@@ -512,7 +526,8 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                 _require_visible_numeric_evidence(slide_no, texts, blocks)
                 cues, unresolved = _lexical_match(
                     slide_no, texts, blocks,
-                    allow_unanchored=semantic_resolver is not None)
+                    allow_unanchored=semantic_resolver is not None,
+                    page=page)
                 if unresolved:
                     if semantic_resolver is None:
                         raise CuePlanningError(
@@ -598,6 +613,9 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
                         }
                 if any(cue is None for cue in cues):
                     raise CuePlanningError("Incomplete cue proposal")
+                deterministic_math_used |= any(
+                    cue.get("source_math_evidence") == "EXACT_SOURCE_MATH_V1"
+                    for cue in cues)
                 total_cues += len(cues)
                 if total_cues > max_cues:
                     raise CuePlanningError("Cue inventory exceeds one global voice batch")
@@ -612,7 +630,8 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
         raise CuePlanningError("Unreadable PDF or source narration") from exc
     return {
         "schema_version": 1, "planning_method": (
-            "source_pdf_grounded_semantic_screen" if semantic_slides
+            "source_pdf_grounded_semantic_screen" if (
+                semantic_slides or deterministic_math_used)
             else "source_pdf_overlap_conservative"
         ),
         "slides_pdf_sha256": sha(pdf),
@@ -622,6 +641,19 @@ def propose_plan(stage: Path, *, max_cues: int = 120, semantic_resolver=None) ->
         "semantic_mapping_certified": False,
         "semantic_assist_applied": bool(semantic_slides),
         "speech_phonemes_aligned": False,
+        **({"automatic_math_recovery": {
+            "schema_version": 1,
+            "status": "SOURCE_EXACT_CUE_RECOVERED_AWAITING_INDEPENDENT_QA",
+            "cue_ids": [cue["element_id"] for row in inventory
+                        for cue in row["cues"]
+                        if cue.get("source_math_evidence") == "EXACT_SOURCE_MATH_V1"],
+            "source_pdf_sha256": sha(pdf),
+            "math_policy_sha256": sha(stage / "microgen_source_math_cue.py"),
+            "semantic_budget_limit": semantic_limit,
+            "semantic_assistance_remaining": semantic_slides,
+            "additional_provider_requests_for_math_recovery": 0,
+            "publication_authorized": False,
+        }} if deterministic_math_used else {}),
     }
 
 def write_verified_plan(stage: Path, *, semantic_resolver=None) -> Path:
