@@ -110,8 +110,16 @@ def classify_log_attempt(stage_name: str, output: bytes,
         if not line or line[:1].isspace() or ": " not in line:
             continue
         name, sep, message = line.partition(": ")
-        if name.isidentifier() and 1 <= len(message) <= 600:
-            lines.append((name, message.strip()))
+        # Python renders exceptions imported from other modules with their
+        # fully qualified class name: module.VerifiedAcousticReplayError.
+        # Classify the final actual exception class without requiring it to
+        # be defined in the child driver. Reject non-identifier decorations,
+        # arbitrary log phrases or an unbounded namespace chain.
+        identifiers=name.split(".")
+        if (1 <= len(identifiers) <= 4
+                and all(x.isidentifier() for x in identifiers)
+                and 1 <= len(message) <= 600):
+            lines.append((identifiers[-1], message.strip()))
     if not lines:
         return None
     # Earlier chained exceptions are not the final exception.

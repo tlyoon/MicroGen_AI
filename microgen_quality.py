@@ -646,6 +646,16 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                       "script_tts.json", "slides.mp4"),
     }
     inputs = list(dependencies.get(name, ("source.pdf",)))
+    # Source-bound mathematical voice clarification is part of the NORMAL
+    # narration stage, not an untracked postprocessing exemption. Bind
+    # original/repaired sidecar, raw script, recovery policy and receipt
+    # when available, invalidating stale checkpoints after a policy edit.
+    if name == "narration":
+        for policy in ("script.txt", "script_tts.json",
+                       "microgen_source_bound_voice_recovery.py",
+                       ".microgen_source_bound_voice_recovery.json"):
+            if (stage / policy).is_file():
+                inputs.append(policy)
     # The V6 recovery policy and classifier are executable dependencies
     # of every model/scientific stage it can classify. When their source
     # changes, old QA fingerprints must not quietly retain acceptance.

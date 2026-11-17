@@ -329,3 +329,90 @@ def test_h_uncertain_paid_failure_is_saved_by_normal_process_one_and_blocks_rest
     with pytest.raises(RuntimeError,match="AMBIGUOUS_PROVIDER_STAGE_HOLD"):
         batch.process_one(args,"2.7",[])
     assert calls==["tts"]  # zero duplicate paid whole-stage requests
+
+
+def test_g_h_real_historical_asr_pre_provider_hold_not_misreported_as_paid(
+        tmp_path,monkeypatch):
+    # Reproduces the complete last exception of real 9feb G3 acoustic QA:
+    # existing source/WAV-bound Gemini evidence is still discrepant.
+    # This happens BEFORE any new Gemini client/reviewer is created.
+    stage=fixture(tmp_path)
+    worker=stage/"existing_asr_hold.py"
+    worker.write_text(
+        "raise type('VerifiedAcousticReplayError',(RuntimeError,),{})("
+        "'Previously recorded dual-Gemini evidence still has substantive "
+        "acoustic disagreements; do not rebill unchanged audio')\n",
+        encoding="utf8",
+    )
+    with pytest.raises(RuntimeError,match=(
+            "non-retryable VerifiedAcousticReplayError")):
+        batch.run_subprocess(
+            sys.executable,worker.name,stage,tmp_path/"asr.log",
+            "independent acoustic QA",gemini_stage=False,retries=25,
+            stage_name="acoustic_qa",
+            nonrepeatable_external_stage=True,
+        )
+    log=(tmp_path/"asr.log").read_text()
+    assert log.count(":: attempt 1")==1
+    assert "attempt 2" not in log
+    receipt=json.loads((stage/DECISION_NAME).read_text(encoding="utf8"))
+    assert receipt["decision"]["failure_id"]==(
+        "MGA-ACOUSTIC-HISTORICAL-REPLAY-STILL-BLOCKED")
+    assert receipt["decision"]["category"]=="scientific_qa"
+    assert receipt["decision"]["disposition"]=="DETERMINISTIC_HOLD"
+    assert receipt["paid_retry_authorized"] is False
+    assert receipt["publication_allowed"] is False
+    assert verified_stage_hold(stage,"acoustic_qa")
+
+
+def test_h_unrecognized_asr_exception_stays_ambiguous_no_retry(
+        tmp_path):
+    stage=fixture(tmp_path)
+    worker=stage/"unknown_asr.py"
+    worker.write_text(
+        "raise type('VerifiedAcousticReplayError',(RuntimeError,),{})("
+        "'Other independent model error, external operation uncertain')\n",
+        encoding="utf8",
+    )
+    with pytest.raises(RuntimeError,match="AMBIGUOUS_PROVIDER_STAGE_HOLD"):
+        batch.run_subprocess(
+            sys.executable,worker.name,stage,tmp_path/"asr_other.log",
+            "independent acoustic QA",gemini_stage=False,retries=25,
+            stage_name="acoustic_qa",
+            nonrepeatable_external_stage=True,
+        )
+    assert "attempt 2" not in (tmp_path/"asr_other.log").read_text()
+    assert not (stage/DECISION_NAME).exists()
+
+
+def test_g_real_module_qualified_acoustic_traceback_preserves_last_exception(
+        tmp_path):
+    from microgen_recovery_registry import classify_log_attempt
+    stage=fixture(tmp_path)
+    source=(
+        "Traceback (most recent call last):\n"
+        "  File \"stage.py\", line 8, in run\n"
+        "    raise VerifiedAcousticReplayError()\n"
+        "microgen_verified_acoustic_replay.VerifiedAcousticReplayError: "
+        "Previously recorded dual-Gemini evidence still has substantive "
+        "acoustic disagreements; do not rebill unchanged audio\n"
+    ).encode("utf8")
+    result=classify_log_attempt("acoustic_qa",source,registry_folder=stage)
+    assert result is not None
+    assert result["failure_id"]==(
+        "MGA-ACOUSTIC-HISTORICAL-REPLAY-STILL-BLOCKED")
+    assert result["category"]=="scientific_qa"
+    assert result["disposition"]=="DETERMINISTIC_HOLD"
+    # Spoofed source text without an actual traceback cannot create
+    # scientific evidence or silently call a paid acoustic model.
+    assert classify_log_attempt(
+        "acoustic_qa",source.split(b"Traceback",1)[-1],
+        registry_folder=stage) is None
+    # When the final error is a different exception class, it must not
+    # inherit an earlier nested deterministic-science classification.
+    chain=source+(
+        b"During handling of the above exception, another exception occurred:"
+        b"\nTraceback (most recent call last):\n"
+        b"RuntimeError: provider effect uncertain\n")
+    assert classify_log_attempt("acoustic_qa",chain,
+                                registry_folder=stage) is None

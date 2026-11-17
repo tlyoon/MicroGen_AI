@@ -400,6 +400,10 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
             if name == "narration":
                 quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+                from microgen_source_bound_voice_recovery import (
+                    verify_source_voice_recovery,
+                )
+                verify_source_voice_recovery(stage)
             elif name == "science_qa":
                 from microgen_autonomous_science_qa import verify_receipt
                 quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
@@ -1378,6 +1382,21 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     print(f"[{subchapter}] source title-card postflight "
                           f"status={title_recovery['status']}; "
                           "independent narration gate still mandatory",
+                          flush=True)
+                    # A source/WAV-identical historical two-Gemini ASR
+                    # discrepancy can make a known unsafe *spoken* x
+                    # component clearer BEFORE fresh TTS. Never touch raw
+                    # narration, printed science or old PCM. An exact-PDF
+                    # 4-slide semantic budget and independent science/ASR
+                    # review remain mandatory; no prior QA verdict reused.
+                    from microgen_source_bound_voice_recovery import (
+                        recover_disputed_component_voice,
+                    )
+                    clarity = recover_disputed_component_voice(stage)
+                    print(f"[{subchapter}] source-bound x-component speech "
+                          f"status={clarity['status']} changed="
+                          f"{len(clarity['changed_slides'])}; "
+                          "independent acoustic QA still mandatory",
                           flush=True)
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")

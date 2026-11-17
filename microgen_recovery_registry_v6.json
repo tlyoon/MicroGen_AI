@@ -206,6 +206,74 @@
       "last_validated": "2026-11-17",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-ACOUSTIC-HISTORICAL-REPLAY-STILL-BLOCKED",
+      "classification": "scientific_qa",
+      "stages": [
+        "acoustic_qa"
+      ],
+      "exception": "VerifiedAcousticReplayError",
+      "message_marker": "Previously recorded dual-Gemini evidence still has substantive acoustic disagreements",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_verified_acoustic_replay.maybe_replay_verified_acoustic",
+      "preconditions": "Original SHA/source/WAV/voice and two independent original Gemini blind transcripts were validated; source-blind reclassification still finds material acoustic disagreements BEFORE any model provider is created; no fresh paid ASR event may be inferred.",
+      "verification": "Keep both original reviewer voices and the unresolved scientific discrepancies; verify unchanged source/PCM SHA, existing exact trace and code; require genuinely different source-bound audio or a separately finite authorized independent reviewer, never mark acoustic pass.",
+      "historical_evidence": "20261117_HP_G3_SERWAY27_ROOT_9FEB_PRIVATE/2.7 real independent acoustic stage. The original two-Gemini trace was reclassified pre-provider into nine holds, with no new Gemini call. Parent previously mislabeled hold as ambiguous external submission.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-VOICE-RECOVERY-NUMERIC-HOLD",
+      "classification": "scientific_qa",
+      "stages": [
+        "narration"
+      ],
+      "exception": "SourceBoundVoiceRecoveryError",
+      "message_marker": "Source voice clarification changed numerical evidence",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_bound_voice_recovery.recover_disputed_component_voice",
+      "preconditions": "Original two independent Gemini blind ASR streams are exact original source+PCM+spoken-SHA verified, at least two different slides with recurrent component pronunciation confusion; exact bounded private grant; never infer a new acoustic acceptance from speech text.",
+      "verification": "Full original source PDF and 21 PDF slices; exact original/revised numbers; narration unchanged; bounded four semantic-slide source cue preflight; source-specific 21-slide shadow; independent science and fresh two-Gemini acoustic review still required.",
+      "historical_evidence": "20261117 real 9feb G3 dual-Gemini PCM unchanged acoustic failure; source-bound private 21-slide shadow verified 16 TTS-only voice changes, original PDF and narration unchanged, source cues no more than four semantic slides; no paid model calls.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-VOICE-RECEIPT-DRIFT",
+      "classification": "data",
+      "stages": [
+        "narration"
+      ],
+      "exception": "SourceBoundVoiceRecoveryError",
+      "message_marker": "Unverifiable voice-recovery transaction",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_bound_voice_recovery.verify_source_voice_recovery",
+      "preconditions": "Prepared/complete transaction receipt must bind original PDF, policy source SHA, original/revised sidecar SHA and independent blind ASR trace; no unidentified changes or symlinks.",
+      "verification": "Atomic new sidecar from source-bound old and new hashes, cross-restart prepared transaction replay without paid requests; later altered voice sidecar blocked, no release.",
+      "historical_evidence": "20261117 HP production source-bound voice 21-slide real-source shadow, interruption at prepared state and persisted restart/tamper stress test.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-VOICE-WINDOWS-NEWLINE",
+      "classification": "software",
+      "stages": [
+        "narration"
+      ],
+      "exception": "SourceBoundVoiceRecoveryError",
+      "message_marker": "Unverifiable new voice sidecar bytes",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_bound_voice_recovery.recover_disputed_component_voice",
+      "preconditions": "Windows text-mode newline conversion made proposal bytes CRLF after the SHA had been computed from LF source; keep exact UTF-8 byte-level identity.",
+      "verification": "Atomic binary write of exact proposed JSON bytes; independently verify SHA before and after promotion; 21-slide private real-source shadow and interrupted restart stress tests.",
+      "historical_evidence": "20261117 first real HP 21-slide source-voice shadow failed on proposal SHA; binary source-exact write corrected it, subsequent full source shadow passed without provider calls.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }

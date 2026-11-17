@@ -165,6 +165,37 @@ def canonical_math_transcript(text: str) -> str:
     value = re.sub(r"\b(?:a\s+v\s+g|average)\b(?=\s*(?:over|acceleration|,|\b))",
                    "avg", value, flags=re.I)
     value = re.sub(r"\b(s\s+i)\b", "si", value, flags=re.I)
+    # Source-BLIND and mathematical-identity-preserving ASR typography.
+    # Underscore notation is a PRINTED component subscript, not a different
+    # spoken variable. Never map y to x, initial to final, or v(x) to v_x.
+    value = re.sub(r"(?<![A-Za-z])([av])_x\b",
+                   lambda m: _COMPONENT[m[1].lower()], value, flags=re.I)
+    # A differential d(v_x)/dt is precisely the verbal derivative named
+    # "dee vee ex over dee tee". Require BOTH its numerator x and denominator
+    # t. A changed differentiated coordinate, time, sign or power remains
+    # different; standalone dv/dx is NOT silently rewritten.
+    value = re.sub(
+        r"\b(?:dv_x|dv\s+(?:sub\s+)?x)\s+over\s+(?:d\s*t|dee\s+tee)\b",
+        "dee vee ex over dee tee", value, flags=re.I)
+    value = re.sub(
+        r"\bdee\s+vee\s+ex\s+over\s+d\s+t\b",
+        "dee vee ex over dee tee", value, flags=re.I)
+    # Letter labels are preserved EXACTLY; panel b and panel bee both name B.
+    # Crucially panel i is not panel e/ee, so a mislabelled physics graph
+    # cannot be waved through as a harmless ASR formatting disagreement.
+    panel_names={"a":"ay","b":"bee","c":"see",
+                 "d":"dee","e":"ee","f":"eff"}
+    value = re.sub(
+        r"\bpanel\s+([a-f])\b",
+        lambda m:"panel "+panel_names[m[1].lower()],
+        value,flags=re.I)
+    # A one-second delay spoken as '1.00 seconds later' is the same time
+    # interval, not a distinct numerical value. Restrict pluralization to
+    # the SAME explicit numeral immediately followed by 'later'; otherwise
+    # preserve every spoken time unit and exponent.
+    value = re.sub(
+        r"\b(\d+(?:\.\d+|\s+point\s+\d+)?)\s+seconds\s+later\b",
+        r"\1 second later",value,flags=re.I)
     # No absolute frequency-tolerance, signed-number waiver, or script-driven
     # insertion is allowed here. The caller's sensitive comparator still runs.
     return value

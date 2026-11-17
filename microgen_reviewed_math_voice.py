@@ -20,7 +20,8 @@ def voice_adapter_code_sha256() -> str:
     root = Path(__file__).resolve().parent
     h = hashlib.sha256()
     for name in ("gen_script_v13.py", "text_to_speech_v25.py",
-                 "microgen_reviewed_math_voice.py"):
+                 "microgen_reviewed_math_voice.py",
+                 "microgen_source_bound_voice_recovery.py"):
         path = root / name
         if not path.is_file() or path.is_symlink():
             raise VoiceRiskPreflightError("Voice-adapter source unavailable")
