@@ -202,7 +202,7 @@ def test_original_scientific_script_remains_untouched_by_source_voice_policy():
     ),
     (
         "a car passes a billboard at constant speed vee ex car of 45.0 meters per second",
-        "a car passes a billboard at a constant x-direction speed of 45.0 meters per second",
+        "a car passes a billboard at a constant velocity along the x axis of 45.0 meters per second",
     ),
     (
         "under constant ay ex and the vee ex graph",
@@ -222,3 +222,22 @@ def test_contextual_component_clarity_no_repeated_words_or_split_cues(before,exp
     for defect in ("initial initial", "final final", "the the",
                    "constant the", "speed the car's"):
         assert defect not in normalized
+
+def test_source_bound_car_velocity_phrase_clears_real_pronunciation_risk():
+    before=(
+        "A car passes a billboard at constant speed vee ex car of "
+        "45.0 meters per second."
+    )
+    revised=normalize_scientific_speech(
+        recovery.clarify_x_component(before)
+    )
+    assert revised==(
+        "A car passes a billboard at a constant velocity along the "
+        "ex axis of 45.0 meters per second."
+    )
+    assert numbers(before)==numbers(revised)
+    assert voice_input_risk_status(
+        revised,normalize_scientific_speech
+    )["unresolved_source_risk_count"]==0
+    assert "x-direction" not in revised
+    assert recovery.clarify_x_component(revised)==revised

@@ -274,6 +274,23 @@
       "last_validated": "2026-11-17",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-SOURCE-VOICE-PRONUNCIATION-PREFLIGHT",
+      "classification": "scientific_qa",
+      "stages": [
+        "narration"
+      ],
+      "exception": "SourceBoundVoiceRecoveryError",
+      "message_marker": "Voice clarification retained predictable pronunciation risks",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_bound_voice_recovery.recover_disputed_component_voice",
+      "preconditions": "Exact source/old dual-independent ASR voice attestation exists; an otherwise mathematically equivalent spoken x-component introduced the literal hyphenated x-direction token, triggering standalone_math_letter. Never waive the phoneme preflight or classify the live TTS as accepted.",
+      "verification": "Require voice_input_risk_status unresolved_source_risk_count=0 on all original 21 TTS-only lines; exact printed-PDF 88 cues, 3 semantic slides <=4 cap, unchanged signs/values/units, source+raw narration unchanged; crash-restart and SHA-tamper rejection. Do not reuse terminal grant.",
+      "historical_evidence": "2026-11-17 real frozen HP 57a9920 campaign 20261117_HP_G3_SERWAY27_SOURCE_MATH_57A9_PRIVATE, narration-stage SourceBoundVoiceRecoveryError on slide 17 x-direction speed. Changed source-equivalent TTS-only expression to constant velocity along the x axis. Actual 21-slide HP source preflight proved no risks or numerical drift, zero provider calls.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }

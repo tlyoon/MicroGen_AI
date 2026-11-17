@@ -61,7 +61,7 @@ def clarify_x_component(text:str)->str:
       # An explanatory vector label inside an ordinary speed phrase must
       # not insert a comma and create an unsupported extra PDF cue.
       (r"\bat\s+constant\s+speed\s+vee\s+(?:sub\s+)?ex\s+car\s+of\b",
-       "at a constant x-direction speed of"),
+       "at a constant velocity along the x axis of"),
       (r"\bdee\s+vee\s+(?:sub\s+)?ex\s+over\s+dee\s+tee\b",
        "the time derivative of the x component of velocity"),
       (r"\bvelocity\s+vee\s+(?:sub\s+)?ex\s+(?:eye|initial)\b",
