@@ -241,3 +241,22 @@ def test_source_bound_car_velocity_phrase_clears_real_pronunciation_risk():
     )["unresolved_source_risk_count"]==0
     assert "x-direction" not in revised
     assert recovery.clarify_x_component(revised)==revised
+
+def test_displacement_parentheses_voice_keeps_exact_source_equation():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    before=("The final ex component of velocity squared equals the initial "
+            "ex component of velocity squared plus 2 the ex component of "
+            "acceleration times ex final minus ex initial.")
+    result=reviewed_math_voice(before)
+    assert result==(before.replace(
+        "times ex final minus ex initial",
+        "times the quantity ex final minus ex initial"))
+    assert reviewed_math_voice(result)==result
+    assert numbers(result)==numbers(before)
+    for changed in (
+        before.replace("minus ex initial","plus ex initial"),
+        before.replace("ex final minus ex initial","ex initial minus ex final"),
+        before.replace("times ex final","times why final"),
+        before.replace("acceleration times","velocity times"),
+    ):
+        assert reviewed_math_voice(changed)==changed

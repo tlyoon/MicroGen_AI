@@ -293,6 +293,20 @@ def reviewed_math_voice(text: str) -> str:
                 "the square of time")
     value=formula.sub(clarify_constant_equation,value)
 
+    # The ungrouped spoken factor "a_x times x_final minus x_initial"
+    # is ambiguous even when the PRINTED source is a_x*(x_f-x_i).
+    # Independent blind acoustic reviewers once both inserted a spurious
+    # "plus x final" at this exact factor boundary. Preserve every source
+    # index/sign/value and add ONLY the spoken grouping word. The normal
+    # source/figure/math timed-cue admission must still independently pass
+    # before any new TTS billable operation, and fresh ASR is mandatory.
+    value=re.sub(
+        r"\b(?P<factor>(?:the\s+)?(?:x|ex)\s+component\s+of\s+"
+        r"acceleration\s+times)\s+"
+        r"(?P<difference>(?:x|ex)\s+final\s+minus\s+(?:x|ex)\s+initial)\b",
+        lambda m: m["factor"]+" the quantity "+m["difference"],
+        value,flags=re.I)
+
     return value
 
 

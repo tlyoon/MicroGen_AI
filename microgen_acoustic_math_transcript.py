@@ -113,7 +113,7 @@ def canonical_math_transcript(text: str) -> str:
     value = re.sub(r"\b(?:negative)\s+(?=\d+\b)", "minus ",
                    value, flags=re.I)
     # Explicit SI shorthand is a different orthography, not a different unit.
-    value = re.sub(r"\bm\s*/\s*s\s*(?:\^?2|squared)\b",
+    value = re.sub(r"\bm\s*/\s*s\s*(?:\^?2|²|squared)\b",
                    "meters per second squared", value, flags=re.I)
     value = re.sub(r"\bm\s*/\s*s\b",
                    "meters per second", value, flags=re.I)
@@ -196,6 +196,51 @@ def canonical_math_transcript(text: str) -> str:
     value = re.sub(
         r"\b(\d+(?:\.\d+|\s+point\s+\d+)?)\s+seconds\s+later\b",
         r"\1 second later",value,flags=re.I)
+    # Source-blind mathematical typography on the original G3 two-Gemini
+    # transcripts. Never infer the missing spoken operator from context:
+    # require a LITERAL multiplication, fraction bar, comparator or minus.
+    # This must precede comparison to expected narration and model consensus.
+    value = re.sub(r"\bsetup\b", "set up", value, flags=re.I)
+    # Billboard variable x_B: spoken "ex bee", printed "xB"/"x B".
+    # Capital B is a typed index, not an arbitrary lower-case product x*b.
+    value = re.sub(r"(?<![A-Za-z])(?:x\s*B|ex\s+B|ex\s+bee)\b",
+                   "ex bee", value)
+    # Multiplication by exactly the time variable t; never equate missing
+    # multiplication, t^2 and t, or multiplication by x/y.
+    value = re.sub(r"\s*\*\s*t\b", " times tee", value)
+    # 1/2 is already normalized above. Other explicit numeric divisions
+    # preserve the operation rather than losing '/' during tokenization.
+    value = re.sub(r"(?<=\d)\s*/\s*(?=\d)", " divided by ", value)
+    value = re.sub(r"\bt\s*>\s*0\b", "t greater than 0", value)
+    # The two-index billboard displacement keeps the SUBTRACTION sign.
+    value = re.sub(r"\bt\s*-\s*(?=ex\s+bee\b)",
+                   "tee minus ", value)
+    # A velocity-versus-time graph may be printed as v_x(t) rather than
+    # "x component of velocity". Only this complete v_x versus t LINE
+    # label is equivalent; acceleration, position and y-axis stay distinct.
+    value = re.sub(
+        r"\b(?:the\s+)?(?:(?:x|ex)[\s-]+component\s+of\s+velocity|v\s*x|vee\s+ex)"
+        r"\s+versus\s+t\s+line\b",
+        "the vee ex versus t line", value, flags=re.I)
+    # Origin x_initial = 0 is exactly zero even if ASR prints 0.0.
+    # This does not equate measured 0.0 with 0 or change final position,
+    # nonzero magnitudes, or any initial/final variable identity.
+    value = re.sub(
+        r"\b(?P<coordinate>(?:x|ex)\s+initial\s+equals)\s+0\.0\b",
+        lambda m: m["coordinate"] + " 0", value, flags=re.I)
+    # An EXACT additive zero term can be printed as zero point zero by
+    # ASR without changing its mathematical value. The rule is limited to
+    # "gives 0.0 plus": measured precision, 0.1 and standalone zero remain
+    # untouched, and both reviewers' original blind output remains recorded.
+    value = re.sub(r"\bgives\s+0\.0\s+plus\b",
+                   "gives 0 plus", value, flags=re.I)
+    # Subtractions in a fully printed quadratic are real operators, even
+    # when the adjacent source factors are spelled as squared time or x_B.
+    # Never synthesize a missing minus: the glyph must be present in ASR.
+    value = re.sub(
+        r"\b(?P<left>(?:t|tee)(?:\s+squared)?)\s*-\s*"
+        r"(?=(?:the\s+car's\s+x[\s-]+component\s+of\s+velocity|ex\s+bee)\b)",
+        lambda m: m["left"] + " minus ", value, flags=re.I)
     # No absolute frequency-tolerance, signed-number waiver, or script-driven
     # insertion is allowed here. The caller's sensitive comparator still runs.
     return value
