@@ -517,6 +517,44 @@ def _parse_source_blind_transcriber_output(raw: str) -> str:
     return v
 
 
+def _extract_dedicated_audio_transcription(response: object) -> str:
+    """Read Gemini's native audio_transcription part, not response.text.
+
+    Gemini transcriber responses may contain NO ordinary text part. The SDK
+    then reports 'non-text parts: audio_transcription', while .text is blank.
+    Accept exactly one concrete transcript text on the first candidate, with
+    no competing text or hidden second transcript. Otherwise fail closed.
+    """
+    candidates=getattr(response,"candidates",None)
+    if candidates:
+        first=candidates[0]
+        content=getattr(first,"content",None)
+        parts=getattr(content,"parts",None) if content is not None else None
+        if parts:
+            transcripts=[]
+            competing=[]
+            for part in parts:
+                transcription=getattr(part,"audio_transcription",None)
+                words=getattr(transcription,"text",None)
+                if transcription is not None:
+                    if isinstance(words,str) and words.strip():
+                        transcripts.append(words.strip())
+                    else:
+                        raise AcousticQAError("Dedicated audio transcription part is empty")
+                other=getattr(part,"text",None)
+                if isinstance(other,str) and other.strip():
+                    competing.append(other.strip())
+                if any(getattr(part,field,None) is not None for field in (
+                        "function_call","function_response","executable_code",
+                        "tool_call","tool_response")):
+                    raise AcousticQAError("Dedicated acoustic response has nontranscript payload")
+            if transcripts:
+                if len(transcripts)!=1 or competing:
+                    raise AcousticQAError("Ambiguous multiple dedicated acoustic transcripts")
+                return _parse_source_blind_transcriber_output(transcripts[0])
+    return _parse_source_blind_transcriber_output(getattr(response,"text",None))
+
+
 def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     """Use a separate audio understanding model; never send target script.
 
@@ -580,7 +618,7 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
                         "SCHEMA_COMPATIBILITY_RETRY") from None
                 raise
             if dedicated:
-                return _parse_source_blind_transcriber_output(response.text or "")
+                return _extract_dedicated_audio_transcription(response)
             # Unconstrained text is still checked against the same strict
             # JSON-only blind transcript rule: it cannot become a silent pass.
             return parse_blind_audio_transcript_response(response.text or "")

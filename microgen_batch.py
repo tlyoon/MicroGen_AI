@@ -93,6 +93,21 @@ def inspect_local_checkout(repo: Path, *, expected_commit: str | None = None) ->
     return head
 
 
+def pin_standing_private_revision(args) -> str:
+    """Bind normal single-HP checkpoints to their already-authorized Git HEAD.
+
+    Uses the same checked-out source verification as multi-PC mode. Never
+    derives a commit from a filename, modifies an old checkpoint, or
+    converts a dirty/unverified checkout into a paid campaign.
+    """
+    if not getattr(args,"standing_private_development",False):
+        raise RuntimeError("Private Git pin requested outside standing scope")
+    verified=inspect_local_checkout(
+        args.repo,expected_commit=args.commit)
+    args.commit=verified
+    return verified
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1611,6 +1626,17 @@ def main() -> int:
                   "Gemini 3.8 Flash-Lite/Kore primary, 3.8 Flash fallback, "
                   "Cloud fallback last and character-budgeted; no manual "
                   "stage approval or publication", flush=True)
+    if args.standing_private_development:
+        # The single-PC private scope was already bound to exact Git HEAD by
+        # eligible_private_development/authorize_or_resume, but the legacy
+        # runner passed --commit=unknown into every checkpoint. That mismatch
+        # silently disabled verified TTS reuse, resulting in repeated paid
+        # 21-slide synthesis after every independently failed acoustic QA.
+        # Pin the SAME verified HEAD before any provider scope or checkpoint
+        # is created; a dirty/replaced checkout must fail closed.
+        pin_standing_private_revision(args)
+        print(f"[batch] private checkout revision pinned={args.commit}",
+              flush=True)
     if args.lease_bucket:
         raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
     if args.check_assignments and not args.multi_pc:

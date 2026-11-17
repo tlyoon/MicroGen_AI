@@ -47,6 +47,8 @@ def fake_backend(monkeypatch, responses):
         item=next(replies)
         if isinstance(item,Exception):
             raise item
+        if hasattr(item,"candidates"):
+            return item
         return SimpleNamespace(text=item)
     client=SimpleNamespace(models=SimpleNamespace(
         generate_content=generate_content))
@@ -148,6 +150,63 @@ def test_schema_downgrade_admits_only_explicit_schema_400():
         ApiError(400,"Forbidden model"),
     ):
         assert _audio_json_schema_rejected(exc) is False
+
+
+def _native_audio_response(*transcripts):
+    from google.genai import types
+    return types.GenerateContentResponse(
+        candidates=[types.Candidate(content=types.Content(parts=[
+            types.Part(audio_transcription={"text":words})
+            for words in transcripts
+        ]))]
+    )
+
+
+def test_real_gemini_specialist_native_audio_transcription_part_is_recovered(
+        monkeypatch,wav):
+    # Actual HP 912 campaign returned non-text ['audio_transcription']
+    # with an empty response.text; legacy code discarded the valid part.
+    spoken="The x component of acceleration equals five metres per second squared."
+    response=_native_audio_response(spoken)
+    assert response.candidates[0].content.parts[0].audio_transcription.text==spoken
+    calls=fake_backend(monkeypatch,[response])
+    reviewer=gemini_audio_recognizer(
+        "synthetic-key",model="gemini-3.5-transcribe")
+    assert reviewer(wav)==spoken
+    assert len(calls)==1
+    assert calls[0][0]=="gemini-3.5-transcribe"
+    assert calls[0][2].response_json_schema is None
+
+
+@pytest.mark.parametrize("transcripts",[
+    ("",),
+    ("Only two",),
+    ("The x component is five metres per second squared.",
+     "The y component is five metres per second squared."),
+])
+def test_native_transcription_empty_short_or_ambiguous_never_accepted(
+        monkeypatch,wav,transcripts):
+    calls=fake_backend(monkeypatch,[_native_audio_response(*transcripts)])
+    with pytest.raises(AcousticQAError):
+        gemini_audio_recognizer(
+            "synthetic-key",model="gemini-3.5-transcribe")(wav)
+    assert len(calls)==1
+
+
+def test_native_transcription_mixed_text_and_audio_fails_closed(monkeypatch,wav):
+    from google.genai import types
+    response=types.GenerateContentResponse(candidates=[
+        types.Candidate(content=types.Content(parts=[
+            types.Part(audio_transcription={"text":
+                "The acceleration is five metres per second squared."}),
+            types.Part(text="A conflicting explanatory caption"),
+        ]))
+    ])
+    calls=fake_backend(monkeypatch,[response])
+    with pytest.raises(AcousticQAError):
+        gemini_audio_recognizer(
+            "synthetic-key",model="gemini-3.5-transcribe")(wav)
+    assert len(calls)==1
 
 
 def test_typed_provider_error_diagnostic_is_non_leaky():

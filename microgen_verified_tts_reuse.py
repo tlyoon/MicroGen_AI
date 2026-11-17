@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 import shutil
 import socket
+import subprocess
 import tempfile
 
 RECEIPT = ".microgen_verified_audio_reuse.json"
@@ -76,6 +77,45 @@ def _same_inputs(old: Path, stage: Path) -> bool:
         and _sha(old / name) == _sha(stage / name)
         for name in SOURCE + PRODUCER
     )
+
+
+def _legacy_checkpoint_commit_attested(old: Path, grant: dict,
+                                       checkpoint: dict) -> bool:
+    """Verify historical single-HP 'unknown' checkpoints without trusting them.
+
+    Earlier normal runs pinned an actual Git SHA in their owner authorization
+    but wrote package_commit='unknown' into the stage checkpoint. Refusing
+    that placeholder silently defeated all paid TTS PCM reuse. Prove the old
+    stage runner is byte-exact to its authorized Git commit, allowing only
+    Git/Windows CRLF differences, AND was independently recorded in the
+    original frozen provider in-flight marker. Never rewrite the old files.
+    """
+    scope=grant.get("scope",{})
+    commit=scope.get("code_revision")
+    inflight=checkpoint.get("inflight_provider_stage")
+    if (checkpoint.get("package_commit")!="unknown"
+            or not isinstance(commit,str)
+            or re.fullmatch(r"[0-9a-f]{40}",commit) is None
+            or not isinstance(inflight,dict)
+            or inflight.get("stage")!="acoustic_qa"
+            or inflight.get("source_sha256")!=scope.get("source_sha256")
+            or not (old/"microgen_batch.py").is_file()
+            or (old/"microgen_batch.py").is_symlink()
+            or inflight.get("runner_sha256")!=_sha(old/"microgen_batch.py")
+            or scope.get("source_sha256")!=_sha(old/"source.pdf")):
+        return False
+    try:
+        repo=Path(__file__).resolve().parent
+        result=subprocess.run(
+            ["git","-C",str(repo),"show",commit+":microgen_batch.py"],
+            stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,timeout=20,check=False)
+        if result.returncode:
+            return False
+        norm=lambda data:data.replace(b"\r\n",b"\n")
+        return norm(result.stdout)==norm((old/"microgen_batch.py").read_bytes())
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        return False
 
 
 def _inventory(old: Path, count: int) -> tuple[list[str], dict[str,str]]:
@@ -195,10 +235,11 @@ def maybe_reuse_verified_tts(stage: Path, *, work_root: Path, source_sha: str,
             continue
         old=previous/stage.name
         old_cp=_read(old/".microgen_checkpoint.json")
-        if (old_cp is None
-                or old_cp.get("package_commit")!=grant.get("scope",{}).get("code_revision")
-                or not old_cp.get("completed",{}).get("tts")):
+        if old_cp is None or not old_cp.get("completed",{}).get("tts"):
             continue
+        if old_cp.get("package_commit")!=grant.get("scope",{}).get("code_revision"):
+            if not _legacy_checkpoint_commit_attested(old,grant,old_cp):
+                continue
         try:
             if not _same_inputs(old,stage):
                 continue

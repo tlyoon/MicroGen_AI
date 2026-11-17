@@ -271,6 +271,64 @@ def test_newly_fixed_real_math_candidate_error_has_persistent_v6_history():
     assert found["disposition"]=="DETERMINISTIC_HOLD"
 
 
+def test_normal_pcm_reuse_imports_historically_unknown_checkpoint_only_after_git_proof(
+        tmp_path,monkeypatch):
+    # Real earlier HP private runs recorded 'unknown' in the stage checkpoint
+    # while the single-use grant was already pinned to full Git HEAD.
+    # Test the NORMAL reuse function, not merely the legacy helper.
+    from types import SimpleNamespace
+    old,new,work,cp,marked,mark,_=_setup(tmp_path,monkeypatch)
+    runner=old/"microgen_batch.py"
+    runner.write_bytes(b"print('historic runner')\r\n")
+    old_grant=json.loads((old.parent/reuse.OWNER).read_text())
+    old_grant["scope"]["code_revision"]="a"*40
+    (old.parent/reuse.OWNER).write_text(json.dumps(old_grant))
+    old_cp=json.loads((old/".microgen_checkpoint.json").read_text())
+    old_cp["package_commit"]="unknown"
+    old_cp["inflight_provider_stage"]={
+        "stage":"acoustic_qa",
+        "source_sha256":reuse._sha(old/"source.pdf"),
+        "runner_sha256":reuse._sha(runner),
+    }
+    (old/".microgen_checkpoint.json").write_text(json.dumps(old_cp))
+    seen=[]
+    def exact_git(args,**kwargs):
+        seen.append(args[-1])
+        return SimpleNamespace(returncode=0,stdout=b"print('historic runner')\n")
+    monkeypatch.setattr(reuse.subprocess,"run",exact_git)
+    result=_run(new,work,cp,mark)
+    assert result["status"]=="SOURCE_BOUND_PCM_REVERIFIED_ACOUSTIC_REVIEW_REQUIRED"
+    assert result["new_model_requests"] is False
+    assert result["old_acoustic_reused"] is False
+    assert seen==["a"*40+":microgen_batch.py"]
+    assert marked==["tts"]
+    assert reuse._sha(new/"slide1.wav")==reuse._sha(old/"slide1.wav")
+    assert not (new/".microgen_autonomous_acoustic_qa.json").exists()
+
+
+def test_historical_unknown_commit_without_exact_git_object_is_not_imported(
+        tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    old,new,work,cp,marked,mark,_=_setup(tmp_path,monkeypatch)
+    runner=old/"microgen_batch.py"
+    runner.write_bytes(b"print('historic runner')\r\n")
+    grant=json.loads((old.parent/reuse.OWNER).read_text())
+    grant["scope"]["code_revision"]="a"*40
+    (old.parent/reuse.OWNER).write_text(json.dumps(grant))
+    saved=json.loads((old/".microgen_checkpoint.json").read_text())
+    saved["package_commit"]="unknown"
+    saved["inflight_provider_stage"]={
+        "stage":"acoustic_qa",
+        "source_sha256":reuse._sha(old/"source.pdf"),
+        "runner_sha256":reuse._sha(runner)}
+    (old/".microgen_checkpoint.json").write_text(json.dumps(saved))
+    monkeypatch.setattr(reuse.subprocess,"run",lambda *a,**k:
+                        SimpleNamespace(returncode=0,stdout=b"wrong git blob"))
+    assert _run(new,work,cp,mark) is None
+    assert marked==[]
+    assert not (new/"slide1.wav").exists()
+
+
 def test_copied_tts_grant_to_different_private_root_never_authorizes_pcm(
         tmp_path,monkeypatch):
     import shutil
