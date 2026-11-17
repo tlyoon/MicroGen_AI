@@ -56,6 +56,7 @@ def _setup(tmp_path, monkeypatch):
                "MICROGEN_ACOUSTIC_MODEL_B":"gemini-3.8-flash"}
     def auth(work,revision,env=voice_env):
         scope={"code_revision":revision,"host":"hp",
+               "work_root":str(work),
                "source_sha256":reuse._sha(new/"source.pdf"),
                "stop_after":"acceptance","provider_environment":env}
         (work/reuse.OWNER).write_text(json.dumps(
@@ -268,3 +269,16 @@ def test_newly_fixed_real_math_candidate_error_has_persistent_v6_history():
     found=classify_log_attempt("tts",traceback,registry_folder=root)
     assert found and found["failure_id"]==row["id"]
     assert found["disposition"]=="DETERMINISTIC_HOLD"
+
+
+def test_copied_tts_grant_to_different_private_root_never_authorizes_pcm(
+        tmp_path,monkeypatch):
+    import shutil
+    old,new,work,cp,marked,mark,_=_setup(tmp_path,monkeypatch)
+    copied=old.parent.parent/"UNAUTHORIZED_AUDIO_GRANT_COPY"
+    shutil.copytree(old.parent,copied)
+    shutil.rmtree(old.parent)
+    assert _run(new,work,cp,mark) is None
+    assert marked==[]
+    assert not (new/"slide1.wav").exists()
+    assert not (new/reuse.RECEIPT).exists()

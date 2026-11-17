@@ -181,7 +181,11 @@ def _candidate(repo_root: Path, candidate_work: Path, subchapter: str,
             or not isinstance(scope, dict)
             or scope.get("source_sha256") != source_sha
             or scope.get("host") != "hp"
-            or scope.get("stop_after") != "acceptance"):
+            or scope.get("stop_after") != "acceptance"
+            # A copied grant from another private campaign is NOT
+            # authorization for this directory. Verify the exact frozen
+            # bound work root before considering any scientific payload.
+            or scope.get("work_root") != str(candidate_work)):
         return None
     stage = candidate_work / subchapter
     cp = _read_json(stage / ".microgen_checkpoint.json")
@@ -221,6 +225,55 @@ def _candidate(repo_root: Path, candidate_work: Path, subchapter: str,
     # The old science screen is NEVER adopted if its implementation or
     # transcript fingerprint drifted; four-stage recovery remains possible.
     return (str(completed["slides"]), stage, full_six_valid)
+
+
+def _upstream_copy_payload_sha(stage: Path) -> str:
+    """Hash EXACTLY the source-bound assets the normal upstream import copies.
+
+    Two previously accepted campaigns can share an identical slide checkpoint
+    timestamp because one imported the same six stages from the other. These
+    are not conflicting scientific results if the *complete* importable
+    source/figure/slide/narration/QA payload is byte-identical. Hash every
+    candidate asset, not timestamps, directory names, or old QA verdicts.
+    """
+    stage=Path(stage)
+    if stage.is_symlink() or not stage.is_dir():
+        raise UpstreamReuseError("Unsafe upstream reuse equivalence source")
+    files={}
+    selected=set(ALLOW_FILES)|{"source.pdf"}
+    selected.update(p.name for p in stage.iterdir()
+                    if p.is_file() and ALLOW_PATTERN.fullmatch(p.name))
+    for name in selected:
+        file=stage/name
+        if file.is_symlink():
+            raise UpstreamReuseError("Linked upstream equivalence evidence")
+        if file.is_file():
+            files[name]=file
+        elif file.exists():
+            raise UpstreamReuseError("Non-file upstream equivalence evidence")
+    for dirname in ALLOW_DIRS:
+        folder=stage/dirname
+        if not folder.exists():
+            continue
+        _safe_filetree(folder)
+        for file in folder.rglob("*"):
+            if file.is_file():
+                key=file.relative_to(stage).as_posix()
+                if key in files:
+                    raise UpstreamReuseError("Duplicate upstream import evidence")
+                files[key]=file
+    if not 1<=len(files)<=4000:
+        raise UpstreamReuseError("Unbounded or empty upstream evidence inventory")
+    count=0
+    values=[]
+    for key,file in sorted(files.items()):
+        count+=file.stat().st_size
+        if count>1_000_000_000:
+            raise UpstreamReuseError("Upstream evidence comparison exceeds size bound")
+        values.append((key,_sha(file)))
+    return hashlib.sha256(
+        json.dumps(values,sort_keys=True,ensure_ascii=False).encode("utf8")
+    ).hexdigest()
 
 
 def _copy_evidence(old: Path, target: Path, *, stages=UPSTREAM) -> list[str]:
@@ -285,7 +338,8 @@ def _copy_verifiable_narration_response_cache(
         scope = auth.get("scope", {})
         if (not isinstance(scope, dict) or scope.get("host") != "hp"
                 or scope.get("stop_after") != "acceptance"
-                or scope.get("source_sha256") != source_sha):
+                or scope.get("source_sha256") != source_sha
+                or scope.get("work_root") != str(entry)):
             continue
         old = entry / target.name
         cp = _read_json(old / ".microgen_checkpoint.json")
@@ -389,7 +443,24 @@ def maybe_import_verified_upstream(
         return None
     entries.sort(key=lambda record: record[0], reverse=True)
     if len(entries) > 1 and entries[0][0] == entries[1][0]:
-        raise UpstreamReuseError("Ambiguous equally recent source-verified slides")
+        # A previously verified upstream import RETAINS its original slide
+        # completion timestamp. A later private campaign can therefore have
+        # the same timestamp as the true source campaign. Resolve only exact
+        # byte-identical imports after independently validating ALL candidates.
+        # Different science/narration/figure assets or stage quality remain
+        # a hard ambiguity; do not choose by directory name alone.
+        tied=[row for row in entries if row[0]==entries[0][0]]
+        identities={(row[2],_upstream_copy_payload_sha(row[1]))
+                    for row in tied}
+        if len(identities)!=1:
+            raise UpstreamReuseError(
+                "Ambiguous equally recent source-verified slides: "
+                "divergent science or lecture artifacts"
+            )
+        # When the entire importable evidence is identical, prefer the
+        # earliest private campaign as the canonical source rather than
+        # copying a copy. This cannot change the scientific payload.
+        entries[0]=min(tied,key=lambda row:row[1].parent.name)
     _, old, full_six_valid = entries[0]
     # Prior source/figure/slide work is still useful when the *narration*
     # contains known ambiguous math-letter speech. A revised narrator must

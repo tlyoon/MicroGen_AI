@@ -151,6 +151,7 @@ def maybe_reuse_verified_tts(stage: Path, *, work_root: Path, source_sha: str,
             or new_grant.get("scope",{}).get("host")!="hp"
             or new_grant.get("scope",{}).get("source_sha256")!=source_sha
             or new_grant.get("scope",{}).get("stop_after")!="acceptance"
+            or new_grant.get("scope",{}).get("work_root")!=str(work_root)
             or new_grant.get("scope",{}).get("code_revision") !=
                cp.get("package_commit")
             or not (stage/"source.pdf").is_file()
@@ -176,7 +177,8 @@ def maybe_reuse_verified_tts(stage: Path, *, work_root: Path, source_sha: str,
         if (grant is None or grant.get("publication_authorized") is not False
                 or grant.get("scope",{}).get("host")!="hp"
                 or grant.get("scope",{}).get("source_sha256")!=source_sha
-                or grant.get("scope",{}).get("stop_after")!="acceptance"):
+                or grant.get("scope",{}).get("stop_after")!="acceptance"
+                or grant.get("scope",{}).get("work_root")!=str(previous)):
             continue
         # Only acoustic reviewer identities may change. A voice/provider,
         # output format, cue budget or synthesis setting change makes the

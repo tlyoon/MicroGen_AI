@@ -55,7 +55,7 @@ def fixture(tmp_path):
     scope = {
         "source_sha256": sha(source.read_bytes()),
         "code_revision": "a" * 40, "host": "hp",
-        "stop_after": "acceptance",
+        "work_root":str(prior), "stop_after": "acceptance",
     }
     (prior / reuse.OWNER_RECEIPT).write_text(json.dumps({
         "schema_version": 1,
@@ -166,12 +166,59 @@ def test_forged_incomplete_or_drifted_prior_campaign_cannot_be_imported(
     assert not (work/"2.5").exists()
 
 
-def test_duplicate_equally_recent_science_evidence_fails_closed(tmp_path):
+def test_duplicate_equally_recent_byte_identical_science_reuses_without_rebilling(tmp_path):
+    # Real Nov 17 recurrence: a new bounded campaign imported all six source
+    # stages, preserving the canonical source's old slide completion time.
+    # Exact, independently validated byte-identical evidence is not a new
+    # scientific interpretation and must not block another eligible run.
     def duplicate(base,old_work,stage,source):
         import shutil
-        shutil.copytree(old_work,base/"OTHER_IDENTICAL_CAMPAIGN")
-    with pytest.raises(reuse.UpstreamReuseError,match="Ambiguous"):
-        call_fixture(tmp_path,duplicate)
+        other=base/"OTHER_IDENTICAL_CAMPAIGN"
+        shutil.copytree(old_work,other)
+        grant=other/reuse.OWNER_RECEIPT
+        info=json.loads(grant.read_text())
+        info["scope"]["work_root"]=str(other)
+        grant.write_text(json.dumps(info))
+    result,work,old_stage=call_fixture(tmp_path,duplicate)
+    assert result and result["status"]==reuse.SIX_STATUS
+    assert result["audio_reused"] is False
+    assert json.loads((work/"2.5"/reuse.RECEIPT).read_text())["new_model_requests"] is False
+    assert not (work/"2.5"/"slide1.wav").exists()
+    assert (work/"2.5"/"slides.pdf").read_bytes()==(
+        old_stage/"slides.pdf").read_bytes()
+
+
+def test_same_timestamp_with_divergent_science_or_figure_evidence_fails_closed(
+        tmp_path):
+    def corrupt_duplicate(base,old_work,stage,source):
+        import shutil
+        other=base/"OTHER_DIVERGENT_CAMPAIGN"
+        shutil.copytree(old_work,other)
+        grant=other/reuse.OWNER_RECEIPT
+        info=json.loads(grant.read_text())
+        info["scope"]["work_root"]=str(other)
+        grant.write_text(json.dumps(info))
+        (other/"2.5"/"pages"/"page_1"/"page_1.png").write_bytes(
+            b"DIFFERENT_FIGURE_EVIDENCE")
+    with pytest.raises(reuse.UpstreamReuseError,match="divergent science"):
+        call_fixture(tmp_path,corrupt_duplicate)
+
+
+def test_same_timestamp_with_only_four_verifiable_stages_fails_closed(tmp_path):
+    def incomplete_duplicate(base,old_work,stage,source):
+        import shutil
+        other=base/"OTHER_FOUR_STAGE_CAMPAIGN"
+        shutil.copytree(old_work,other)
+        grant=other/reuse.OWNER_RECEIPT
+        info=json.loads(grant.read_text())
+        info["scope"]["work_root"]=str(other)
+        grant.write_text(json.dumps(info))
+        checkpoint=other/"2.5"/".microgen_checkpoint.json"
+        j=json.loads(checkpoint.read_text())
+        j["completed"].pop("science_qa")
+        checkpoint.write_text(json.dumps(j))
+    with pytest.raises(reuse.UpstreamReuseError,match="divergent science"):
+        call_fixture(tmp_path,incomplete_duplicate)
 
 
 def test_standing_normal_process_dispatches_reuse_before_prepare(tmp_path):
@@ -507,3 +554,16 @@ def test_prior_six_stage_math_voice_is_downgraded_to_four_on_new_policy(
     assert receipt["new_audio_reused"] is False
     assert receipt["publication_allowed"] is False
     assert reuse.verify_import_receipt(stage)["stages"]==list(reuse.FOUR_UPSTREAM)
+
+
+def test_copied_owner_grant_with_wrong_work_root_is_not_valid_evidence(
+        tmp_path):
+    # An unrelated QA shadow must not become eligible just because a test
+    # copied a real grant file and valid scientific outputs into its folder.
+    def duplicate_then_remove_real(base,old_work,stage,source):
+        import shutil
+        shutil.copytree(old_work,base/"COPIED_GRANT_NOT_A_REAL_CAMPAIGN")
+        shutil.rmtree(old_work)
+    result,work,_=call_fixture(tmp_path,duplicate_then_remove_real)
+    assert result is None
+    assert not (work/"2.5").exists()

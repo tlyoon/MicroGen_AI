@@ -188,6 +188,24 @@
       "last_validated": "2026-11-17",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-UPSTREAM-VERIFIED-SOURCE-TIE",
+      "classification": "authorization",
+      "stages": [
+        "figure_extraction",
+        "slides"
+      ],
+      "exception": "UpstreamReuseError",
+      "message_marker": "Ambiguous equally recent source-verified slides",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_verified_upstream_reuse.maybe_import_verified_upstream",
+      "preconditions": "Two or more independently validated upstream candidates with same slides completion time; each source+code private campaign authorization must bind the exact work root. Never select copied grants.",
+      "verification": "Reject copied work-root grant; compare 84+ actual PDF/narration/science/figure assets under bounded all-importable-file SHA manifest; accept only byte-identical, same six-stage validity or fail closed on conflicting evidence.",
+      "historical_evidence": "20261117_HP_G3_SERWAY27_MATH_3322_PRIVATE failed before TTS because separately created HP test shadow had copied 5cc grant and same slide timestamp; real 84-file source evidence exact; 84 focused tests.",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }
