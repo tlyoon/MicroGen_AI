@@ -157,6 +157,8 @@ def test_normal_batch_owner_grant_without_any_approval_flag(
                       return_value={"free_gb": 20, "required_gb": 8}), \
          patch.object(batch, "resolve_docling_python",
                       return_value=sys.executable), \
+         patch.object(batch, "inspect_local_checkout",
+                      return_value="d"*40), \
          patch.object(batch, "preflight") as preflight, \
          patch.object(batch, "subchapter_ownership",
                       return_value=nullcontext(None)), \
@@ -247,6 +249,8 @@ def test_normal_batch_exact_scope_resume_needs_no_second_approval(
                           return_value={"free_gb":20,"required_gb":8}), \
              patch.object(batch,"resolve_docling_python",
                           return_value=sys.executable), \
+             patch.object(batch,"inspect_local_checkout",
+                          return_value="d"*40), \
              patch.object(batch,"preflight"), \
              patch.object(batch,"subchapter_ownership",
                           return_value=nullcontext(None)), \
