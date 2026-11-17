@@ -263,3 +263,65 @@ def test_newly_discovered_checkpoint_corruption_is_registered_for_future_reuse(
     assert rule["max_unmodified_retries"]==0
     assert classify_log_attempt("acoustic_qa",traceback.encode("utf8"),
                                 registry_folder=root) is None
+
+BUDGET_ACOUSTIC = (
+    "Traceback (most recent call last):\n"
+    '  File "microgen_autonomous_acoustic_gate.py", line 905, in audit_stage\n'
+    '    raise AutonomousAcousticError("REPAIR_CANDIDATE_BUDGET_HOLD")\n'
+    "AutonomousAcousticError: Autonomous acoustic QA blocked: "
+    "REPAIR_CANDIDATE_BUDGET_HOLD: independent evidence requires bounded "
+    "resolution; do not rewrite or replay original speech\n"
+)
+
+
+def test_three_candidate_acoustic_hold_is_known_scientific_not_uncertain_paid(tmp_path):
+    root=stage(tmp_path)
+    decision=classify_log_attempt(
+        "acoustic_qa",BUDGET_ACOUSTIC.encode("utf8"),registry_folder=root)
+    assert decision["failure_id"]=="MGA-ACOUSTIC-REPAIR-BUDGET-HOLD"
+    assert decision["category"]=="scientific_qa"
+    assert decision["disposition"]=="DETERMINISTIC_HOLD"
+    assert decision["max_unmodified_retries"]==0
+    assert classify_log_attempt(
+        "tts",BUDGET_ACOUSTIC.encode("utf8"),registry_folder=root) is None
+    worker=root/"three_candidate_acoustic.py"
+    worker.write_text(
+        "import sys\nsys.stderr.write("+repr(BUDGET_ACOUSTIC)+")\nsys.exit(1)\n",
+        encoding="utf8")
+    log=tmp_path/"actual_paid_stage.log"
+    with pytest.raises(RuntimeError,match=(
+        "non-retryable AutonomousAcousticError.*"
+        "recovery_id=MGA-ACOUSTIC-REPAIR-BUDGET-HOLD")):
+        batch.run_subprocess(
+            sys.executable,worker.name,root,log,
+            "independent two-model acoustic QA",
+            gemini_stage=False,retries=3,stage_name="acoustic_qa",
+            nonrepeatable_external_stage=True,
+        )
+    assert log.read_text().count("attempt 1")==1
+    assert "attempt 2" not in log.read_text()
+    from microgen_recovery_registry import verified_stage_hold
+    assert verified_stage_hold(root,"acoustic_qa")
+    receipt=json.loads((root/DECISION_NAME).read_text(encoding="utf8"))
+    assert receipt["decision"]["failure_id"]==decision["failure_id"]
+    assert receipt["accepted_as_qa"] is False
+    assert receipt["paid_retry_authorized"] is False
+    assert receipt["publication_allowed"] is False
+    assert receipt["next_eligible_operation"]=="HOLD_SAME_STAGE_UNTIL_VERIFIED_NEW_EVIDENCE"
+
+
+def test_repair_budget_is_not_matched_from_untrusted_pdfs_or_old_tracebacks(tmp_path):
+    root=stage(tmp_path)
+    for body in (
+        BUDGET_ACOUSTIC.split("Traceback (most recent call last):\n")[1],
+        "A textbook says REPAIR_CANDIDATE_BUDGET_HOLD",
+        BUDGET_ACOUSTIC+
+        "Traceback (most recent call last):\n"
+        "TimeoutError: Gemini unavailable\n",
+        BUDGET_ACOUSTIC.replace(
+            "Autonomous acoustic QA blocked: ", "Acoustic repair passed: "),
+        BUDGET_ACOUSTIC.replace(
+            "AutonomousAcousticError:", "DifferentAcousticError:"),
+    ):
+        assert classify_log_attempt(
+            "acoustic_qa",body.encode("utf8"),registry_folder=root) is None

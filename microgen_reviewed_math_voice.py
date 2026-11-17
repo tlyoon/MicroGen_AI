@@ -317,6 +317,30 @@ def reviewed_math_voice(text: str) -> str:
             "vee ex",value,flags=re.I)
         value=clarify_x_component(value)
 
+    # Recurrent two-Gemini x/y confusion in compact a_x speech is a
+    # pronunciation hazard, not harmless orthographic ASR variation.
+    # Expand ONLY an independently source-identifiable acceleration label
+    # or full equation-introduction role. Avoid global a_x substitution:
+    # previous full-lecture cue preflight proved that broad paraphrases
+    # exceed the fixed semantic mapping budget on unrelated slides.
+    from microgen_source_bound_voice_recovery import clarify_x_component
+    value=re.sub(
+        r"\b(?P<relation>slope\s+(?:equals|equal\s+to)\s+the\s+)"
+        r"(?P<component>acceleration\s+ay\s+(?:sub\s+)?ex)\b"
+        r"(?!\s+(?:average|avg)\b)",
+        lambda m:m["relation"]+clarify_x_component(m["component"]),
+        value,flags=re.I)
+    value=re.sub(
+        r"\b(?P<intro>defined\s+as|means|when)\s+"
+        r"(?P<variable>ay\s+(?:sub\s+)?ex)\s+equals\b",
+        lambda m: m["intro"]+" "+clarify_x_component(m["variable"])+" equals",
+        value,flags=re.I)
+    value=re.sub(
+        r"\b(?P<lhs>the\s+x\s+component\s+of\s+acceleration\s+equals)\s+"
+        r"(?P<rhs>ay\s+(?:sub\s+)?ex\s+(?:average|avg))\b",
+        lambda m:m["lhs"]+" "+clarify_x_component(m["rhs"]),
+        value,flags=re.I)
+
     # A source-bound fraction (0 - initial speed)/duration needs the
     # subtraction grouped aloud. Do not convert a two-digit integer to a
     # decimal or assume 63 ~= 6.3: name the WHOLE numerical value and the

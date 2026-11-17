@@ -344,3 +344,35 @@ def test_narrator_keeps_complete_signed_integer_division_in_one_cue():
         source.replace("divided by 2.0","divided by 0"),
     ):
         assert "whole-number value 63" not in reviewed_math_voice(changed)
+
+def test_recurrent_compact_x_acceleration_blind_asr_is_prevented_before_tts():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    examples={
+        "The straight line has constant slope equal to the acceleration ay ex.":
+        "constant slope equal to the acceleration along the x axis.",
+        "instantaneous acceleration defined as ay ex equals dee vee sub ex over dee tee":
+        "defined as the x component of acceleration equals",
+        "Constant acceleration means ay ex equals ay sub ex average":
+        "means the x component of acceleration equals the average x component of acceleration",
+        "Finally, when ay ex equals 0, all equations reduce to constant velocity.":
+        "when the x component of acceleration equals 0",
+    }
+    for before,required in examples.items():
+        after=reviewed_math_voice(before)
+        assert required in after,(before,after)
+        assert numbers(after)==numbers(before)
+        assert reviewed_math_voice(after)==after
+
+    # This older compact symbol has an established reviewed pronunciation.
+    assert reviewed_math_voice(
+        "Later, a sub x equals zero.")=="Later, ay sub ex equals zero."
+    for unreviewed in (
+        "The acceleration is in the y direction.",
+        "A colloquial remark about a y-shaped axis.",
+        "The symbol ay ex is an arbitrary variable name.",
+        "For a 2D problem, ay equals positive acceleration.",
+    ):
+        assert reviewed_math_voice(unreviewed)==unreviewed
+
+    wrong="The straight line has constant slope equal to the acceleration ay why."
+    assert reviewed_math_voice(wrong)==wrong

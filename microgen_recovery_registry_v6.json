@@ -20,6 +20,23 @@
       "publication_allowed": false
     },
     {
+      "id": "MGA-ACOUSTIC-REPAIR-BUDGET-HOLD",
+      "classification": "scientific_qa",
+      "stages": [
+        "acoustic_qa"
+      ],
+      "exception": "AutonomousAcousticError",
+      "message_marker": "Autonomous acoustic QA blocked: REPAIR_CANDIDATE_BUDGET_HOLD",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_autonomous_acoustic_gate.audit_stage",
+      "preconditions": "Source/WAV/voice-bound independent two-model ASR identifies more repair candidates than the existing finite two-slide repair budget; preserve failed transcripts and PCM; no unchanged replay or waiver",
+      "verification": "Independently reproduce the original SHA-bound three-slide review categories and signatures, prove the source-faithful speaking repair in the normal voice adapter, pass real-PDF timed-cue and full regression, and obtain fresh two-Gemini QA before any video acceptance",
+      "historical_evidence": "20261117_HP_G3_SERWAY27_SOURCE_CUE_68E_PRIVATE/2.7: original immutable independent Gemini 3.5/3.8 reviewers flagged slides 9,14,20 as compact x-acceleration pronunciation risks; full 21-slide 88-cue PCM source proof preserved; subsequent exact three-context voice-only candidate passed source-PDF timed preflight without provider calls",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-SOURCE-CUE-PLANNING",
       "classification": "scientific_qa",
       "stages": [
