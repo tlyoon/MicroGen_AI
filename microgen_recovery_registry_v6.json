@@ -171,6 +171,23 @@
       "last_validated": "2026-11-17",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-TTS-REUSE-CUE-PLAN-PROVENANCE",
+      "classification": "data",
+      "stages": [
+        "tts"
+      ],
+      "exception": "CueTTSError",
+      "message_marker": "Unreadable source-bound cue plan",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_verified_tts_reuse.maybe_reuse_verified_tts",
+      "preconditions": "Original cue plan is independently verified; failed isolated candidate lacks source-math policy files or cannot prove original PDF/math SHA. Never assume all other malformed cue plans have the same root.",
+      "verification": "12 exact TTS producer-policy SHA matches, 111 immutable original audio/provenance files transferred in an isolated real 21-slide shadow, full source-bound math cue revalidation passes, and changing either policy is rejected",
+      "historical_evidence": "20261117_HP_G3_SERWAY27_V6_5CC_PRIVATE froze at TTS reuse on 2026-11-17 with CueTTSError; source-plan candidate missing two math policy files; no extra acoustic calls",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }

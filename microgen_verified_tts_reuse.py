@@ -22,6 +22,14 @@ import tempfile
 
 RECEIPT = ".microgen_verified_audio_reuse.json"
 OWNER = ".microgen_bounded_provider_authorization.json"
+# Short source-attested mathematical cue policies are part of the TTS
+# evidence producer. The independently reverified cue plan binds their
+# exact SHA256, so they must accompany candidate validation and match
+# original source code before any PCM is adopted.
+MATH_POLICY = (
+    "microgen_source_math_cue.py",
+    "microgen_worked_equation_recovery.py",
+)
 # Exact producer dependencies, not acoustic comparator dependencies.
 PRODUCER = (
     "text_to_speech_v25.py", "microgen_flash_tts.py",
@@ -29,7 +37,7 @@ PRODUCER = (
     "microgen_cue_semantic_mapping.py", "microgen_timed_highlight_contract.py",
     "microgen_reviewed_math_voice.py", "microgen_tts_provenance.py",
     "microgen_private_dev_policy.py", "microgen_campaign_authorization.py",
-)
+) + MATH_POLICY
 SOURCE = ("source.pdf", "slides.pdf", "script_tts.json", "script.txt")
 TIMED = (".microgen_timed_cue_plan.json",
          ".microgen_timed_highlights.json",
@@ -222,7 +230,10 @@ def maybe_reuse_verified_tts(stage: Path, *, work_root: Path, source_sha: str,
     with tempfile.TemporaryDirectory(prefix=".microgen-audio-reuse-",
                                      dir=work_root) as tmp:
         candidate=Path(tmp)
-        for name in SOURCE:
+        for name in SOURCE + MATH_POLICY:
+            # The cue-plan verifier recomputes hashes from the candidate
+            # directory. It cannot verify a recovered mathematical cue
+            # without the exact policies to which the original plan refers.
             shutil.copy2(stage/name,candidate/name)
         plan_source=(stage/TIMED[0] if (stage/TIMED[0]).is_file()
                      else old/TIMED[0])

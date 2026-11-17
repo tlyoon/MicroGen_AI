@@ -81,6 +81,9 @@ def _setup(tmp_path, monkeypatch):
         assert count==1
         assert all((stage/name).exists() for name in
                    reuse.SOURCE+(reuse.TIMED[0],)+reuse.TIMED[1:])
+        # An actual PDF-grounded math plan binds the source-math helper
+        # policy SHA; candidate QA cannot run without those exact files.
+        assert all((stage/name).is_file() for name in reuse.MATH_POLICY)
         assert (stage/"slide1.pdf").is_file()
         assert (stage/"slide1.wav").is_file()
         assert (stage/"highlight_chunks"/"slide1_cue1.wav").is_file()
@@ -126,7 +129,8 @@ def test_reuses_identical_pcm_from_failed_acoustic_campaign_without_old_verdict(
 @pytest.mark.parametrize("drift",[
     "source","script","narration_code","voice_policy","cue_plan",
     "source_slide","environment_voice","missing_grant",
-    "old_unverified_tts","extra_cache_file","source_provenance"
+    "old_unverified_tts","extra_cache_file","source_provenance",
+    "source_math_policy","worked_equation_policy"
 ])
 def test_mismatched_or_unverified_prior_audio_is_not_imported(
     tmp_path, monkeypatch, drift,
@@ -140,6 +144,10 @@ def test_mismatched_or_unverified_prior_audio_is_not_imported(
         (new/"text_to_speech_v25.py").write_bytes(b"DRIFT")
     elif drift=="voice_policy":
         (new/"microgen_reviewed_math_voice.py").write_bytes(b"DRIFT")
+    elif drift=="source_math_policy":
+        (new/reuse.MATH_POLICY[0]).write_bytes(b"DRIFT")
+    elif drift=="worked_equation_policy":
+        (new/reuse.MATH_POLICY[1]).write_bytes(b"DRIFT")
     elif drift=="cue_plan":
         (new/reuse.TIMED[0]).write_bytes(b"DRIFT")
     elif drift=="source_slide":
@@ -222,3 +230,41 @@ def test_wrong_code_bound_owner_grant_cannot_import_tts(
     cp["package_commit"]="DIFFERENT_REVISION"
     assert _run(new,work,cp,mark) is None
     assert not (new/"slide1.wav").exists()
+
+
+def test_original_math_policy_hashes_are_source_producer_dependencies():
+    # All candidate copies must carry the exact same two policies that the
+    # independent cue plan uses for PDF numerical and geometry grounding.
+    import microgen_timed_cue_tts as timed
+    assert len(reuse.MATH_POLICY)==2
+    assert set(reuse.MATH_POLICY).issubset(set(reuse.PRODUCER))
+    import inspect
+    verifier=inspect.getsource(timed._verified_plan)
+    for policy in reuse.MATH_POLICY:
+        assert policy in verifier
+    candidate_source=inspect.getsource(reuse.maybe_reuse_verified_tts)
+    assert "for name in SOURCE + MATH_POLICY:" in candidate_source
+    assert "shutil.copy2(stage/name,candidate/name)" in candidate_source
+
+
+def test_newly_fixed_real_math_candidate_error_has_persistent_v6_history():
+    from microgen_recovery_registry import load_registry, classify_log_attempt
+    root=Path(__file__).resolve().parents[1]
+    rules=load_registry(root)["entries"]
+    matching=[x for x in rules
+              if x["id"]=="MGA-TTS-REUSE-CUE-PLAN-PROVENANCE"]
+    assert len(matching)==1
+    row=matching[0]
+    assert row["handler"]=="microgen_verified_tts_reuse.maybe_reuse_verified_tts"
+    assert row["max_unmodified_retries"]==0
+    assert row["publication_allowed"] is False
+    # The source-only historical signature can be recognized during any
+    # later child-process traceback. It must not authorize paying for or
+    # accepting an audio result when the proof is absent.
+    traceback=(
+        "Traceback (most recent call last):\\n"
+        "CueTTSError: Unreadable source-bound cue plan\\n"
+    ).replace("\\n","\n").encode("utf8")
+    found=classify_log_attempt("tts",traceback,registry_folder=root)
+    assert found and found["failure_id"]==row["id"]
+    assert found["disposition"]=="DETERMINISTIC_HOLD"
