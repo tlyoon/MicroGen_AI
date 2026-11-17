@@ -208,9 +208,10 @@ def canonical_math_transcript(text: str) -> str:
     # Multiplication by exactly the time variable t; never equate missing
     # multiplication, t^2 and t, or multiplication by x/y.
     value = re.sub(r"\s*\*\s*t\b", " times tee", value)
-    # 1/2 is already normalized above. Other explicit numeric divisions
-    # preserve the operation rather than losing '/' during tokenization.
-    value = re.sub(r"(?<=\d)\s*/\s*(?=\d)", " divided by ", value)
+    # 1/2 is normalized above. Require a multi-digit numerator and an
+    # explicit decimal denominator; do not rewrite 1/3 of a prose mixture.
+    value = re.sub(r"\b(\d{2,})\s*/\s*(\d+\.\d+)\b",
+                   lambda m: m[1] + " divided by " + m[2], value)
     value = re.sub(r"\bt\s*>\s*0\b", "t greater than 0", value)
     # The two-index billboard displacement keeps the SUBTRACTION sign.
     value = re.sub(r"\bt\s*-\s*(?=ex\s+bee\b)",
