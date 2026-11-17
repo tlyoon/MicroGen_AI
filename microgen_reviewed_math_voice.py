@@ -293,6 +293,54 @@ def reviewed_math_voice(text: str) -> str:
                 "the square of time")
     value=formula.sub(clarify_constant_equation,value)
 
+    # Reuse the historical source-bound spoken x-component clarifier only
+    # for complete equation roles implicated by independent ASR recurrences.
+    # Do NOT revoice a previously grounded standalone summary or average
+    # velocity identity: unnecessary paraphrases can exhaust the fixed
+    # four-slide semantic cue budget before the genuine risk is reached.
+    # This is a structural equation-role filter, NOT a slide/page number
+    # exception, nor a waiver for reviewers hearing a mathematical y-axis.
+    risk_equation_patterns=(
+        r"\bay\s+sub\s+ex\s+equals\s+vee\s+sub\s+ex\b",
+        r"\bay\s+sub\s+ex\s+times\s+(?:t|tee)\b",
+        r"\bvee\s+sub\s+ex\s+final\s+equals\s+vee\s+sub\s+ex\s+initial\s+plus\b",
+        r"\bv\s+ex\s+final\s+equals\s+v\s+ex\s+initial\s+plus\b",
+        r"\bay\s+ex\s+equals\s+the\s+fraction\b",
+        r"\bconstant\s+speed\s+vee\s+ex\s+car\s+of\b",
+        r"\bone-half\s+of\s+v\s+ex\s+initial\s+plus\s+v\s+ex\s+final\b",
+    )
+    if any(re.search(pattern,value,flags=re.I)
+           for pattern in risk_equation_patterns):
+        from microgen_source_bound_voice_recovery import clarify_x_component
+        value=re.sub(
+            r"\bv\s+ex(?=\s+(?:initial|final|eye|eff|car|trooper)\b)",
+            "vee ex",value,flags=re.I)
+        value=clarify_x_component(value)
+
+    # A source-bound fraction (0 - initial speed)/duration needs the
+    # subtraction grouped aloud. Do not convert a two-digit integer to a
+    # decimal or assume 63 ~= 6.3: name the WHOLE numerical value and the
+    # numerator while retaining all original digits, sign and denominator.
+    value=re.sub(
+        r"\bgives\s+(?P<zero>0)\s+minus\s+(?P<whole>[1-9]\d{1,2})"
+        r"\s+divided\s+by\s+(?P<duration>\d+(?:\.\d+)?)\b",
+        lambda m: ("gives the numerator "+m["zero"]+
+                   " minus the whole-number value "+m["whole"]+
+                   ", with that entire numerator divided by "+m["duration"]),
+        value, flags=re.I)
+
+    # Explicit spoken multiplication, not an omitted word, prevents
+    # equation-term boundaries from silently disappearing in independent
+    # recognizers. Only numerically exact speed x time and half x factor
+    # constructions qualify, preserving every source quantity.
+    value=re.sub(r"\bone-half\s+times\b",
+                 "one-half multiplied by",value,flags=re.I)
+    value=re.sub(
+        r"\b(?P<speed>\d+(?:\.\d+)?\s+meters\s+per\s+second)"
+        r"\s+times\s+(?P<duration>\d+(?:\.\d+)?\s+seconds)\b",
+        lambda m:m["speed"]+", multiplied by "+m["duration"],
+        value,flags=re.I)
+
     # The ungrouped spoken factor "a_x times x_final minus x_initial"
     # is ambiguous even when the PRINTED source is a_x*(x_f-x_i).
     # Independent blind acoustic reviewers once both inserted a spurious
@@ -306,6 +354,22 @@ def reviewed_math_voice(text: str) -> str:
         r"(?P<difference>(?:x|ex)\s+final\s+minus\s+(?:x|ex)\s+initial)\b",
         lambda m: m["factor"]+" the quantity "+m["difference"],
         value,flags=re.I)
+
+    # Two independent audio transcriptions disagreed about the two MINUS
+    # operators in the quadratic a_x*t^2/2 - v_x*t - x_B = 0. Describe
+    # the complete factor and BOTH subtractions aloud; do not change the
+    # coefficient, exponent, variable index or equality. This is a
+    # deterministic wording proposal, never a post-hoc acoustic waiver.
+    value=re.sub(
+        r"\b(?P<lead>one-half\s+the\s+x\s+component\s+of\s+acceleration)"
+        r"\s+times\s+tee\s+squared\s+minus\s+"
+        r"(?P<velocity>the\s+car's\s+x\s+component\s+of\s+velocity)"
+        r"\s+times\s+(?:t|tee)\s+minus\s+"
+        r"(?P<position>ex\s+bee)\s+equals\s+0\b",
+        lambda m:(m["lead"]+" multiplied by tee squared, minus the full "
+                  "product of "+m["velocity"]+" multiplied by tee, and "
+                  "minus the position term "+m["position"]+" equals 0"),
+        value, flags=re.I)
 
     return value
 

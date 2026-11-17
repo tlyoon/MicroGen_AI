@@ -260,3 +260,69 @@ def test_displacement_parentheses_voice_keeps_exact_source_equation():
         before.replace("acceleration times","velocity times"),
     ):
         assert reviewed_math_voice(changed)==changed
+
+def test_real_failure_family_compact_x_component_voice_is_source_faithful():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    before=("The velocity vee sub ex final equals vee sub ex initial "
+            "plus ay sub ex times t. The jet has acceleration ay sub ex.")
+    # A complete, potentially ambiguous equation role triggers pronunciation
+    # clarification even in a fresh production run, not just a prior PDF.
+    after=reviewed_math_voice(before)
+    assert "final velocity along the x axis equals" in after
+    assert "the initial x component of velocity" in after
+    assert "the x component of acceleration" in after
+    assert "ay sub ex" not in after
+    assert numbers(after)==numbers(before)
+    assert reviewed_math_voice(after)==after
+
+
+def test_previously_clear_average_velocity_narration_not_unnecessarily_revoiced():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    source=("Let us examine Average Velocity for Constant Acceleration. "
+            "vee sub ex average equals vee sub ex initial plus vee sub ex final, "
+            "divided by 2, for constant ay sub ex.")
+    assert reviewed_math_voice(source)==source
+
+
+def test_full_integer_fraction_voice_changes_neither_value_nor_sign():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    before=("Calculating acceleration gives 0 minus 63 divided by 2.0, "
+            "yielding minus 32 meters per second squared.")
+    after=reviewed_math_voice(before)
+    assert "the whole-number value 63" in after
+    assert "that entire numerator divided by 2.0" in after
+    assert "minus 32" in after
+    assert "6.3" not in after
+    assert numbers(before)==numbers(after)
+    assert reviewed_math_voice(after)==after
+    wrong=before.replace("63","6.3")
+    assert "whole-number value" not in reviewed_math_voice(wrong)
+
+
+def test_source_voice_preserves_mathematically_different_axis_or_operator():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    wrong=("The y component of acceleration is negative, "
+           "and ex final plus ex initial equals 63.")
+    assert reviewed_math_voice(wrong)==wrong
+    from microgen_tts_acoustic_qa import mismatch_details
+    assert mismatch_details("The number is 63.","The number is 6.3.")[
+        "sensitive_mismatches"]>0
+    assert mismatch_details("ay ex is positive","a sub y is positive")[
+        "difference_fraction_upper_bound"]>0
+
+def test_quadratic_minus_sign_clarity_without_operator_loss():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    source=("The quadratic equation one-half ay sub ex times tee squared "
+            "minus vee ex car times t minus ex bee equals 0.")
+    spoken=reviewed_math_voice(source)
+    assert "minus the full product of the car's x component of velocity" in spoken
+    assert "minus the position term ex bee equals 0" in spoken
+    assert spoken.count("minus") == 2
+    assert numbers(source)==numbers(spoken)
+    assert reviewed_math_voice(spoken)==spoken
+    for altered in (
+        source.replace("minus vee ex car", "plus vee ex car"),
+        source.replace("minus ex bee", "plus ex bee"),
+        source.replace("tee squared", "tee cubed"),
+    ):
+        assert "minus the full product" not in reviewed_math_voice(altered)
