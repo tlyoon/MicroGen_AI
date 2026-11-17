@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import re
 import shutil
@@ -507,10 +508,20 @@ def unchanged_failure_hold(cp: dict, stage_name: str, stage: Path) -> bool:
 
 
 def wait_for_gemini_circuit(lease=None) -> None:
-    """Pause while the shared billing/capacity circuit is open.
+    """Finite pause for the shared Gemini billing/capacity circuit.
 
-    A failed/lost distributed lease must interrupt even a long capacity wait.
+    Do not hold the entire workflow forever for an unavailable external
+    dependency. A terminal pause lets the coordinator advance independent
+    authorized work. It never authorizes repeated paid submissions.
     """
+    raw = os.environ.get("MICROGEN_CIRCUIT_MAX_WAIT_SECONDS", "900")
+    try:
+        limit = float(raw)
+    except (ValueError, OverflowError) as exc:
+        raise RuntimeError("INVALID_FINITE_GEMINI_CIRCUIT_WAIT_BUDGET") from exc
+    if not (60 <= limit <= 7200) or not math.isfinite(limit):
+        raise RuntimeError("INVALID_FINITE_GEMINI_CIRCUIT_WAIT_BUDGET")
+    deadline = time.monotonic() + limit
     last = 0.0
     while True:
         if lease is not None:
@@ -518,16 +529,23 @@ def wait_for_gemini_circuit(lease=None) -> None:
         opened, data = circuit_is_open()
         if not opened:
             return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "GEMINI_CIRCUIT_BOUNDED_PAUSE: provider still unavailable "
+                "after finite wait; preserve stage checkpoint and continue "
+                "independent eligible sections"
+            )
         retry_after = float((data or {}).get("retry_after_epoch", 0) or 0)
         wait = max(1.0, retry_after - time.time())
         if time.time() - last >= 60:
             print(
                 f"[batch] Gemini circuit open ({(data or {}).get('type','unknown')}); "
-                f"pausing this stage, next probe in about {wait:.0f}s",
+                f"bounded next probe in about {min(wait, remaining):.0f}s",
                 flush=True,
             )
             last = time.time()
-        time.sleep(min(5.0 if lease is not None else 60.0, wait))
+        time.sleep(min(5.0 if lease is not None else 60.0, wait, remaining))
 
 
 def _assign_windows_kill_job(proc: subprocess.Popen):
@@ -785,8 +803,14 @@ def run_subprocess(
     retries: int,
     lease=None,
     stage_name: str | None = None,
+    nonrepeatable_external_stage: bool = False,
 ) -> None:
+    # A failed whole-stage run may have submitted a paid provider request.
+    # Request-level replay is permitted only by the stage's own verified
+    # idempotency machinery, never by relaunching its entire Python driver.
+    # Unknown non-paid failures keep the established bounded retry policy.
     attempt = 0
+    circuit_resume_cycles = 0
     while True:
         if lease is not None:
             lease.assert_held()
@@ -841,12 +865,29 @@ def run_subprocess(
                         "source-bound scientific/QA evidence still required"
                     )
 
-        # If the request tripped the shared circuit, this is an external pause,
-        # not a stage failure and must not consume the retry count.
+        # A post-send model error is an uncertain external effect, never
+        # proof that a paid request did not happen. The outer persisted
+        # inflight_provider_stage is reconciled independently on restart.
+        if nonrepeatable_external_stage:
+            raise RuntimeError(
+                f"AMBIGUOUS_PROVIDER_STAGE_HOLD: {label} failed after "
+                f"{attempt + 1} whole-stage attempt(s); do not repeat an "
+                "uncertain paid request without source-bound reconciliation"
+            )
+
+        # An external circuit pause is distinct from scientific QA and must
+        # not retry forever across repeated reopen/close cycles.
         if gemini_stage:
             opened, _ = circuit_is_open()
             if opened:
-                print(f"[{stage.name}] {label}: Gemini circuit opened; pausing", flush=True)
+                circuit_resume_cycles += 1
+                if circuit_resume_cycles > 2:
+                    raise RuntimeError(
+                        "GEMINI_CIRCUIT_RECOVERY_EXHAUSTED: repeated external "
+                        "outages after finite resume cycles; preserve checkpoint"
+                    )
+                print(f"[{stage.name}] {label}: Gemini circuit opened; "
+                      f"bounded pause {circuit_resume_cycles}/2", flush=True)
                 wait_for_gemini_circuit(lease)
                 continue
 
@@ -1318,6 +1359,11 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     retries=args.stage_retries,
                     lease=lease,
                     stage_name=stage_name,
+                    nonrepeatable_external_stage=bool(
+                        getattr(args, "bounded_provider_scope_verified", False)
+                        and stage_name in (GEMINI_STAGES | {"tts"})
+                        and not (offline_mapping and
+                                 stage_name == "figure_mapping")),
                 )
                 if lease is not None:
                     lease.assert_held()
@@ -1345,6 +1391,30 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 "message": str(exc),
                 "utc": utc_now(),
             }
+            # V6 finite-resource decisions are generated by the PARENT
+            # runner, not necessarily by a child traceback. Classify the
+            # exact bounded outage/uncertain external-effect rule and persist
+            # it in the already durable stage checkpoint. It is NOT an
+            # independently verified QA success or a paid retry grant.
+            if (stage / "microgen_recovery_registry_v6.json").is_file():
+                try:
+                    from microgen_recovery_registry import classify_runtime_error
+                    parent_rule = classify_runtime_error(
+                        stage_name, exc, registry_folder=stage)
+                    if parent_rule:
+                        failure["recovery_id"] = parent_rule["failure_id"]
+                        failure["recovery_disposition"] = parent_rule["disposition"]
+                        failure["recovery_registry_sha256"] = (
+                            parent_rule["registry_sha256"])
+                        failure["paid_retry_authorized"] = False
+                        failure["next_eligible_operation"] = (
+                            "ADVANCE_INDEPENDENT_AUTHORIZED_WORK"
+                            if parent_rule["disposition"] ==
+                               "PAUSED_EXTERNAL_DEPENDENCY" else
+                            "RECONCILE_UNCERTAIN_PROVIDER_EFFECT"
+                        )
+                except (OSError, ValueError, RuntimeError):
+                    failure["recovery_disposition"] = "RECOVERY_EVIDENCE_HOLD"
             # Copy only structured, source-bound registry metadata to
             # the checkpoint. Never copy raw Gemini transcripts or log text
             # into generic recovery history.

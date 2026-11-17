@@ -107,6 +107,70 @@
       "last_validated": "2026-11-16",
       "max_unmodified_retries": 0,
       "publication_allowed": false
+    },
+    {
+      "id": "MGA-GEMINI-CIRCUIT-PAUSED",
+      "classification": "infrastructure",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "GEMINI_CIRCUIT_BOUNDED_PAUSE",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "microgen_batch.wait_for_gemini_circuit",
+      "preconditions": "Finite Gemini circuit wait budget has elapsed; external capacity remains unavailable; no implicit paid reissue",
+      "verification": "Recheck provider circuit/lease on a later separately eligible run with unchanged provider authorization and checkpoint",
+      "historical_evidence": "2026-11-17 HP zero-provider simulated 60-second circuit failure and finite pause tests",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-GEMINI-CIRCUIT-OSCILLATION",
+      "classification": "infrastructure",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "GEMINI_CIRCUIT_RECOVERY_EXHAUSTED",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "microgen_batch.run_subprocess",
+      "preconditions": "External provider repeatedly fails despite reopened capacity; finite two-cycle cap reached",
+      "verification": "Independent provider recovery plus source/code/campaign scope preserved; no unlimited same-stage retries",
+      "historical_evidence": "2026-11-17 HP simulated oscillating three-round provider outage with zero Gemini calls",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-UNCERTAIN-PAID-WHOLE-STAGE",
+      "classification": "authorization",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa",
+        "tts"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "AMBIGUOUS_PROVIDER_STAGE_HOLD",
+      "disposition": "UNRESOLVED_EXTERNAL_EFFECT_HOLD",
+      "handler": "microgen_batch.run_subprocess",
+      "preconditions": "Source-bound private campaign may have submitted paid work; the whole failed driver cannot be replayed as a retry",
+      "verification": "Reconcile exact request-granular idempotency tokens, historical provider acceptance and immutable receipt in separately bounded authorized campaign",
+      "historical_evidence": "2026-11-17 HP four simulated private stages each proven one whole-stage submission and no duplicate requests",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
     }
   ]
 }

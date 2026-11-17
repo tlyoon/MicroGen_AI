@@ -21,7 +21,8 @@ REGISTRY_NAME = "microgen_recovery_registry_v6.json"
 DECISION_NAME = ".microgen_recovery_v6.json"
 ALLOWED_CLASSES = {"scientific_qa", "infrastructure", "software",
                    "data", "authorization", "orchestration"}
-ALLOWED_DISPOSITIONS = {"DETERMINISTIC_HOLD"}
+ALLOWED_DISPOSITIONS = {"DETERMINISTIC_HOLD", "PAUSED_EXTERNAL_DEPENDENCY",
+                        "UNRESOLVED_EXTERNAL_EFFECT_HOLD"}
 CLASS_RE = re.compile(
     r"^[ \t]*(?P<exception>[A-Za-z_][A-Za-z_0-9]*)"
     r":[ \t]+(?P<message>[^\r\n]{1,600})[ \t]*$",
@@ -135,6 +136,47 @@ def classify_log_attempt(stage_name: str, output: bytes,
         "max_unmodified_retries": item["max_unmodified_retries"],
         "stage": stage_name,
         "registry_sha256": digest(Path(registry_folder) / REGISTRY_NAME),
+    }
+
+
+def classify_runtime_error(stage_name: str, error: Exception, *,
+                           registry_folder: Path) -> dict | None:
+    """Classify a batch-runner-generated local pause or uncertain paid effect.
+
+    The subprocess log classifier handles child tracebacks. This separate
+    call handles parent-side bounded capacity pauses and post-send uncertain
+    effects, recording them in the ordinary checkpoint without pretending
+    they were a permanent source or scientific defect.
+    """
+    if not isinstance(stage_name, str) or not isinstance(error, Exception):
+        raise ValueError("Invalid parent runtime recovery classification")
+    registry = load_registry(registry_folder)
+    kind=type(error).__name__
+    message=str(error)
+    hits=[
+        item for item in registry["entries"]
+        if stage_name in item["stages"]
+        and kind == item["exception"]
+        and item["disposition"] in {
+            "PAUSED_EXTERNAL_DEPENDENCY","UNRESOLVED_EXTERNAL_EFFECT_HOLD"
+        }
+        and item["message_marker"]
+        and message.startswith(item["message_marker"]+":")
+    ]
+    if len(hits)>1:
+        raise RecoveryRegistryError("Ambiguous parent runtime recovery signatures")
+    if not hits:
+        return None
+    item=hits[0]
+    return {
+        "failure_id":item["id"],
+        "category":item["classification"],
+        "exception":kind,
+        "disposition":item["disposition"],
+        "handler":item["handler"],
+        "max_unmodified_retries":item["max_unmodified_retries"],
+        "stage":stage_name,
+        "registry_sha256":digest(Path(registry_folder)/REGISTRY_NAME),
     }
 
 
