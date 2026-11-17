@@ -253,3 +253,59 @@ def test_displayed_fraction_rounding_must_be_internally_consistent():
     assert not _printed_fraction_rounding_is_consistent(
         "63","0","2.0 s = -32 m/s2"
     )
+
+def test_complete_clear_whole_integer_fraction_uses_exact_printed_source():
+    """The real failed semantic empty-array must be avoided before provider."""
+    spoken=(
+        "Calculating the ex component of acceleration equals the fraction "
+        "the final ex component of velocity minus the initial ex component "
+        "of velocity over t gives the numerator 0 minus the whole-number "
+        "value 63 with that entire numerator divided by 2.0,"
+    )
+    labels=[
+        "ax = vxf \u2212vxi",
+        "t\n= 0 \u221263 m/s",
+        "2.0 s\n= \u221232 m/s2",
+    ]
+    blocks,page=fixture(labels)
+    cue=build_exact_source_math_cue(15,3,spoken,blocks,page)
+    assert cue is not None
+    assert cue["source_math_evidence"]=="EXACT_SOURCE_MATH_V1"
+    assert verified_source_math_row(cue,15,3,blocks,page)
+    for wrong in (
+        spoken.replace("whole-number value 63","whole-number value 6.3"),
+        spoken.replace("whole-number value 63","whole-number value 64"),
+        spoken.replace("numerator 0 minus","numerator 0 plus"),
+        spoken.replace("minus the initial","plus the initial"),
+        spoken.replace("the final ex component","the final why component"),
+        spoken.replace("the initial ex component","the final ex component"),
+        spoken.replace("divided by 2.0","divided by 3.0"),
+        spoken.replace("with that entire numerator","with a different numerator"),
+    ):
+        assert build_exact_source_math_cue(15,3,wrong,blocks,page) is None,wrong
+    for i,broken in (
+        (0,"ax = vxi \u2212vxf"),
+        (1,"t\n= 0 +63 m/s"),
+        (1,"t\n= 0 \u22126.3 m/s"),
+        (2,"3.0 s\n= \u221232 m/s2"),
+        (2,"2.0 s\n= \u22123.2 m/s2"),
+        (2,"2.0 s\n= +32 m/s2"),
+        (2,"2.0 s\n= \u221232 m/s"),
+    ):
+        new=labels.copy();new[i]=broken
+        assert build_exact_source_math_cue(
+            15,3,spoken,*fixture(new)) is None,(i,broken)
+    tampered=copy.deepcopy(cue)
+    tampered["spoken_text"]=spoken.replace("63","6.3")
+    assert not verified_source_math_row(tampered,15,3,blocks,page)
+
+
+def test_fraction_omitted_denominator_remains_unmapped():
+    labels=["ax = vxf \u2212vxi","t\n= 0 \u221263 m/s","2.0 s\n= \u221232 m/s2"]
+    ungrounded=(
+        "Calculating the ex component of acceleration equals the fraction "
+        "the final ex component of velocity minus the initial ex component "
+        "of velocity over t gives the numerator 0 minus the whole-number value 63,"
+    )
+    assert build_exact_source_math_cue(
+        15,3,ungrounded,*fixture(labels)) is None

@@ -323,10 +323,10 @@ def reviewed_math_voice(text: str) -> str:
     # numerator while retaining all original digits, sign and denominator.
     value=re.sub(
         r"\bgives\s+(?P<zero>0)\s+minus\s+(?P<whole>[1-9]\d{1,2})"
-        r"\s+divided\s+by\s+(?P<duration>\d+(?:\.\d+)?)\b",
+        r"\s+divided\s+by\s+(?P<duration>(?!0+(?:\.0+)?\b)\d+(?:\.\d+)?)\b",
         lambda m: ("gives the numerator "+m["zero"]+
                    " minus the whole-number value "+m["whole"]+
-                   ", with that entire numerator divided by "+m["duration"]),
+                   " with that entire numerator divided by "+m["duration"]),
         value, flags=re.I)
 
     # Explicit spoken multiplication, not an omitted word, prevents

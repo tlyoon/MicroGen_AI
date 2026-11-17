@@ -103,6 +103,20 @@ def _exact_x_component_spoken_aliases(spoken: str) -> str:
     )
     for pattern,equivalent in substitutions:
         s=re.sub(pattern,equivalent,s,flags=re.I)
+    # Voice clarification of a complete signed worked fraction must be
+    # compared as ONE mathematical cue. The voice adapter deliberately
+    # says "whole-number value" to avoid 63 sounding like 6.3. Translate
+    # only the exact SAME numerator, subtraction, denominator and digits
+    # back to the original source-bound relation for matching. This does
+    # NOT invent a missing fraction, round a value, or accept source mismatch.
+    # The printed original fraction and rounded signed result are still
+    # mandatory in _candidate_kind() below and in independent plan QA.
+    s=re.sub(
+        r"\bgives\s+the\s+numerator\s+0\s+minus\s+the\s+whole-number"
+        r"\s+value\s+(?P<speed>[1-9]\d{1,2})\s+with\s+that\s+entire"
+        r"\s+numerator\s+divided\s+by\s+(?P<duration>\d+(?:\.\d+)?)\b",
+        lambda m:"gives 0 minus "+m["speed"]+" divided by "+m["duration"],
+        s,flags=re.I)
     return s
 
 

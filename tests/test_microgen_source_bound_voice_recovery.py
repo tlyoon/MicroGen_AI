@@ -326,3 +326,21 @@ def test_quadratic_minus_sign_clarity_without_operator_loss():
         source.replace("tee squared", "tee cubed"),
     ):
         assert "minus the full product" not in reviewed_math_voice(altered)
+
+def test_narrator_keeps_complete_signed_integer_division_in_one_cue():
+    from microgen_reviewed_math_voice import reviewed_math_voice
+    source=("Calculating ay ex equals the fraction v ex final minus vee "
+            "ex eye over t gives 0 minus 63 divided by 2.0, yielding "
+            "minus 32 meters per second squared.")
+    voice=reviewed_math_voice(source)
+    assert ("the whole-number value 63 with that entire numerator "
+            "divided by 2.0, yielding") in voice
+    assert "the whole-number value 6.3" not in voice
+    assert numbers(voice)==numbers(source)
+    assert reviewed_math_voice(voice)==voice
+    for changed in (
+        source.replace("0 minus 63","0 plus 63"),
+        source.replace("63 divided","6.3 divided"),
+        source.replace("divided by 2.0","divided by 0"),
+    ):
+        assert "whole-number value 63" not in reviewed_math_voice(changed)
