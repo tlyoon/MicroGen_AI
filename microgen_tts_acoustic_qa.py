@@ -476,6 +476,47 @@ def parse_blind_audio_transcript_response(raw: str) -> str:
     return data["transcript"].strip()
 
 
+def _audio_json_schema_rejected(exc: Exception) -> bool:
+    """Only a vendor-identified schema contract error admits one simpler retry.
+
+    400 alone is not enough: an invalid model, audio body, billing status,
+    identity or permission cannot be fixed by weakening the response format.
+    """
+    from microgen_tts_service_recovery import safe_http_status
+    if safe_http_status(exc)!=400:
+        return False
+    reason=str(exc).casefold()[:1600]
+    return any(marker in reason for marker in (
+        "responsejsonschema", "response_json_schema",
+        "responseschema", "response_schema",
+        "unsupported json schema", "schema is not supported",
+    ))
+
+
+def _parse_source_blind_transcriber_output(raw: str) -> str:
+    """Dedicated transcription models may return words rather than a JSON map.
+
+    Neither format sees the source, and both are still compared by two
+    independent models with the full source/mathematics sensitive-token gate.
+    A model explanation, markdown block, or empty/ambiguous answer fails.
+    """
+    if not isinstance(raw,str) or not 5<=len(raw.strip())<=12000:
+        raise AcousticQAError("Invalid dedicated acoustic transcript")
+    v=raw.strip()
+    if v.startswith("{"):
+        v=parse_blind_audio_transcript_response(v)
+    lowered=v.casefold()
+    if (len(v)<12 or len(v.split())<3
+            or v.startswith(("***","###","```","["))
+            or lowered.startswith((
+                "transcript:", "transcription:", "here is", "here's",
+                "the audio", "i heard", "the recording", "as requested",
+                "i have checked", "i think the correct", "this is the likely"))
+            or is_meta_transcript(v)):
+        raise AcousticQAError("Dedicated recognizer supplied commentary, not words")
+    return v
+
+
 def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     """Use a separate audio understanding model; never send target script.
 
@@ -484,9 +525,13 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
     """
     from google import genai
     from google.genai import types
+    # Keep physical API requests inside the explicit bounded reviewer budget:
+    # SDK-internal retries would otherwise multiply the outer 3-try policy.
     client = genai.Client(
-        api_key=api_key, http_options=types.HttpOptions(timeout=90000)
+        api_key=api_key, http_options=types.HttpOptions(
+            timeout=90000,retry_options=types.HttpRetryOptions(attempts=1))
     )
+    dedicated=(model=="gemini-3.5-transcribe")
     prompt = (
         "Transcribe the exact audible words in this English university lecture "
         "recording. Do not infer or fix what the speaker *should* have said. "
@@ -494,33 +539,61 @@ def gemini_audio_recognizer(api_key: str, *, model: str="gemini-3.5-flash"):
         "substitute conventional mathematical terminology for what is heard. "
         "Return only words actually heard, no explanations or timecodes. "
         "When unintelligible insert [unclear]. "
-        "Respond with only one JSON object containing a transcript string. "
-        "Do not include reasoning, draft notes or suggested corrections."
+        + ("Return the plain spoken transcript, without a title, label or commentary. "
+           if dedicated else
+           "Respond with only one JSON object containing a transcript string. ")
+        + "Do not include reasoning, draft notes or suggested corrections."
     )
+    # The specialist transcriber produces plain text. General Gemini models
+    # retain strict JSON unless the server explicitly rejects the schema
+    # field with a 400; any downgrade consumes an existing retry slot.
+    constrained=[not dedicated]
     def transcribe(wav: Path) -> str:
         content = wav.read_bytes()
         if len(content) > 18_000_000:
             raise AcousticQAError("Audio too large to transcribe inline")
         from microgen_tts_service_recovery import (
             run_bounded_recognition, AudioRecognitionUnavailable,
+            AudioSchemaCompatibilityRetry,
         )
         def single_attempt():
-            response = client.models.generate_content(
-                model=model,
-                contents=[types.Part.from_bytes(data=content,mime_type="audio/wav"),
-                          prompt],
-                config=types.GenerateContentConfig(
-                    temperature=0, max_output_tokens=2400,
-                    response_mime_type="application/json",
-                    response_json_schema=AUDIO_TRANSCRIPT_SCHEMA,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                ),
-            )
+            options={
+                "temperature":0,
+                "max_output_tokens":2400,
+                "automatic_function_calling":
+                    types.AutomaticFunctionCallingConfig(disable=True),
+            }
+            if constrained[0]:
+                options.update(response_mime_type="application/json",
+                               response_json_schema=AUDIO_TRANSCRIPT_SCHEMA)
+            try:
+                response=client.models.generate_content(
+                    model=model,
+                    contents=[types.Part.from_bytes(data=content,mime_type="audio/wav"),
+                              prompt],
+                    config=types.GenerateContentConfig(**options),
+                )
+            except Exception as exc:
+                if constrained[0] and _audio_json_schema_rejected(exc):
+                    constrained[0]=False
+                    raise AudioSchemaCompatibilityRetry(
+                        "SCHEMA_COMPATIBILITY_RETRY") from None
+                raise
+            if dedicated:
+                return _parse_source_blind_transcriber_output(response.text or "")
+            # Unconstrained text is still checked against the same strict
+            # JSON-only blind transcript rule: it cannot become a silent pass.
             return parse_blind_audio_transcript_response(response.text or "")
         try:
             return run_bounded_recognition(single_attempt,time.sleep,max_attempts=3)
-        except AudioRecognitionUnavailable:
-            raise AcousticQAError("Independent audio transcription unavailable") from None
+        except AudioRecognitionUnavailable as exc:
+            # Class/status only. Never echo raw provider response, source
+            # narration, access credentials, or potentially billable URLs.
+            raise AcousticQAError(
+                "Independent audio transcription unavailable "
+                f"kind={exc.failure_kind} "
+                f"http_status={exc.http_status if exc.http_status is not None else 'unknown'} "
+                f"attempts={exc.attempts}") from None
     return transcribe
 
 

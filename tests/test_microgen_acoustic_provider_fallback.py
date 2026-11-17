@@ -40,7 +40,7 @@ def test_recovers_unavailable_secondary_reviewer_with_fixed_distinct_model(
         calls.append(models)
         model=models[1]
         return (_fake_engine(models[0],calls=counts),
-                _fake_engine(model,broken=model=="gemini-2.5-flash",
+                _fake_engine(model,broken=model=="gemini-3.5-transcribe",
                              calls=counts),models)
     def transcript_stage(stage,texts,engines,models,*,memo):
         unavailable=set()
@@ -66,16 +66,16 @@ def test_recovers_unavailable_secondary_reviewer_with_fixed_distinct_model(
         None,["a","b","c"],engines,originals,initial,initial_memo,
         provider_factory=provider_factory)
     assert report["unavailable_recognizer_passes"]==[]
-    assert models==("gemini-3.5-flash","gemini-2.5-pro")
+    assert models==("gemini-3.5-flash","gemini-2.5-flash")
     assert trace["status"]=="UNAVAILABLE_GEMINI_MODEL_REPLACED_FOR_ASR_ONLY"
     assert trace["actual_models"]==list(models)
     assert trace["publication_allowed"] is False
     assert [item["model"] for item in trace["attempts"]]==[
-        "gemini-2.5-flash","gemini-2.5-pro"]
+        "gemini-3.5-transcribe","gemini-2.5-flash"]
     assert all(pair[0]!=pair[1] for pair in calls)
     # The untouched independent model is not billed again.
     assert len([v for v in counts if v[0]==originals[0]])==3
-    assert len([v for v in counts if v[0]=="gemini-2.5-pro"])==3
+    assert len([v for v in counts if v[0]=="gemini-2.5-flash"])==3
     assert len([k for k in memo if k[0]==0])==3
     assert len([k for k in memo if k[0]==1])==3
 

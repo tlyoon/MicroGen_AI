@@ -37,7 +37,7 @@ DEFAULT_MODELS=("gemini-3.5-flash", "gemini-3.8-flash")
 # only tried on UNAVAILABLE model passes, never to fish for an ASR pass
 # after real scientific/phonetic disagreement. Every candidate still uses
 # the existing per-model bounded Gemini key-pool transport policy.
-BOUNDED_AUDIO_REVIEWER_FALLBACK=("gemini-2.5-flash", "gemini-2.5-pro")
+BOUNDED_AUDIO_REVIEWER_FALLBACK=("gemini-3.5-transcribe", "gemini-2.5-flash")
 PASS="ASR_SCREEN_PASS_LISTENING_REQUIRED"
 REPAIRABLE="REVIEW_REQUIRED_PRONUNCIATION_RISK"
 
@@ -103,9 +103,16 @@ def _providers(models_override:tuple[str,str]|None=None) -> tuple[Callable,Calla
                     preferred_slot = slot
                     return transcript
                 except Exception as exc:
-                    # Never log the credential or expected narration.
+                    # Keep only safe provider status/category. Old code
+                    # erased the diagnostic reason and treated every 400,
+                    # 401, 429 and 503 as the same acoustic failure.
+                    from microgen_tts_service_recovery import (
+                        failure_kind,safe_http_status,
+                    )
                     print(f"[Acoustic QA] {model} key slot #{slot+1} "
-                          f"unavailable ({type(exc).__name__}); "
+                          f"unavailable ({type(exc).__name__}, "
+                          f"kind={failure_kind(exc)}, "
+                          f"http_status={safe_http_status(exc)}); "
                           "trying next configured slot",flush=True)
             raise AutonomousAcousticError(
                 f"Independent acoustic recognizer {model} unavailable "
@@ -208,9 +215,14 @@ def _recover_unavailable_reviewers(
                 newengines=tuple(newengines)
                 trial=_transcripts(stage,texts,newengines,proposed,memo=candidate_memo)
             except (OSError,RuntimeError,ValueError,TypeError,KeyError) as exc:
+                from microgen_tts_service_recovery import (
+                    failure_kind,safe_http_status,
+                )
                 attempted.append({"reviewer_index":index,"model":candidate,
                                   "status":"UNAVAILABLE",
-                                  "error_class":type(exc).__name__})
+                                  "error_class":type(exc).__name__,
+                                  "failure_kind":failure_kind(exc),
+                                  "http_status":safe_http_status(exc)})
                 continue
             lost=set(trial.get("unavailable_recognizer_passes",[]))
             attempted.append({"reviewer_index":index,"model":candidate,
