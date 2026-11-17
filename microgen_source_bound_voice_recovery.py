@@ -51,6 +51,17 @@ def clarify_x_component(text:str)->str:
     # Replace specific roles BEFORE the generic component, preserving exact
     # original initial/final index, speaker identity, and all quantities.
     rules=(
+      # An already stated initial/final velocity must NOT become
+      # "initial initial velocity" after expanding the math subscript.
+      # Preserve the same x component and its initial/final index.
+      (r"\binitial\s+velocity\s+vee\s+(?:sub\s+)?ex\s+(?:eye|initial)\b",
+       "initial velocity along the x axis"),
+      (r"\bfinal\s+velocity\s+vee\s+(?:sub\s+)?ex\s+(?:eff|final)\b",
+       "final velocity along the x axis"),
+      # An explanatory vector label inside an ordinary speed phrase must
+      # not insert a comma and create an unsupported extra PDF cue.
+      (r"\bat\s+constant\s+speed\s+vee\s+(?:sub\s+)?ex\s+car\s+of\b",
+       "at a constant x-direction speed of"),
       (r"\bdee\s+vee\s+(?:sub\s+)?ex\s+over\s+dee\s+tee\b",
        "the time derivative of the x component of velocity"),
       (r"\bvelocity\s+vee\s+(?:sub\s+)?ex\s+(?:eye|initial)\b",
@@ -80,6 +91,21 @@ def clarify_x_component(text:str)->str:
     )
     for pattern,speech in rules:
         result=re.sub(pattern,speech,result,flags=re.I)
+    # Exact grammar for repeatedly attested mathematics, not a generic
+    # rewrite of arbitrary English or mathematical source values.
+    result=re.sub(
+        r"\bconstant the x component of acceleration\b",
+        "constant acceleration along the x axis",result,flags=re.I)
+    result=re.sub(
+        r"\bthe the x component of velocity\b",
+        "the x component of velocity",result,flags=re.I)
+    result=re.sub(
+        r"\bthe x component of velocity average\b",
+        "the average x component of velocity",result,flags=re.I)
+    result=re.sub(
+        r"\bconstant speed the car's x component of velocity\b",
+        "constant speed, with the car's x component of velocity",
+        result,flags=re.I)
     return result
 
 
@@ -307,6 +333,14 @@ def recover_disputed_component_voice(stage:Path)->dict:
         # would trigger the correct prepayment ambiguous-letter guard.
         repaired=normalize_scientific_speech(
             clarify_x_component(prior_text))
+        # Prevent known ungrammatical TTS expansions, even if the PDF math
+        # matcher could otherwise prove the source quantities. The voice
+        # preflight must not publish duplicated or malformed explanations.
+        if re.search(
+            r"\b(?:initial initial|final final|the the|constant the|"
+            r"speed the car's)\b",repaired,flags=re.I):
+            raise SourceBoundVoiceRecoveryError(
+                "Unstable repeated mathematical voice labels")
         if repaired==prior_text:
             continue
         if (clarify_x_component(repaired)!=repaired

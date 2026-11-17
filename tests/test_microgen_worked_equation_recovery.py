@@ -164,3 +164,92 @@ class WorkedMathProof(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_explicit_x_component_voice_reuses_original_printed_source_with_zero_model():
+    # Same source/variables, expressed as ordinary English rather than short
+    # letter names. Only the unchanged printed-math proof can accept it.
+    speech=(
+        "In Example 2.7, a jet lands on an aircraft carrier with an "
+        "initial velocity along the ex axis of approximately 63 meters "
+        "per second and stops in 2.0 seconds."
+    )
+    labels=[
+        "Example 2.7: Carrier Landing (Part A)",
+        "Problem: A jet lands on an aircraft carrier at vxi "
+        "\u224863 m/s (140 mi/h) and stops (vxf = 0) "
+        "in t = 2.0 s. What is its constant acceleration?",
+    ]
+    blocks,page=fixture(labels)
+    cue=build_exact_source_math_cue(15,1,speech,blocks,page)
+    assert cue and verified_source_math_row(cue,15,1,blocks,page)
+    for damaged in (
+        speech.replace("ex axis","why axis"),
+        speech.replace("initial velocity","final velocity"),
+        speech.replace("63 meters","63.2 meters"),
+    ):
+        assert build_exact_source_math_cue(15,1,damaged,blocks,page) is None
+    for damaged in (
+        labels[1].replace("vxi","vyi"),
+        labels[1].replace("63 m/s","64 m/s"),
+        labels[1].replace("2.0 s","2.1 s"),
+    ):
+        assert build_exact_source_math_cue(
+            15,1,speech,*fixture([labels[0],damaged])) is None
+
+
+def test_explicit_x_component_fraction_still_requires_printed_signs_and_units():
+    speech=(
+        "Calculating the ex component of acceleration equals the fraction "
+        "v ex final minus the initial ex component of velocity over t "
+        "gives 0 minus 63 divided by 2.0,"
+    )
+    labels=[
+        "ax = vxf \u2212vxi",
+        "t\n= 0 \u221263 m/s",
+        "2.0 s\n= \u221232 m/s2",
+    ]
+    blocks,page=fixture(labels)
+    cue=build_exact_source_math_cue(15,3,speech,blocks,page)
+    assert cue and verified_source_math_row(cue,15,3,blocks,page)
+    for changed_speech in (
+        speech.replace("ex component of acceleration","why component of acceleration"),
+        speech.replace("initial ex component","final ex component"),
+        speech.replace("minus the initial","plus the initial"),
+        speech.replace("63 divided","63.2 divided"),
+        speech.replace("2.0,","3.0,"),
+    ):
+        assert build_exact_source_math_cue(15,3,changed_speech,blocks,page) is None
+    for i,bad in (
+        (0, "ax = vxi \u2212vxf"),
+        (1, "t = 0 +63 m/s"),
+        (2, "2.0 s = \u22123.2 m/s2"),
+    ):
+        changed=labels.copy()
+        changed[i]=bad
+        assert build_exact_source_math_cue(
+            15,3,speech,*fixture(changed)) is None
+
+def test_displayed_fraction_rounding_must_be_internally_consistent():
+    from microgen_worked_equation_recovery import (
+        _printed_fraction_rounding_is_consistent,
+    )
+    assert _printed_fraction_rounding_is_consistent(
+        "63","2.0","2.0 s = -32 m/s2"
+    )
+    assert _printed_fraction_rounding_is_consistent(
+        "63","2.0","2.0 s = -31.5 m/s2"
+    )
+    for false_result in (
+        "2.0 s = -3.2 m/s2",
+        "2.0 s = -31 m/s2",
+        "2.0 s = +32 m/s2",
+        "2.0 s = -32 m/s",
+        "2.0 s = -32 m/s3",
+        "2.0 s = -32 m/s2 = -3.2 m/s2",
+    ):
+        assert not _printed_fraction_rounding_is_consistent(
+            "63","2.0",false_result
+        )
+    assert not _printed_fraction_rounding_is_consistent(
+        "63","0","2.0 s = -32 m/s2"
+    )

@@ -188,3 +188,37 @@ def test_original_scientific_script_remains_untouched_by_source_voice_policy():
     assert '_require_budget_preflight' in source
     assert 'semantic_limit=MAX_SEMANTIC_SLIDES' in source
     assert 'preflight_voice_sidecar(candidate,require_policy_binding=True)' in source
+
+@pytest.mark.parametrize("before,expected",[
+    (
+        "a jet lands with an initial velocity vee ex eye of approximately 63 "
+        "meters per second",
+        "a jet lands with an initial velocity along the x axis of approximately "
+        "63 meters per second",
+    ),
+    (
+        "the jet has final velocity vee ex eff at the end",
+        "the jet has final velocity along the x axis at the end",
+    ),
+    (
+        "a car passes a billboard at constant speed vee ex car of 45.0 meters per second",
+        "a car passes a billboard at a constant x-direction speed of 45.0 meters per second",
+    ),
+    (
+        "under constant ay ex and the vee ex graph",
+        "under constant acceleration along the x axis and the x component of velocity graph",
+    ),
+    (
+        "vee sub ex average equals vee sub ex initial",
+        "the average x component of velocity equals the initial x component of velocity",
+    ),
+])
+def test_contextual_component_clarity_no_repeated_words_or_split_cues(before,expected):
+    output=recovery.clarify_x_component(before)
+    assert output==expected
+    assert recovery.clarify_x_component(output)==output
+    assert numbers(before)==numbers(output)
+    normalized=normalize_scientific_speech(output)
+    for defect in ("initial initial", "final final", "the the",
+                   "constant the", "speed the car's"):
+        assert defect not in normalized

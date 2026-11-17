@@ -31,9 +31,9 @@
       "disposition": "DETERMINISTIC_HOLD",
       "handler": "microgen_timed_cue_planner.preflight",
       "preconditions": "Actual source-PDF math/semantic cue grounding fails; check relevant source/code change before trying again",
-      "verification": "PDF-grounded cue-plan and independent PCM/TTS proof",
-      "historical_evidence": "Serway 2.7 timed cue preflight in G3",
-      "last_validated": "2026-11-16",
+      "verification": "Recompute the exact printed source PDF, x-component initial/final indices, signed fraction, displayed result rounding, units, bounding boxes and source quote in independent TTS/PCM verification; never accept a hallucinated or empty semantic mapping, altered y coordinate, changed sign, or 32 versus 3.2.",
+      "historical_evidence": "Serway 2.7 timed cue preflight in G3; 2026-11-17 actual source-bound TTS abort at b76723a on printed worked-example x-velocity/acceleration formula: Gemini replied empty semantic array after bounded key rotation. Offline recovery recognizes only exact x-component voice/math aliases, independently rederives source-PDF geometry and verifies signed numerator, denominator and printed rounding; no additional provider calls. 21-slide shadow: 88 cues, only three semantic-assisted slides, zero missing slide-15 cues.",
+      "last_validated": "2026-11-17",
       "max_unmodified_retries": 0,
       "publication_allowed": false
     },

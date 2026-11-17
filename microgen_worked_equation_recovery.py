@@ -40,16 +40,83 @@ def _literal_equivalent_number(value: str, text: str) -> bool:
     return _source_number(value) in numbers(text)
 
 
+def _printed_fraction_rounding_is_consistent(
+    speed: str, duration: str, printed_result: str,
+) -> bool:
+    """Verify, never *invent*, the printed rounded signed result.
+
+    The source displays the measured fraction and its evaluated result.
+    A result of -3.2 cannot be accepted for (0 - 63)/2.0 merely because a
+    minus sign appears. Match the printed decimal precision using standard
+    half-up rounding, and reject malformed, absent or ambiguous result lines.
+    No replacement numeric value is generated or published.
+    """
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+    # A source block with multiple incompatible result equalities is
+    # ambiguous; do not select the first convenient signed result.
+    if printed_result.count("=")!=1:
+        return False
+    value=re.search(
+        rf"=\s*[-\u2212]\s*(?P<result>{_NUMBER})\s*"
+        rf"m\s*/\s*s{_SQUARED}\b",
+        printed_result, flags=re.I,
+    )
+    if not value:
+        return False
+    result=value["result"]
+    decimals=len(result.split(".")[1]) if "." in result else 0
+    quantum=Decimal(1).scaleb(-decimals)
+    try:
+        denominator=Decimal(duration)
+        if denominator <= 0:
+            return False
+        calculated=-(Decimal(speed)/denominator)
+        observed=-Decimal(result)
+        return (calculated.quantize(quantum,rounding=ROUND_HALF_UP)
+                == observed)
+    except (InvalidOperation,ZeroDivisionError,OverflowError,ValueError):
+        return False
+
+
+def _exact_x_component_spoken_aliases(spoken: str) -> str:
+    """Source-blind, mathematical identity-preserving speech spellings.
+
+    The original velocity x-subscript can be voiced explicitly rather than
+    as short letter names. Translate only the exact same variable and its
+    initial/final index back to its symbolic spoken name *before* the
+    unchanged printed-source sign/value/unit/equation proof. Never translate
+    arbitrary x-axis functions, y components or scientific conclusions.
+    """
+    s=_flatten(spoken)
+    substitutions=(
+        (r"\binitial velocity along the (?:x|ex) axis\b",
+         "initial velocity vee ex eye"),
+        (r"\bfinal velocity along the (?:x|ex) axis\b",
+         "final velocity vee ex eff"),
+        (r"\bthe initial (?:x|ex) component of velocity\b",
+         "vee ex eye"),
+        (r"\bthe final (?:x|ex) component of velocity\b",
+         "vee ex final"),
+        (r"\bthe (?:x|ex) component of acceleration\b",
+         "ay ex"),
+    )
+    for pattern,equivalent in substitutions:
+        s=re.sub(pattern,equivalent,s,flags=re.I)
+    return s
+
+
 def _candidate_kind(spoken: str, chosen: list[tuple], page) -> bool:
     """Accept only exact source-verifiable math relations from printed cells."""
-    s = _flatten(spoken)
+    s = _exact_x_component_spoken_aliases(spoken)
     src = _flatten(" ".join(row[1] for row in chosen))
     compact = re.sub(r"\s+", "", src).lower()
     values = [row[1] for row in chosen]
 
     # A worked-example reference and its real "Problem:" statement.
     pattern = (rf"^In Example (?P<example>\d+\.\d+), a jet lands on an "
-               rf"aircraft carrier with an initial velocity .*? of "
+               rf"aircraft carrier with an initial velocity "
+               rf"(?:vee|v) (?:sub )?ex (?:eye|initial) of "
                rf"approximately (?P<speed>{_NUMBER}) meters per second "
                rf"and stops in (?P<duration>{_NUMBER}) seconds?\.$")
     match = re.fullmatch(pattern, s, re.I)
@@ -85,6 +152,8 @@ def _candidate_kind(spoken: str, chosen: list[tuple], page) -> bool:
             and re.search(
                 rf"(?<!\d){re.escape(match['duration'])}\s*s\b", third, re.I)
             and re.search(r"=\s*[-\u2212]", third)
+            and _printed_fraction_rounding_is_consistent(
+                match["speed"],match["duration"],third)
         )
 
     # Spoken signed acceleration (already printed on the result line).
