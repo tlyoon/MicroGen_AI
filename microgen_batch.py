@@ -858,15 +858,32 @@ def run_subprocess(
                 stage_name, current_attempt, registry_folder=stage,
             )
             if decision is not None:
-                persist_stage_decision(
-                    stage, decision, attempt_number=attempt + 1,
-                )
                 if decision["disposition"] == "DETERMINISTIC_HOLD":
+                    persist_stage_decision(
+                        stage, decision, attempt_number=attempt + 1,
+                    )
                     raise RuntimeError(
                         f"{label} failed with non-retryable "
                         f"{decision['exception']} after {attempt + 1} "
                         f"attempt(s); recovery_id={decision['failure_id']}; "
                         "source-bound scientific/QA evidence still required"
+                    )
+                if decision["disposition"] == "PAUSED_EXTERNAL_DEPENDENCY":
+                    # Recognized finite provider exhaustion is NOT an
+                    # acoustic/scientific defect and is NOT evidence of a
+                    # usable paid result. Do not persist a deterministic
+                    # QA hold or submit another whole-stage request.
+                    # process_one records the typed external dependency and
+                    # keeps the original in-flight provider marker so a
+                    # restart cannot reissue this possibly billed stage.
+                    raise RuntimeError(
+                        "VERIFIED_EXTERNAL_DEPENDENCY_HOLD: "
+                        f"{label} exhausted an independently recognized "
+                        f"provider dependency after {attempt + 1} "
+                        f"whole-stage attempt(s); "
+                        f"recovery_id={decision['failure_id']}; "
+                        "preserve source/WAV/provider effect and advance "
+                        "only independently authorized work"
                     )
 
         # A post-send model error is an uncertain external effect, never

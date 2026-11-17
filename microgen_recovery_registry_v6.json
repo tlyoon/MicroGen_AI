@@ -168,6 +168,45 @@
       "publication_allowed": false
     },
     {
+      "id": "MGA-ACOUSTIC-REVIEWERS-UNAVAILABLE",
+      "classification": "infrastructure",
+      "stages": [
+        "acoustic_qa"
+      ],
+      "exception": "AutonomousAcousticError",
+      "message_marker": "Independent acoustic transcription unavailable for model pass(es)",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "microgen_autonomous_acoustic_gate.audit_stage",
+      "preconditions": "Both independent acoustic reviewer passes unavailable after finite model/key rotation; no source-grounded ASR can be certified, no WAV may be accepted, and spent whole-stage calls cannot be silently reissued",
+      "verification": "Verify original last traceback, reviewer-slot exhaustion evidence, absence of accepted independent ASR, intact 21 WAV source/code SHA and frozen in-flight provider checkpoint; restart requires separately verified authority",
+      "historical_evidence": "20261117_HP_G3_SERWAY27_ACOUSTIC_C0E_PRIVATE/2.7: source-grounded science QA and 88 PCM cues passed; all independent Gemini 3.5/3.8/2.5 model-key attempts unavailable, two ASR passes missing; fail-closed acoustic receipt and input hashes preserved",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-CHILD-EXTERNAL-DEPENDENCY-HOLD",
+      "classification": "infrastructure",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa",
+        "tts"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "VERIFIED_EXTERNAL_DEPENDENCY_HOLD",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "microgen_batch.run_subprocess",
+      "preconditions": "A known exact child traceback already classified a finite external provider exhaustion, with no independently valid stage receipt and no authorization to repeat paid calls",
+      "verification": "Match exact child recovery id in bounded current-attempt traceback, preserve same source/runner SHA and existing in-flight provider marker; unit-stress actual subprocess against zero-duplicate, no-QA-pass and correct offline continuation rules",
+      "historical_evidence": "20261117 HP genuine 2.7 acoustic reviewer exhaustion after 88 valid PCM cues; previously mislabeled as ambiguous paid whole-stage; normalized to typed external dependency, without a deterministic scientific defect claim",
+      "last_validated": "2026-11-17",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-UNCERTAIN-PAID-WHOLE-STAGE",
       "classification": "authorization",
       "stages": [
