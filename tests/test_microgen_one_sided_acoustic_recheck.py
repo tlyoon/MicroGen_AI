@@ -72,12 +72,12 @@ def test_real_21_slide_failed_dual_model_replay_requires_only_two_rechecks():
     engines=(recognizer(0),recognizer(1))
     memo={}
     initial=_transcripts(stage,texts,engines,models,memo=memo)
-    assert initial["review_required_slides"]==[5,7]
+    assert initial["review_required_slides"]==[5]
     result=recheck_one_sided_sensitive(stage,initial,texts,engines,memo)
     assert result["review_required_slides"]==[]
-    assert result["independent_one_sided_sensitive_rechecks"]["resolved_slides"]==[5,7]
-    assert len(hits)==44 # 42 original source-bound reads plus two retakes
-    assert [x for x in hits[42:]]==[(1,5),(1,7)]
+    assert result["independent_one_sided_sensitive_rechecks"]["resolved_slides"]==[5]
+    assert len(hits)==43 # 42 original blind reads plus one source-risk retake
+    assert [x for x in hits[42:]]==[(1,5)]
     _verify(stage,result,texts)
     assert not (stage/".microgen_autonomous_acoustic_qa.json").exists()
 
@@ -94,6 +94,6 @@ def test_real_failed_asr_remains_blocked_if_sensitive_mismatch_repeats():
     memo={}
     initial=_transcripts(stage,texts,engines,models,memo=memo)
     result=recheck_one_sided_sensitive(stage,initial,texts,engines,memo)
-    assert result["review_required_slides"]==[5,7]
+    assert result["review_required_slides"]==[5]
     assert result["independent_one_sided_sensitive_rechecks"]["resolved_slides"]==[]
-    assert result["independent_one_sided_sensitive_rechecks"]["attempted_slides"]==[5,7]
+    assert result["independent_one_sided_sensitive_rechecks"]["attempted_slides"]==[5]

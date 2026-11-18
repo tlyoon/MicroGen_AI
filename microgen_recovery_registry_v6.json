@@ -3,6 +3,36 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261118-MEANING-PRESERVING-QA",
+      "classification": "scientific_qa",
+      "stages": ["science_qa"],
+      "exception": "ScienceQAError",
+      "message_marker": "Unsupported or ungrounded scientific correction",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_context_qa_tolerance.reclassify_proven_minor_scientific_issues",
+      "preconditions": "The independent reviewer reports a potential wording or pronunciation variation; compare complete meaning against source. Equivalent unit spelling and mathematical verb inflection are harmless; changes to equations, operators, variables, numbers, negation or physical claims are never silently waived.",
+      "verification": "Source/quote-bound advisory demotion only for audited equivalence classes, real 21-slide historical ASR replay, missing divided-by/operator fault injection, mathematical sign/unit/quantity regressions, source hash and code binding, normal automatic advancement without extra TTS.",
+      "historical_evidence": "18 November 2026 Serway section 2.7 slide 7 original two-Gemini ASR difference multiplied/multiply was merely grammatical. Slide 5 a repeatedly missing divided-by remains a mathematical-content hold.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-20261118-IDENTICAL-PAID-ASR-REJECTION",
+      "classification": "scientific_qa",
+      "stages": ["acoustic_qa"],
+      "exception": "OneSidedAcousticReplayError",
+      "message_marker": "HISTORICAL_IDENTICAL_SENSITIVE_RETAKE_HOLD",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_one_sided_acoustic_replay.replay_with_one_sided_rechecks",
+      "preconditions": "A previous authorized HP campaign already obtained a contrary blind recheck for the same source/WAV/reviewer input. A new campaign or comparison-code revision does not authorize duplicate paid retakes.",
+      "verification": "Read-only cross-campaign rejection lookup binds source and entire WAV snapshot to historic model identities. Fault-inject changed audio, unrecognized status, duplicate spend and malicious external source; no provider call on identical rejected evidence.",
+      "historical_evidence": "18 November 2026 2fe957f live source-bound slide 5 blind recheck still omitted divided by. The exact paid rejection must never be forgotten or converted into an acoustic acceptance merely because fewer other slides are now flagged.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261118-UNCERTAIN-ONE-SIDED-ASR",
       "classification": "orchestration",
       "stages": ["acoustic_qa"],

@@ -70,7 +70,7 @@ def test_real_failed_dual_gemini_trace_is_found_on_exactly_matching_pcm(campaign
     found=find_source_identical_failed_review(new,_normalized(new))
     assert found is not None
     assert found["old"]==old
-    assert found["retakes"]==[(5,1),(7,1)]
+    assert found["retakes"]==[(5,1)]
     assert found["models"]==("gemini-3.5-flash","gemini-3.8-flash")
 
 
@@ -93,13 +93,13 @@ def test_offline_fake_retake_strict_replay_acceptance_and_reverify(campaign):
         def second(path):
             slide=int(path.stem.removeprefix("slide"))
             calls.append(slide)
-            assert slide in (5,7)
+            assert slide==5
             return source[slide-1]  # SYNTHETIC! not an independent Gemini verdict
         return first,second,("gemini-3.5-flash","gemini-3.8-flash")
     replay=replay_with_one_sided_rechecks(new,source,provider_factory=supplier)
     assert replay is not None
     assert replay["report"]["review_required_slides"]==[]
-    assert calls==[5,7]
+    assert calls==[5]
     assert (new/RECEIPT).is_file()
     _verify(new,replay["report"],source)
     receipt={
@@ -188,3 +188,42 @@ def test_single_slot_retake_does_not_trigger_paid_key_pool_fanout(monkeypatch):
     assert second_normal(Path("synthetic-slide.wav")).startswith("Synthetic")
     assert len(attempted)==2
     assert [x[0] for x in attempted]==["offline-key-B","offline-key-A"]
+
+
+def test_prior_rejected_identical_paid_retake_never_rebilled_in_new_campaign(campaign):
+    """Historical two-Gemini disagreement survives new SHA-pinned code revision."""
+    old,new=campaign
+    found=find_source_identical_failed_review(new,_normalized(new))
+    assert found and found["retakes"]==[(5,1)]
+    prior=new.parent.parent/"older-rejected-private"/"2.7"
+    prior.mkdir(parents=True)
+    owner={
+        "publication_authorized":False,
+        "scope":{"host":"hp","work_root":str(prior.parent),
+                 "source_sha256":sha(new/"source.pdf")}
+    }
+    (prior.parent/".microgen_bounded_provider_authorization.json").write_text(
+        json.dumps(owner),encoding="utf8")
+    record={
+        "schema_version":1,
+        "status":"FINITE_ASR_RETAKE_STARTED",
+        "publication_allowed":False,
+        "source_binding":{
+            "source_sha256":sha(new/"source.pdf"),
+            "input_snapshot_sha256":found["trace"]["source_snapshot_sha256"],
+            "original_private_trace_sha256":sha(found["trace_path"]),
+            "old_campaign":found["old"].parent.name,
+            "models":list(found["models"]),
+            "retake_slides":[{"slide":5,"reviewer_index":1}],
+        },
+        "attempts":[{"slide":5,"reviewer_index":1,"status":"REJECTED",
+                     "transcript":"Source-blind model omitted the operator"}],
+    }
+    (prior/RECEIPT).write_text(json.dumps(record),encoding="utf8")
+    with pytest.raises(OneSidedAcousticReplayError,
+                       match="HISTORICAL_IDENTICAL_SENSITIVE_RETAKE_HOLD"):
+        replay_with_one_sided_rechecks(
+            new,_normalized(new),
+            provider_factory=lambda: (_ for _ in ()).throw(
+                AssertionError("Repeated paid request must never be sent")))
+    assert not (new/RECEIPT).exists()

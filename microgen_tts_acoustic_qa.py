@@ -57,7 +57,11 @@ def tokens(text: str) -> list[str]:
     # in independent Gemini ASR (vee ex / v_x, t=0 / t equals zero).
     # This is script-blind and never drops signs or numerical exponents.
     from microgen_acoustic_math_transcript import canonical_math_transcript
-    text = canonical_math_transcript(text)
+    from microgen_context_qa_tolerance import canonical_equivalent_text
+    # Allow only context-preserving inflections and pronunciation variants.
+    # Never remove an operator, number, sign, negation or physical quantity.
+    text = canonical_equivalent_text(
+        canonical_math_transcript(text), nontechnical=True)
     # The hyphen between non and isolated does not change the audible word.
     text = re.sub(r"\bnon[\s-]?isolated\b", "non isolated", text,
                   flags=re.IGNORECASE)

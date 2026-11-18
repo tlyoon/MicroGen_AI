@@ -123,8 +123,37 @@ def find_source_identical_failed_review(stage:Path,texts:list[str]):
                 trace=valid_trace(path,current,len(texts),tuple(models))
                 if trace is None or trace["review_required_slides"]!=flagged:
                     continue
+                # An old diagnostic's failure list is historical evidence,
+                # NOT the current verdict. Under the meaning-first policy,
+                # grammatical 'multiplied' / 'multiply' may now be a PASS.
+                # Reevaluate ALL authentic blind transcripts against current
+                # source, source-risk and mathematical QA. The current
+                # remaining failures must be a nonempty subset of the old
+                # failures, and each one must still meet the strict bounded
+                # one-sided source-exact retake preconditions.
+                from microgen_tts_acoustic_qa import audit_with_recognizer
+                historical=[
+                    row["original_blind_transcripts"] for row in trace["slides"]
+                ]
+                def archived_engine(index):
+                    def run(wav):
+                        n=int(wav.stem.removeprefix("slide"))
+                        if wav!=stage/f"slide{n}.wav" or not 1<=n<=len(historical):
+                            raise OneSidedAcousticReplayError(
+                                "Historical review WAV identity changed")
+                        return historical[n-1][index]
+                    return run
+                current_review=audit_with_recognizer(
+                    stage,texts,archived_engine(0),lambda value:value,
+                    independent_recognizer=archived_engine(1),
+                    recognition_models=tuple(models))
+                current_bad=current_review["review_required_slides"]
+                if (not current_bad or
+                        not set(current_bad).issubset(set(flagged)) or
+                        len(current_bad)>MAX_RECHECK_SLIDES):
+                    continue
                 checked=[]
-                for n in flagged:
+                for n in current_bad:
                     row=trace["slides"][n-1]
                     if row.get("expected_spoken_sha256")!=hashlib.sha256(
                             texts[n-1].encode("utf8")).hexdigest():
@@ -137,7 +166,7 @@ def find_source_identical_failed_review(stage:Path,texts:list[str]):
                         checked=[]
                         break
                     checked.append((n,index))
-                if len(checked)!=len(flagged):
+                if len(checked)!=len(current_bad):
                     continue
                 if any(
                         row.get("expected_spoken_sha256")!=hashlib.sha256(
@@ -180,6 +209,45 @@ def replay_with_one_sided_rechecks(stage:Path,texts:list[str],
         "retake_slides":[{"slide":n,"reviewer_index":i}
                          for n,i in found["retakes"]],
     }
+    # Before any new provider reservation, inspect earlier private retakes
+    # of this exact immutable source/WAV/reviewer combination. A known
+    # mathematically contrary result is NOT forgotten by creating a new
+    # campaign folder or updating the comparison code. Only changed media
+    # and independently verified targeted repair can justify another test.
+    root=stage.parent.parent
+    for campaign in root.iterdir():
+        if (campaign==stage.parent or campaign.is_symlink()
+                or not campaign.is_dir()):
+            continue
+        former=campaign/stage.name
+        prior_file=former/RECEIPT
+        if (prior_file.is_symlink() or not prior_file.is_file()):
+            continue
+        old_owner=read_json(campaign/OWNER)
+        if (old_owner is None
+                or old_owner.get("publication_authorized") is not False
+                or old_owner.get("scope",{}).get("host")!="hp"
+                or old_owner.get("scope",{}).get("work_root")!=str(campaign)
+                or old_owner.get("scope",{}).get("source_sha256")!=
+                source_binding["source_sha256"]):
+            continue
+        prior=read_json(prior_file,128_000)
+        if (not isinstance(prior,dict)
+                or prior.get("source_binding")!=source_binding
+                or prior.get("publication_allowed") is not False
+                or not isinstance(prior.get("attempts"),list)):
+            continue
+        if any(
+            isinstance(attempt,dict)
+            and attempt.get("status")=="REJECTED"
+            and (attempt.get("slide"),attempt.get("reviewer_index"))
+                in found["retakes"]
+            for attempt in prior.get("attempts",[])
+        ):
+            raise OneSidedAcousticReplayError(
+                "HISTORICAL_IDENTICAL_SENSITIVE_RETAKE_HOLD: unchanged "
+                "math-sensitive audio already rejected; no paid replay")
+
     existing=read_json(receipt_path,128_000) if receipt_path.exists() else None
     if receipt_path.exists() and existing is None:
         raise OneSidedAcousticReplayError("UNVERIFIABLE_RETAKE_RESERVATION_HOLD")

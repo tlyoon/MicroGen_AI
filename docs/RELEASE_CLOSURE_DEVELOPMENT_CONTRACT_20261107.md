@@ -15,6 +15,16 @@ makes **automatic recovery in the normal pipeline** a mandatory, testable
 development requirement. It strengthens the autonomous progression rule without
 expanding provider spending, device scope, publication authority, or QA waivers.
 
+**Owner amendment (18 November 2026):** The
+[Context-Preserving Scientific and Acoustic QA Contract](
+CONTEXT_PRESERVING_SCIENTIFIC_ACOUSTIC_QA_CONTRACT_20261118.md)
+is now binding. Accept clearly meaning-preserving wording, grammatical and
+accent variations in both science and speech QA; minor issues may be
+advisories, not unnecessary repair blockers. Scientifically meaningful
+contradictions, numerical or mathematical changes, ambiguous missing
+operators and unsafe provenance remain hard QA stops. This applies to
+actual executable comparison/repair code, not just reviewer prompts.
+
 ## 1. Authority, precedence, and objective
 
 This is the **controlling forward-development and closure procedure** for

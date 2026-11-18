@@ -116,6 +116,24 @@ def _review_prompt(source: list[str], slides: list[str], items: list[dict]) -> s
             "can safely replace a unique plain-text narration or slide sentence; "
             "never rewrite TeX macros, equations, graphics or symbolic formulas; "
             "otherwise use empty string).",
+            "Apply a meaning-first, context-aware severity policy throughout "
+            "the complete lecture. Judge whether the original physical or "
+            "mathematical idea remains correct, not whether the words match "
+            "the textbook literally.",
+            "PASS: minor pronunciation spelling, accent, grammatical inflection, "
+            "clear paraphrases, harmless filler and wording changes that do not "
+            "alter the scientific claim, relationship, explanation or example.",
+            "ADVISORY: a minor or uncertain presentational difference where the "
+            "overall educational meaning remains intact. Record an issue but do "
+            "not request regeneration or block the production stage.",
+            "ERROR: a clear scientific contradiction, wrong mathematical operation "
+            "or sign, changed variable/quantity/units, numerical value, direction, "
+            "causality, negation, unsupported pivotal claim or materially misleading "
+            "explanation. These require source-grounded correction and re-review.",
+            "Omitting a crucial mathematical phrase such as 'divided by' must be "
+            "considered in its complete equation; do not waive it just because "
+            "the word difference is small. Equivalent complete expressions such "
+            "as 'multiply by'/'multiplied by' are harmless.",
             "Mark an error only for a clear, source-contradicting statement.",
             "Do not flag differences in wording, supplementary teaching examples "
             "or legitimate rounding as errors without a clear contradiction.",
@@ -302,9 +320,11 @@ def _same_input_hashes(stage: Path, before: dict) -> None:
 
 def _implementation_hashes() -> dict[str, str]:
     import microgen_autonomous_slide_repair as slide_repair
+    import microgen_context_qa_tolerance as context_policy
     return {
         "science_qa":sha256(Path(__file__)),
         "slide_repair":sha256(Path(slide_repair.__file__)),
+        "context_tolerance":sha256(Path(context_policy.__file__)),
     }
 
 
@@ -321,6 +341,11 @@ def _receipt_valid(stage: Path, record: dict) -> bool:
         and record.get("slide_count") > 0
         and record.get("all_slides_reviewed") is True
         and record.get("unresolved_blocking_issues") == 0
+        and record.get("qa_meaning_tolerance_contract") ==
+            __import__("microgen_context_qa_tolerance").CONTRACT_VERSION
+        and isinstance(record.get("minor_meaning_preserving_advisory_slides"),list)
+        and all(type(n) is int and 1<=n<=record["slide_count"] for n in
+                record["minor_meaning_preserving_advisory_slides"])
         and record.get("publication_allowed") is False)
 
 
@@ -405,7 +430,16 @@ def audit_stage(stage: Path, *, reviewer: Callable | None = None) -> dict:
     source, slides, items, data = _fingerprinted_slides(stage)
     before = _inputs(stage)
     reviewer = reviewer or _live_review
+    from microgen_context_qa_tolerance import (
+        reclassify_proven_minor_scientific_issues, CONTRACT_VERSION,
+    )
     rows = _validate_review(reviewer(source, slides, items), len(items))
+    # Historical failure: literal wording was sometimes returned as an
+    # ERROR despite the same source-grounded physics. Demote ONLY exact
+    # independently source-cited equivalent statements to an advisory.
+    # Contradictory formulae/numbers/units remain full correction blockers.
+    rows, minor_downgrades = reclassify_proven_minor_scientific_issues(
+        rows,source,slides,[str(x["narration"]) for x in items])
     try:
         operations = _plan_corrections(rows, source, slides, items)
     except ScienceQAError as exc:
@@ -443,6 +477,10 @@ def audit_stage(stage: Path, *, reviewer: Callable | None = None) -> dict:
                         candidate_slide_edit(stage, i+1, old, new, scratch))
                 verified = _validate_review(
                     reviewer(source, candidate_pages, new_data["slides"]), len(items))
+                verified, verified_minor = reclassify_proven_minor_scientific_issues(
+                    verified,source,candidate_pages,
+                    [str(x["narration"]) for x in new_data["slides"]])
+                minor_downgrades=sorted(set(minor_downgrades+verified_minor))
                 if any(r["status"] == "error" for r in verified):
                     raise ScienceQAError(
                         "Corrected slide/narration did not pass independent source recheck")
@@ -473,6 +511,8 @@ def audit_stage(stage: Path, *, reviewer: Callable | None = None) -> dict:
                 "source_bound_narration_corrections":len(narration_ops),
                 "source_bound_slide_text_corrections":len(slide_ops),
                 "advisory_slide_count":advisories,
+                "minor_meaning_preserving_advisory_slides":minor_downgrades,
+                "qa_meaning_tolerance_contract":CONTRACT_VERSION,
                 "unresolved_blocking_issues":0,
                 "inputs":_inputs(stage),
                 "implementation_sha256":_implementation_hashes(),
