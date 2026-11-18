@@ -334,6 +334,36 @@ def reviewed_math_voice(text: str) -> str:
         lambda m:m["mean"]+"for constant acceleration along the x axis",
         value,flags=re.IGNORECASE)
 
+    # An independently reviewed 21-slide Serway source/A-V campaign
+    # (18 Nov 2026) exposed compact a_x language in TWO complete roles:
+    # the introductory constant-acceleration kinematics equations and the
+    # trooper's time-solution denominator. Both blind Gemini reviewers heard
+    # ambiguous x/y or a*x labels. Expand only source-identifiable full
+    # clauses; never infer that arbitrary "a x" is acceleration, never
+    # change numbers/signs, and NEVER waive a failed acoustic review.
+    # The existing two-slide auto-repair budget remains unchanged.
+    value=re.sub(
+        r"\bcomplete\s+set\s+of\s+kinematic\s+equations\s+for\s+"
+        r"constant\s+ay\s+(?:sub\s+)?ex\b"
+        r"(?!\s+(?:squared|cubed|times|plus|minus)\b)",
+        "complete set of kinematic equations for constant acceleration "
+        "along the x axis",value,flags=re.I)
+    value=re.sub(
+        r"\b(?P<intro>where|when)\s+ay\s+(?:sub\s+)?ex\s+"
+        r"equals\s+zero\b",
+        lambda m:m["intro"]+" the acceleration along the x axis equals zero",
+        value,flags=re.I)
+    value=re.sub(
+        r"\b(?P<context>terms\s+on\s+the\s+right(?:-|\s+)hand\s+side\s+"
+        r"of\s+the\s+time\s+solution\s+)have\s+a\s+x\s+"
+        r"in\s+the\s+denominator\b",
+        lambda m:m["context"]+"have the x component of acceleration "
+        "in the denominator",value,flags=re.I)
+    value=re.sub(
+        r"\bincreasing\s+a\s+x\s+decreases\s+the\s+overtake\s+time\b",
+        "increasing the x component of acceleration decreases "
+        "the overtake time",value,flags=re.I)
+
     # Recurrent two-Gemini x/y confusion in compact a_x speech is a
     # pronunciation hazard, not harmless orthographic ASR variation.
     # Expand ONLY an independently source-identifiable acceleration label
