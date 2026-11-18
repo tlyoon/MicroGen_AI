@@ -185,6 +185,67 @@
       "publication_allowed": false
     },
     {
+      "id": "MGA-GEMINI-MIXED-TRANSIENT-BILLING-POOL",
+      "classification": "infrastructure",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa",
+        "tts"
+      ],
+      "exception": "GeminiProviderPoolUnavailable",
+      "message_marker": "GEMINI_MIXED_TRANSIENT_BILLING_EXHAUSTED",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "gemini_keys.call_with_key_failover",
+      "preconditions": "Real stage's configured Gemini key pool returned a transient provider status such as 504 and an independent key returned 402 billing depletion; preserve each known category without claiming all keys exhausted credits or repeating a possibly billed operation",
+      "verification": "Replay full real 20261118 HP 2.7 science traceback and injected two-key 504+402 with no additional stage requests, zero QA pass, frozen source+Git revision, and a typed parent external-dependency checkpoint",
+      "historical_evidence": "20261118_HP_G3_SERWAY27_ACOUSTIC_855_PRIVATE/2.7: 21-slide narration passed; source-grounded independent science QA failed key #1 with 504 deadline, key #2 with 402 prepayment credits depleted; generic ambiguous parent hold was misleading",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-GEMINI-ALL-KEY-BILLING-HOLD",
+      "classification": "infrastructure",
+      "stages": [
+        "figure_mapping",
+        "slides",
+        "narration",
+        "science_qa",
+        "acoustic_qa",
+        "tts"
+      ],
+      "exception": "GeminiBillingError",
+      "message_marker": "stopped because every configured Gemini key reported billing/prepayment failure",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "gemini_keys.call_with_key_failover",
+      "preconditions": "Every actually configured Gemini key reports genuine prepayment credit depletion, so shared billing circuit is opened by existing provider recovery and no source/audio defect or further paid retry can be inferred",
+      "verification": "Synthetic 402 on every configured key produces one bounded request per key, typed billing exception, shared circuit, parent external pause and zero duplicate paid stage attempts; never equate a mixed 504 and 402 incident with all-keys billing depletion",
+      "historical_evidence": "20261118 HP science 402 key failure and historical November Gemini credits circuit breaker regression; separate all-billing path was previously not recognized by the version-controlled runner registry",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-GEMINI-LEGACY-SCIENCE-402-HOLD",
+      "classification": "infrastructure",
+      "stages": [
+        "science_qa"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "Gemini API keys were unavailable: 402 RESOURCE_EXHAUSTED",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "microgen_batch.run_subprocess",
+      "preconditions": "Exact terminal historical Python exception from the real HP 18 November science stage identifies 402 provider credit exhaustion after ordinary finite key failover; without a valid science receipt, neither a source defect nor a safe paid replay is inferred",
+      "verification": "Classify original source-bound 855 private failed science log, require full terminal traceback rather than quoted log or academic text, and keep the entire old checkpoint immutable with paid_retry_authorized false",
+      "historical_evidence": "20261118_HP_G3_SERWAY27_ACOUSTIC_855_PRIVATE/2.7: source-science QA exit 1; original terminal RuntimeError explicitly includes Gemini API keys were unavailable: 402 RESOURCE_EXHAUSTED",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-CHILD-EXTERNAL-DEPENDENCY-HOLD",
       "classification": "infrastructure",
       "stages": [
