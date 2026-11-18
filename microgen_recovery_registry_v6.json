@@ -3,6 +3,36 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261118-SINGLE-OPERATOR-CUE-REPAIR-RESERVATION",
+      "classification": "orchestration",
+      "stages": ["acoustic_qa"],
+      "exception": "AutonomousAcousticError",
+      "message_marker": "SOURCE_OPERATOR_CUE_RESERVATION_HOLD",
+      "disposition": "UNRESOLVED_EXTERNAL_EFFECT_HOLD",
+      "handler": "microgen_source_operator_cue_recovery.maybe_repair_rejected_operator",
+      "preconditions": "A SHA-bound mathematical source cue has an existing exclusive journal, possibly after a paid TTS or model recognition. Do not reissue external effects if the receipt is absent, incomplete, uncertain or rejected.",
+      "verification": "Inspect fsynced source/audio/model/voice-bound journal and original private evidence without making calls. If a provider send was reserved, preserve it; only an independently accepted new private candidate and full journal verification may continue to timed video.",
+      "historical_evidence": "2026-11-18 HP genuine Serway 2.7 cue s5_e2 'divided by': earlier paid retake of same WAV was contrary; all-four-cue revoice was wasteful. 21-slide offline source and crash-at-provider-send fault-injection verifies one-cue budget, persistent reservation and no duplicate.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-20261118-SOURCE-OPERATOR-CUE-REPAIR-ERROR",
+      "classification": "scientific_qa",
+      "stages": ["acoustic_qa"],
+      "exception": "SourceOperatorCueRecoveryError",
+      "message_marker": "",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_operator_cue_recovery.maybe_repair_rejected_operator",
+      "preconditions": "Genuine source operator cue identification, voice continuity, private provider reservation or two blind math reviews failed.",
+      "verification": "Allow only the unique original cue identified by exact missing operator in authenticated Gemini transcripts. Source, numbers, signs, voice, old unaffected chunks and physical PCM must remain bound. Never waive a missing division operator; stop if any candidate remains unclear.",
+      "historical_evidence": "2026-11-18 real 21-slide Serway 2.7 source with four slide-5 timed cues and an actual preserved rejected review, synthetic full transaction and deliberate PCM/scope/provider failure tests.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261118-MEANING-PRESERVING-QA",
       "classification": "scientific_qa",
       "stages": ["science_qa"],

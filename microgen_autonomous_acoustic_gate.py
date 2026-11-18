@@ -819,6 +819,10 @@ def verify_receipt(stage:Path) -> dict:
     # every downstream video/acceptance read, never trusted by status alone.
     from microgen_one_sided_acoustic_replay import verify_one_sided_replay
     verify_one_sided_replay(stage,receipt)
+    from microgen_source_operator_cue_recovery import (
+        verify_source_operator_repair,
+    )
+    verify_source_operator_repair(stage,receipt)
     return receipt
 
 
@@ -893,6 +897,26 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 +", ".join(evidence["blocking_defects"]))
     auto_provider_recovery=engines is None
     if auto_provider_recovery:
+        # A prior uncertain billable source-operator-cue repair cannot be
+        # retried merely because the normal runner restarts. An installed
+        # correction is accepted only through its complete verified receipt.
+        from microgen_source_operator_cue_recovery import (
+            maybe_repair_rejected_operator,JOURNAL as OPERATOR_JOURNAL,
+        )
+        if (stage/OPERATOR_JOURNAL).exists() or (
+                stage/OPERATOR_JOURNAL).is_symlink():
+            raise AutonomousAcousticError(
+                "SOURCE_OPERATOR_CUE_RESERVATION_HOLD: completed receipt "
+                "absent; reconcile the durable one-send journal offline")
+        operator_repair=maybe_repair_rejected_operator(stage,texts)
+        if operator_repair is not None:
+            verify_receipt(stage)
+            print("[Acoustic QA] only one source-bound mathematical cue "
+                  "revoiced, actual PCM/timed manifest transaction committed, "
+                  "two fresh blind Gemini reviews passed; original remaining "
+                  "WAVs and historical reviewers cryptographically retained",
+                  flush=True)
+            return operator_repair
         # Automatic production recovery for a corrected source-BLIND
         # transcript normalizer: reclassify BOTH original Gemini reviewers
         # only when the former private WAV/source/model evidence is exactly

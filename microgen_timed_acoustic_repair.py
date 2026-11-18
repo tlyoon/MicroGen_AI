@@ -36,6 +36,8 @@ def prepare_timed_repair(
     scratch: Path,
     synthesize: Callable,
     verify_candidate: Callable,
+    *,
+    selected_cues: dict[int,list[int]] | None=None,
 ) -> dict:
     """Prepare and validate corrected cue-WAV inventory; return scratch paths.
 
@@ -62,7 +64,16 @@ def prepare_timed_repair(
             or len(texts) != len(rows) or len(records) != len(rows)
             or verified["slide_count"] != len(rows)):
         raise TimedAcousticRepairError("Untrusted bounded acoustic slide selection")
-    count = sum(len(rows[i - 1]["cues"]) for i in slides)
+    if selected_cues is not None:
+        if (not isinstance(selected_cues,dict) or
+                set(selected_cues)!=set(slides) or
+                any(not isinstance(v,list) or not v or
+                    sorted(set(v))!=v or any(type(j) is not int or
+                    j<1 or j>len(rows[n-1]["cues"]) for j in v)
+                    for n,v in selected_cues.items())):
+            raise TimedAcousticRepairError("Untrusted precise timed cue selection")
+    count=sum(len(selected_cues[n]) if selected_cues is not None
+              else len(rows[n-1]["cues"]) for n in slides)
     if not 1 <= count <= MAX_TIMED_REPAIR_CUES:
         raise TimedAcousticRepairError("Finite timed acoustic cue budget exceeded")
     # Match the original production Flash cue synthesizer's exact
@@ -104,6 +115,11 @@ def prepare_timed_repair(
         old_record = records[n - 1]
         row = new_manifest["slides"][n - 1]
         for j, cue in enumerate(row["cues"], 1):
+            # Only source-identified sensitive cues are revoiced. Everything
+            # else keeps the exact original PCM/hash/timing evidence.
+            if selected_cues is not None and j not in selected_cues[n]:
+                outputs.append((stage/cue["audio_chunk"]).read_bytes())
+                continue
             # Avoid duplicate provider effect or an unsupported extra source cue.
             target = scratch / f"timed_slide{n}_cue{j}.wav"
             if target.exists() or target.is_symlink():
@@ -149,5 +165,7 @@ def prepare_timed_repair(
         "prepared": prepared,
         "cue_count": count,
         "changed_slides": list(slides),
+        "selected_cues":({str(n):selected_cues[n] for n in slides}
+                         if selected_cues is not None else None),
         "publication_allowed": False,
     }

@@ -25,6 +25,17 @@ contradictions, numerical or mathematical changes, ambiguous missing
 operators and unsafe provenance remain hard QA stops. This applies to
 actual executable comparison/repair code, not just reviewer prompts.
 
+**18 November 2026 targeted recovery implementation:** The
+[Source-Bound Single-Cue Mathematical-Operator Recovery](
+SOURCE_OPERATOR_SINGLE_CUE_RECOVERY_20261118.md) is now the mandatory
+finite recovery path for authenticated genuine two-Gemini mathematical-operator
+disagreements previously rejected on unchanged PCM. Repair the unique verified
+timed cue, not a whole lecture or unrelated cues; reserve one TTS and two
+source-blind ASR requests with crash-safe journals before sending, require
+full PCM timing and independent math verification, and resume the ordinary
+batch to decoded video only after success. Never retry an already reserved
+paid provider effect or waive missing division by a word-error percentage.
+
 ## 1. Authority, precedence, and objective
 
 This is the **controlling forward-development and closure procedure** for
