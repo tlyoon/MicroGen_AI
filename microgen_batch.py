@@ -1154,6 +1154,12 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                   f"{import_evidence['stages']} from prior verified "
                   f"private campaign {import_evidence['from']}; "
                   "no old TTS/failed provider stage imported", flush=True)
+    # Preserve the PREVIOUS code pin for the only permitted post-acoustic
+    # reconciliation. prepare_stage legitimately updates package_commit;
+    # comparing its new value with itself would hide an unsafe code delta.
+    prior_checkpoint=args.work_root/subchapter/".microgen_checkpoint.json"
+    prior_commit=(load_checkpoint(prior_checkpoint).get("package_commit")
+                  if prior_checkpoint.is_file() else None)
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -1200,6 +1206,30 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
             mark_complete(cp, checkpoint_path, "science_qa", stage)
             print(f"[{subchapter}] recovered independently verified science "
                   "receipt after interrupted provider stage", flush=True)
+        elif (isinstance(pending,dict)
+              and pending.get("stage")=="acoustic_qa"):
+            from microgen_post_acoustic_reuse_resume import (
+                reconcile_verified_audio_receipt,
+            )
+            recovered_qa=reconcile_verified_audio_receipt(
+                args.repo,stage,cp,prior_commit,args.commit,
+                stage_valid,quality.dependency_fingerprint,dest)
+            if recovered_qa is None:
+                raise RuntimeError(
+                    "AMBIGUOUS_PROVIDER_STAGE_HOLD: acoustic QA not "
+                    "independently attested after an uncertain provider "
+                    "request; do not repeat Gemini or TTS")
+            cp.setdefault("dependency_fingerprints",{}).update(
+                recovered_qa["fingerprints"])
+            cp["post_acoustic_reconciliation"]={
+                key:value for key,value in recovered_qa.items()
+                if key!="fingerprints"}
+            mark_complete(cp,checkpoint_path,"acoustic_qa",stage)
+            print(f"[{subchapter}] genuine independent acoustic pass "
+                  "recovered from one-cue SHA journal; source/science/TTS "
+                  "rechecked and fingerprints safely reconciled after "
+                  "verifier-only patch; zero additional provider calls",
+                  flush=True)
         else:
             raise RuntimeError(
                 "AMBIGUOUS_PROVIDER_STAGE_HOLD: a previous provider stage may "

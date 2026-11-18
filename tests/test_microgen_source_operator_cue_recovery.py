@@ -229,3 +229,122 @@ def test_executable_registry_handles_uncertain_paid_single_cue_send():
         "MGA-20261118-SINGLE-OPERATOR-CUE-REPAIR-RESERVATION")
     assert decision["max_unmodified_retries"]==0
     assert decision["disposition"]=="UNRESOLVED_EXTERNAL_EFFECT_HOLD"
+
+
+def _attach_original_reuse_receipt(stage):
+    """Create the actual production schema before any simulated TTS changes."""
+    from microgen_verified_tts_reuse import PRODUCER, RECEIPT, TIMED
+    repo=Path(__file__).resolve().parents[1]
+    # Producer hashes are the existing unmodified original TTS policy.
+    # New selective recovery policy is deliberately NOT an old TTS producer.
+    for file in PRODUCER + (
+            "microgen_tts_acoustic_qa.py","microgen_tts_evidence.py"):
+        shutil.copy2(repo/file,stage/file)
+    assets={
+        str(p.relative_to(stage)).replace("\\","/"):sha(p)
+        for p in (
+            list(stage.glob("slide*.wav"))
+            +list((stage/"highlight_chunks").glob("*.wav"))
+            +list((stage/".microgen_tts_cache").glob("*.json"))
+            +[stage/TIMED[1],stage/TIMED[2]]
+        )
+    }
+    receipt={
+        "schema_version":1,
+        "status":"SOURCE_BOUND_PCM_REVERIFIED_ACOUSTIC_REVIEW_REQUIRED",
+        "source_sha256":sha(stage/"source.pdf"),
+        "origin_campaign":"original-private",
+        "cue_plan_sha256":sha(stage/TIMED[0]),
+        "tts_producer_sha256":{name:sha(stage/name) for name in PRODUCER},
+        "file_sha256":assets,
+        "original_acoustic_approval_reused":False,
+        "new_model_requests":False,
+        "publication_allowed":False,
+    }
+    (stage/RECEIPT).write_text(json.dumps(receipt),encoding="utf8")
+    from microgen_verified_tts_reuse import verify_reuse_receipt
+    assert verify_reuse_receipt(stage)["status"]==(
+        "SOURCE_BOUND_PCM_REVERIFIED_ACOUSTIC_REVIEW_REQUIRED")
+    return receipt
+
+
+def _reconcile_fake_real_source(full_real_source_campaign):
+    old,new,prior=full_real_source_campaign
+    _attach_original_reuse_receipt(new)
+    text=_normalized(new)
+    def offline_tts(t,d,record):
+        synthentic_new_cue(new/"highlight_chunks/slide5_cue2.wav",d)
+    result=maybe_repair_rejected_operator(
+        new,text,synthesize=offline_tts,
+        recognizer_factory=good_fake_recognizers(text[4],[]))
+    assert result["slide_count"]==21
+    return new
+
+
+def test_verified_pre_repair_baseline_recognizes_only_attested_five_file_change(
+        full_real_source_campaign):
+    from microgen_verified_tts_reuse import verify_reuse_receipt
+    s=_reconcile_fake_real_source(full_real_source_campaign)
+    accepted=verify_reuse_receipt(s)
+    assert accepted["status"]==(
+        "SOURCE_BOUND_PCM_RECONCILED_WITH_ACCEPTED_ONE_CUE_REPAIR")
+    assert accepted["changed_files"]==sorted([
+        ".microgen_timed_highlights.json",
+        ".microgen_tts_cache/slide5.json",
+        ".microgen_tts_provenance.json",
+        "highlight_chunks/slide5_cue2.wav","slide5.wav",
+    ])
+    assert verify_receipt(s)["repaired_audio_slides"]==1
+    from microgen_quality import dependency_fingerprint
+    assert len(dependency_fingerprint(s,"tts"))==64
+    assert len(dependency_fingerprint(s,"acoustic_qa"))==64
+
+
+@pytest.mark.parametrize("intrusion",[
+    "unrelated_slide", "unrelated_cue","forged_old_wav",
+    "forged_old_cue","missing_acoustic","tampered_journal",
+])
+def test_post_repair_reuse_refuses_extra_or_forged_modifications(
+        full_real_source_campaign,intrusion):
+    from microgen_verified_tts_reuse import (
+        verify_reuse_receipt,VerifiedTTSReuseError,RECEIPT,
+    )
+    s=_reconcile_fake_real_source(full_real_source_campaign)
+    if intrusion in ("unrelated_slide","unrelated_cue"):
+        name=("slide8.wav" if intrusion=="unrelated_slide"
+              else "highlight_chunks/slide5_cue1.wav")
+        file=s/name
+        # Replace the hardlink rather than mutating archived source media.
+        temp=s/(".".join(("intrusion",file.name)))
+        temp.write_bytes(file.read_bytes()+b"BAD")
+        temp.replace(file)
+    elif intrusion in ("forged_old_wav","forged_old_cue"):
+        doc=json.loads((s/RECEIPT).read_text())
+        name=("slide5.wav" if intrusion=="forged_old_wav"
+              else "highlight_chunks/slide5_cue2.wav")
+        doc["file_sha256"][name]="a"*64
+        (s/RECEIPT).write_text(json.dumps(doc))
+    elif intrusion=="missing_acoustic":
+        (s/".microgen_autonomous_acoustic_qa.json").unlink()
+    else:
+        state=s/JOURNAL
+        doc=json.loads(state.read_text())
+        doc["requests"][2]["transcript"]="division omitted"
+        state.write_text(json.dumps(doc))
+    with pytest.raises(Exception):
+        verify_reuse_receipt(s)
+
+
+def test_recovery_registry_recognizes_historical_tts_reuse_lineage_error():
+    from microgen_recovery_registry import classify_log_attempt
+    repo=Path(__file__).resolve().parents[1]
+    event=(
+        b"Traceback (most recent call last):\n"
+        b"microgen_verified_tts_reuse.VerifiedTTSReuseError: "
+        b"Recovered WAV or cache integrity drift\n")
+    decision=classify_log_attempt(
+        "acoustic_qa",event,registry_folder=repo)
+    assert decision["failure_id"]==(
+        "MGA-20261118-POST-ACOUSTIC-REUSE-SHA-RECONCILIATION")
+    assert decision["max_unmodified_retries"]==0
+    assert decision["disposition"]=="DETERMINISTIC_HOLD"

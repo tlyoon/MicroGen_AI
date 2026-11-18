@@ -361,12 +361,71 @@ def verify_reuse_receipt(stage: Path) -> dict | None:
     if (not isinstance(files,dict) or len(files)>MAX_FILES
             or len(files)<4):
         raise VerifiedTTSReuseError("Recovered audio file inventory missing")
+    # A successful independently attested acoustic repair is expected to
+    # change its *selected cue*, the reconstructed slide, and their two
+    # metadata manifests. The original imported TTS receipt remains an
+    # immutable pre-repair baseline; do not edit its old file hashes.
+    differences=[]
     for rel,digest in files.items():
         path=stage/rel
         if (not isinstance(rel,str) or not isinstance(digest,str)
                 or not re.fullmatch(r"[0-9a-f]{64}",digest)
                 or path.is_symlink() or not path.is_file()
-                or stage.resolve() not in path.resolve().parents
-                or _sha(path)!=digest):
+                or stage.resolve() not in path.resolve().parents):
             raise VerifiedTTSReuseError("Recovered WAV or cache integrity drift")
+        if _sha(path)!=digest:
+            differences.append(rel)
+    if differences:
+        # Do not let a forged acoustic receipt excuse *any* modified file.
+        # verify_receipt itself binds the two fresh blind recognizers, saved
+        # paid reservations, original immutable 21-slide transcript evidence,
+        # source+voice+code identity and every measured PDF/PCM cue.
+        from microgen_autonomous_acoustic_gate import verify_receipt
+        from microgen_source_operator_cue_recovery import JOURNAL
+        try:
+            acoustic=verify_receipt(stage)
+        except Exception as exc:
+            raise VerifiedTTSReuseError(
+                "No independently verified acoustic repair lineage for "
+                "original reused PCM drift") from exc
+        selected=acoustic.get("verified_source_operator_cue_recovery",{})
+        selected=selected.get("selected_cues")
+        if (not isinstance(selected,dict) or len(selected)!=1
+                or acoustic.get("repaired_audio_slides")!=1):
+            raise VerifiedTTSReuseError(
+                "Recovered TTS drift lacks verified one-cue acoustic lineage")
+        try:
+            n=int(next(iter(selected)))
+            indices=selected[str(n)]
+            if (str(n)!=next(iter(selected)) or not isinstance(indices,list)
+                    or len(indices)!=1 or type(indices[0]) is not int):
+                raise ValueError("Wrong source cue selection")
+            j=indices[0]
+        except (ValueError,KeyError,IndexError,TypeError) as exc:
+            raise VerifiedTTSReuseError("Malformed acoustic cue lineage") from exc
+        permitted={
+            f"slide{n}.wav",
+            f"highlight_chunks/slide{n}_cue{j}.wav",
+            f".microgen_tts_cache/slide{n}.json",
+            ".microgen_tts_provenance.json",
+            ".microgen_timed_highlights.json",
+        }
+        if set(differences)!=permitted:
+            raise VerifiedTTSReuseError(
+                "Acoustic repair changed files beyond the source-verified cue")
+        state=_read(stage/JOURNAL)
+        binding=state.get("binding",{}) if isinstance(state,dict) else {}
+        if (binding.get("source_wav_sha256")!=
+                files[f"slide{n}.wav"]
+                or binding.get("cue_original_sha256")!=
+                files[f"highlight_chunks/slide{n}_cue{j}.wav"]):
+            raise VerifiedTTSReuseError(
+                "Repaired cue does not originate in immutable reused PCM")
+        return {
+            "status":"SOURCE_BOUND_PCM_RECONCILED_WITH_ACCEPTED_ONE_CUE_REPAIR",
+            "receipt_sha256":_sha(stage/RECEIPT),
+            "acoustic_receipt_sha256":
+                _sha(stage/".microgen_autonomous_acoustic_qa.json"),
+            "changed_files":sorted(differences),
+        }
     return {"status":receipt["status"],"receipt_sha256":_sha(stage/RECEIPT)}

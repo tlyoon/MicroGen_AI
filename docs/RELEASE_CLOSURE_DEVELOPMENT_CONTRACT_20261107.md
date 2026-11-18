@@ -36,6 +36,19 @@ full PCM timing and independent math verification, and resume the ordinary
 batch to decoded video only after success. Never retry an already reserved
 paid provider effect or waive missing division by a word-error percentage.
 
+**18 November 2026 production follow-through:** A successful source-bound
+single-cue acoustic correction replaces five legitimate source-timed audio
+assets. The `microgen_verified_tts_reuse.verify_reuse_receipt` recovery
+now recognizes this exact documented transition **only** after verifying
+the authentic independently accepted acoustic receipt, both Gemini model
+reviews, the journal's old and new hashes, original source/timing, and
+all other preserved original files. Do not recalculate or rewrite the
+original pre-repair TTS-reuse receipt: it remains the immutable baseline.
+Unknown extra drift, missing reviewer lineage, forged records, and
+interrupted provider reservations remain mandatory holds. Successful
+reconciliation automatically restarts the original timed lecture
+video/split/acceptance stages without reissuing model requests.
+
 ## 1. Authority, precedence, and objective
 
 This is the **controlling forward-development and closure procedure** for

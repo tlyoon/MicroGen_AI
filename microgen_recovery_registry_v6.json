@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261118-POST-ACOUSTIC-REUSE-SHA-RECONCILIATION",
+      "classification": "orchestration",
+      "stages": ["acoustic_qa", "video", "acceptance"],
+      "exception": "VerifiedTTSReuseError",
+      "message_marker": "Recovered WAV or cache integrity drift",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_verified_tts_reuse.verify_reuse_receipt",
+      "preconditions": "An originally source- and model-verified reused PCM inventory remains immutable, but one genuinely accepted source-bound operator-cue repair updated the cue, its slide WAV, voice cache, provenance, and measured-highlight manifest. Never replace the original TTS-reuse receipt with a newly calculated snapshot.",
+      "verification": "Compare every original imported file to its original SHA. Permit exclusively five exact files from one SHA-bound cue: that cue WAV, rebuilt slide WAV, that slide TTS cache, voice provenance and timed-highlight manifest. Independently verify the original pre-repair WAV/cue SHA in the paid-reservation journal, genuine two-Gemini corrected acoustic receipt, source/voice/timing/whole-slide lineage and all unchanged original assets. Any other drift, missing evidence or conflicting mathematics is an immutable stop. Real HP Serway 2.7 21-slide replay, wrong-file/wrong-SHA/journal/receipt fault injections and no duplicate provider request required.",
+      "historical_evidence": "2026-11-18 HP G3 2.7 private campaign 20261118_HP_G3_SERWAY27_OPERATOR_BCF_PRIVATE passed two independent source-blind Gemini acoustic reviewers after one corrected s5_e2. The downstream old reuse receipt held five pre-repair SHAs and originally raised VerifiedTTSReuseError, despite genuine accepted PCM. Source/current WAV and cue original SHA remain recorded in the new immutable operator journal.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261118-SINGLE-OPERATOR-CUE-REPAIR-RESERVATION",
       "classification": "orchestration",
       "stages": ["acoustic_qa"],
