@@ -80,11 +80,44 @@ def valid_trace(path: Path, snapshot: dict, slide_count: int,
     return report
 
 
-def maybe_replay_verified_acoustic(stage: Path, texts: list[str]) -> dict | None:
+def _third_component_witness_hold(state: dict) -> Exception:
+    """Distinguish absent provider from a genuinely contrary third opinion.
+
+    A known billing/network/model failure can never be misreported as a
+    mathematical rejection, and neither outcome grants a second paid send.
+    """
+    if not isinstance(state,dict):
+        return VerifiedAcousticReplayError(
+            "COMPONENT_WITNESS_MATHEMATICS_HOLD: independent evidence missing")
+    if (state.get("status")=="THIRD_GEMINI_REVIEWER_UNAVAILABLE"
+            or (state.get("status")=="MATH_WITNESS_UNRESOLVED"
+                and any(isinstance(a,dict)
+                        and a.get("status")=="WITNESS_UNAVAILABLE"
+                        for a in state.get("attempts",[])))):
+        return RuntimeError(
+            "G3_COMPONENT_THIRD_GEMINI_UNAVAILABLE: finite independent "
+            "witness consumed without a usable reply; hold prior audio "
+            "and preserve the paid-call reservation")
+    if state.get("status") in {
+            "PAID_WITNESS_SCOPE_UNAUTHORIZED",
+            "PAID_WITNESS_ALREADY_RESERVED_OR_INVALID"}:
+        return VerifiedAcousticReplayError(
+            "COMPONENT_WITNESS_SCOPE_HOLD: no authorized fresh single "
+            "third-Gemini request; no paid replay allowed")
+    return VerifiedAcousticReplayError(
+        "COMPONENT_WITNESS_MATHEMATICS_HOLD: independently obtained third "
+        "review did not corroborate the original math variable; "
+        "original WAVs and paid reservation remain frozen")
+
+
+def maybe_replay_verified_acoustic(stage: Path, texts: list[str],
+                                   *, third_provider_factory=None) -> dict | None:
     """Find ONE genuine failed review, re-evaluate both model outputs strictly.
 
-    Only a changed comparison implementation authorizes offline replay. If
-    unchanged evidence remains ambiguous, block instead of model-shopping.
+    Only a changed comparison or acoustic-gate implementation authorizes
+    offline replay. A single original math-symbol split may use one source-
+    blind third Gemini model under fresh owner authorization; no other old
+    disagreements are waived or ever auto-rebilled.
     """
     stage = Path(stage).resolve()
     root = Path(os.environ.get("LOCALAPPDATA", "/unavailable")) / "MicroGen_AI_Checkpoints"
@@ -104,8 +137,13 @@ def maybe_replay_verified_acoustic(stage: Path, texts: list[str]) -> dict | None
         return None
     new_scope = new_grant.get("scope", {})
     source_sha = sha(source_file)
+    new_cp = read_json(stage / ".microgen_checkpoint.json")
     if (new_grant.get("publication_authorized") is not False
             or not isinstance(new_scope, dict)
+            or new_scope.get("work_root") != str(stage.parent)
+            or new_cp is None
+            or new_cp.get("package_commit") != new_scope.get("code_revision")
+            or not new_cp.get("completed",{}).get("tts")
             or new_scope.get("host") != "hp"
             or new_scope.get("source_sha256") != source_sha
             or new_scope.get("stop_after") != "acceptance"):
@@ -132,7 +170,11 @@ def maybe_replay_verified_acoustic(stage: Path, texts: list[str]) -> dict | None
                 or sha(old / "source.pdf") != source_sha
                 or not (old / math_file.name).is_file()
                 or (old / math_file.name).is_symlink()
-                or sha(old / math_file.name) == sha(math_file)):
+                or not (old / "microgen_autonomous_acoustic_gate.py").is_file()
+                or (old / "microgen_autonomous_acoustic_gate.py").is_symlink()
+                or (sha(old / math_file.name) == sha(math_file)
+                    and sha(old / "microgen_autonomous_acoustic_gate.py") ==
+                    sha(stage / "microgen_autonomous_acoustic_gate.py"))):
             continue
         for diagnostic_path in old.glob(".microgen_acoustic_blocked_*.json"):
             diagnostic = read_json(diagnostic_path, 128_000)
@@ -178,19 +220,49 @@ def maybe_replay_verified_acoustic(stage: Path, texts: list[str]) -> dict | None
         stage, texts, recognizer(0), lambda x: x,
         independent_recognizer=recognizer(1),
         recognition_models=tuple(trace["models"]))
+    witness_used = False
     if report.get("review_required_slides"):
-        raise VerifiedAcousticReplayError(
-            "Previously recorded dual-Gemini evidence still has substantive "
-            "acoustic disagreements; do not rebill unchanged audio")
+        # On an exact source/PCM matched old 2-Gemini disagreement, never
+        # issue another 42 ASR calls merely to reconstruct the same words.
+        # Only an eligible isolated symbol split can ask ONE third, distinct
+        # source-blind Gemini model under the new finite owner grant.
+        from microgen_tts_acoustic_qa import (
+            verified_isolated_component_letter_witness,
+        )
+        from microgen_autonomous_acoustic_gate import _bounded_independent_math_tiebreak
+        flagged=report["review_required_slides"]
+        if (len(flagged)!=1 or flagged!=trace["review_required_slides"]
+                or not valid_trace(trace_path,snapshot,len(texts),
+                                   tuple(trace["models"]))):
+            raise VerifiedAcousticReplayError(
+                "Historical dual-Gemini disagreement not an isolated source-bound symbol")
+        n=flagged[0]
+        original=report["slides"][n-1]
+        if (original.get("assessment")!="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
+                or original.get("source_pronunciation_risks")
+                or not verified_isolated_component_letter_witness(
+                    texts[n-1],*original["transcripts"],texts[n-1])):
+            raise VerifiedAcousticReplayError(
+                "Historical mathematics disagreement still material; no paid replay")
+        arguments=({"provider_factory":third_provider_factory}
+                   if third_provider_factory is not None else {})
+        report=_bounded_independent_math_tiebreak(
+            stage,texts,report,tuple(trace["models"]),**arguments)
+        if report.get("review_required_slides"):
+            raise _third_component_witness_hold(
+                report.get("independent_math_tiebreak",{}))
+        witness_used = True
     _verify(stage, report, texts)
     return {
         "report": report,
         "evidence": {
-            "method": "SHA_BOUND_PREVIOUS_BLIND_GEMINI_TRANSCRIPT_RECLASSIFICATION",
+            "method": ("SHA_BOUND_PREVIOUS_BLIND_GEMINI_PLUS_THIRD_COMPONENT_WITNESS"
+                       if witness_used else
+                       "SHA_BOUND_PREVIOUS_BLIND_GEMINI_TRANSCRIPT_RECLASSIFICATION"),
             "original_private_trace_sha256": sha(trace_path),
             "original_campaign": old.parent.name,
             "math_comparator_sha256": sha(math_file),
-            "paid_recognition_calls": 0,
+            "paid_recognition_calls": 1 if witness_used else 0,
             "audio_regeneration": False,
             "publication_allowed": False,
         },
@@ -207,9 +279,13 @@ def verify_replay_evidence(stage: Path, receipt: dict) -> None:
                 "method", "original_private_trace_sha256", "original_campaign",
                 "math_comparator_sha256", "paid_recognition_calls",
                 "audio_regeneration", "publication_allowed"}
-            or evidence["method"] !=
-               "SHA_BOUND_PREVIOUS_BLIND_GEMINI_TRANSCRIPT_RECLASSIFICATION"
-            or evidence["paid_recognition_calls"] != 0
+            or evidence["method"] not in {
+               "SHA_BOUND_PREVIOUS_BLIND_GEMINI_TRANSCRIPT_RECLASSIFICATION",
+               "SHA_BOUND_PREVIOUS_BLIND_GEMINI_PLUS_THIRD_COMPONENT_WITNESS"}
+            or evidence["paid_recognition_calls"] != (
+                1 if evidence["method"] ==
+                "SHA_BOUND_PREVIOUS_BLIND_GEMINI_PLUS_THIRD_COMPONENT_WITNESS"
+                else 0)
             or evidence["audio_regeneration"] is not False
             or evidence["publication_allowed"] is not False
             or not isinstance(evidence["original_campaign"], str)
@@ -249,3 +325,50 @@ def verify_replay_evidence(stage: Path, receipt: dict) -> None:
             or any(row.get("transcripts") != original["original_blind_transcripts"]
                    for row, original in zip(rows, trace["slides"]))):
         raise VerifiedAcousticReplayError("Historical reviewer transcript identity drift")
+    if evidence["method"] == (
+            "SHA_BOUND_PREVIOUS_BLIND_GEMINI_PLUS_THIRD_COMPONENT_WITNESS"):
+        from text_to_speech_v25 import normalize_scientific_speech
+        from microgen_tts_acoustic_qa import (
+            verified_isolated_component_letter_witness, _input_snapshot,
+        )
+        from microgen_autonomous_acoustic_gate import MATH_TIEBREAK_MODELS
+        flagged=trace["review_required_slides"]
+        if (len(flagged)!=1 or report.get("review_required_slides")
+                or report.get("input_snapshot_sha256") !=
+                   _input_snapshot(stage,len(rows))):
+            raise VerifiedAcousticReplayError("Unverifiable component witness scope")
+        n=flagged[0]
+        row=rows[n-1]
+        original=trace["slides"][n-1]
+        witness=row.get("third_independent_review")
+        timeline=report.get("independent_math_tiebreak")
+        if (not isinstance(witness,dict) or
+                witness.get("status")!="SOURCE_BOUND_COMPONENT_LETTER_WITNESS"
+                or witness.get("model") not in MATH_TIEBREAK_MODELS
+                or witness.get("model") in trace["models"]
+                or not isinstance(timeline,dict)
+                or timeline.get("status")!="VERIFIED_BOUNDED_WITNESS"
+                or timeline.get("attempted_slides")!=[n]
+                or timeline.get("resolved_slides")!=[n]
+                or timeline.get("witness_model")!=witness.get("model")
+                or not verified_isolated_component_letter_witness(
+                    normalize_scientific_speech(
+                        json.loads((stage/"script_tts.json").read_text(encoding="utf8"))
+                        ["slides"][n-1]["tts_text"]),
+                    *original["original_blind_transcripts"],
+                    witness.get("transcript",""))):
+            raise VerifiedAcousticReplayError("Third independent math witness invalid")
+        reservation=read_json(stage/".microgen_independent_math_witness_attempt.json")
+        expected_reservation_hash=hashlib.sha256(
+            json.dumps(report["input_snapshot_sha256"],
+                       sort_keys=True).encode("utf8")).hexdigest()
+        if (reservation is None or reservation.get("schema_version")!=1
+                or reservation.get("status")!=
+                   "RESERVED_PAID_THIRD_REVIEWER_NO_IMPLICIT_RETRY"
+                or reservation.get("candidate_slides")!=[n]
+                or reservation.get("chosen_model")!=witness["model"]
+                or reservation.get("source_snapshot_sha256")!=
+                   expected_reservation_hash
+                or reservation.get("max_paid_third_asr_calls")!=1
+                or reservation.get("publication_allowed") is not False):
+            raise VerifiedAcousticReplayError("Third reviewer paid-call reservation invalid")

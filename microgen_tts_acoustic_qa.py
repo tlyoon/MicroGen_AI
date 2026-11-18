@@ -315,6 +315,68 @@ def verified_numeric_fragment_tiebreak(
     return True
 
 
+def verified_isolated_component_letter_witness(
+        expected: str, heard_a: str, heard_b: str, third_heard: str,
+) -> bool:
+    """Require three BLIND recognizers for one a_x versus i_x ASR split.
+
+    The exact source-voiced role is the constant x-component of acceleration.
+    One original reviewer must be source-faithful; the other may replace only
+    the isolated spoken letter, not a coefficient, axis, initial index,
+    sign, power, unit or mathematical claim. The distinct third model must
+    independently corroborate the original source-faithful reviewer. No
+    third opinion or failed evidence is a substitute for a genuine WAV.
+    """
+    import re
+    if (not all(isinstance(v,str) and v.strip()
+                for v in (expected,heard_a,heard_b,third_heard))
+            or len(tokens(expected)) < MINOR_ASR_MIN_SOURCE_WORDS
+            or not re.search(r"\bfor constant ay sub ex\b",expected,re.I)
+            or not re.search(r"\bacceleration\b",expected,re.I)
+            or any(x in v.lower() for v in
+                   (heard_a,heard_b,third_heard)
+                   for x in ("[unclear]","[inaudible]","[silence]",
+                             "[uncertain]"))):
+        return False
+    checks=[mismatch_details(expected,x) for x in (heard_a,heard_b)]
+    good=[i for i,c in enumerate(checks) if (
+        c["difference_fraction_upper_bound"]<=0.05 and
+        c["sensitive_mismatches"]==0 and not c["circa_red_flags"] and
+        not c["letter_y_yay_red_flags"])]
+    if len(good)!=1:
+        return False
+    bad=checks[1-good[0]]
+    # Whitelist only this observed, narrow phonetic ASR confusion. There
+    # is no generic mathematical-letter or homophone equivalence policy.
+    if (bad["difference_fraction_upper_bound"]>0.08 or
+            bad["sensitive_mismatches"] or bad["circa_red_flags"] or
+            bad["letter_y_yay_red_flags"] or
+            len(bad["differences"])!=1):
+        return False
+    issue=bad["differences"][0]
+    # Independent ASR tokenizers may preserve or split the following x:
+    # both observed shapes concern EXACTLY the same solitary a_x/i_x
+    # letter substitution, never a different axis or expression.
+    allowed={
+        ("ay ex","i sub e x"),
+        ("ay","i sub e"),
+    }
+    if (issue["kind"]!="replace" or
+            (issue["expected"],issue["recognized"]) not in allowed or
+            issue["sensitive"]):
+        return False
+    # The third recognizer never sees expected or original words. These
+    # checks happen only AFTER its immutable, single-call blind response.
+    third=mismatch_details(expected,third_heard)
+    agreement=mismatch_details((heard_a,heard_b)[good[0]],third_heard)
+    return all(
+        c["difference_fraction_upper_bound"]<=0.05 and
+        not (c["sensitive_mismatches"] or c["circa_red_flags"] or
+             c["letter_y_yay_red_flags"])
+        for c in (third,agreement)
+    )
+
+
 def _input_snapshot(folder: Path, count: int) -> dict[str,str]:
     """Pin the actual WAVs, sidecar (if present), and voice-bound manifest."""
     names=[".microgen_tts_provenance.json"]+[f"slide{i}.wav" for i in range(1,count+1)]

@@ -355,7 +355,7 @@ def _bounded_independent_math_tiebreak(
     """
     from microgen_tts_acoustic_qa import (
         verified_numeric_fragment_tiebreak, verified_isolated_decimal_asr_witness,
-        _input_snapshot,
+        verified_isolated_component_letter_witness, _input_snapshot,
     )
     original_snapshot=_input_snapshot(stage,len(texts))
     candidates=[]
@@ -378,6 +378,9 @@ def _bounded_independent_math_tiebreak(
         elif verified_isolated_decimal_asr_witness(
                 texts[n-1],trans[0],trans[1],texts[n-1]):
             kinds[n]="isolated_decimal"
+        elif verified_isolated_component_letter_witness(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="component_letter"
         if n in kinds:
             candidates.append(n)
     if not candidates or len(candidates)>MAX_MATH_TIEBREAK_SLIDES:
@@ -432,8 +435,11 @@ def _bounded_independent_math_tiebreak(
             if kinds[n]=="math_fragment":
                 ok=verified_numeric_fragment_tiebreak(
                     texts[n-1],original[0],original[1],third)
-            else:
+            elif kinds[n]=="isolated_decimal":
                 ok=verified_isolated_decimal_asr_witness(
+                    texts[n-1],original[0],original[1],third)
+            else:
+                ok=verified_isolated_component_letter_witness(
                     texts[n-1],original[0],original[1],third)
             attempts.append({"slide":n,"kind":kinds[n],
                              "status":("SOURCE_BOUND_WITNESS_CORROBORATED" if ok
@@ -443,7 +449,9 @@ def _bounded_independent_math_tiebreak(
             row["third_independent_review"]={
                 "status":("SOURCE_BOUND_MATH_SPLIT_WITNESS"
                           if kinds[n]=="math_fragment" else
-                          "SOURCE_BOUND_ISOLATED_DECIMAL_WITNESS"),
+                          "SOURCE_BOUND_ISOLATED_DECIMAL_WITNESS"
+                          if kinds[n]=="isolated_decimal" else
+                          "SOURCE_BOUND_COMPONENT_LETTER_WITNESS"),
                 "model":witness_model,
                 "transcript":third,
                 "audio_sha256":digest_file(wav),
@@ -870,10 +878,17 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
             with (stage/RECEIPT).open("x",encoding="utf8") as f:
                 f.write(json.dumps(receipt,indent=2,ensure_ascii=False))
             verify_receipt(stage)
-            print("[Acoustic QA] SHA-bound original two-Gemini evidence "
-                  "strictly reclassified after exact notation-policy fix; "
-                  "no additional recognition calls or audio regeneration",
-                  flush=True)
+            if replay["evidence"]["paid_recognition_calls"] == 1:
+                print("[Acoustic QA] SHA-bound original two-Gemini blind "
+                      "transcripts reused; one independent third-model "
+                      "component witness corroborated; no repeat of the "
+                      "original two-model review or WAV regeneration",
+                      flush=True)
+            else:
+                print("[Acoustic QA] SHA-bound original two-Gemini evidence "
+                      "strictly reclassified after exact notation-policy fix; "
+                      "no additional recognition calls or audio regeneration",
+                      flush=True)
             return receipt
     if engines is None:
         first,second,found=_providers()
