@@ -37,7 +37,7 @@ def genuine_accepted_hp_stage(monkeypatch):
     monkeypatch.setenv("MICROGEN_TIMED_CUES","1")
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST","1")
     return root/"G2_SERWAY24_RC_CODE_20261107",stage,cp,Path(
-        "G:/My Drive/Serway/Serway_1_7/2.7")
+        "G:/My Drive/Serway/Serway_1_7/2/2.7")
 
 
 def test_real_21_slide_accepted_recovery_read_only(genuine_accepted_hp_stage):
@@ -113,3 +113,65 @@ def test_failure_in_three_stage_preflight_keeps_old_checkpoint_intact(
             lambda *args:"b"*64,dest,git_diff=lambda *_:ALLOWED)
     assert seen==["science_qa","tts"]
     assert json.dumps(cp,sort_keys=True)==before
+
+
+def test_authorization_code_delta_returns_offline_only_never_paid(
+        genuine_accepted_hp_stage,monkeypatch):
+    from microgen_campaign_authorization import (
+        _offline_verified_acoustic_continuation,
+    )
+    import microgen_post_acoustic_reuse_resume as module
+    repo,stage,cp,dest=genuine_accepted_hp_stage
+    root=stage.parent
+    old=json.loads(
+        (root/".microgen_bounded_provider_authorization.json"
+         ).read_text(encoding="utf8"))["scope"]
+    new={**old,"code_revision":PATCH}
+    expected={"status":"SOURCE_BOUND_ONE_CUE_AUDIO_CHECKPOINT_RECONCILED",
+              "source_accepted_reuse_receipt_sha256":"1"*64,
+              "independent_acoustic_receipt_sha256":"2"*64}
+    monkeypatch.setattr(
+        module,"reconcile_verified_audio_receipt",
+        lambda *args,**kwargs:expected)
+    value=_offline_verified_acoustic_continuation(
+        repo=repo,root=root,source_file=dest/"source.pdf",
+        old_scope=old,proposed_scope=new,stage_retries=0)
+    assert value["offline_continuation_only"] is True
+    assert value["publication_authorized"] is False
+    assert value["stage_retries"]==0
+    assert json.loads((root/".microgen_bounded_provider_authorization.json"
+        ).read_text())["scope"]==old
+    for key,value in (
+        ("provider_environment",{"MICROGEN_TTS_VOICE":"other"}),
+        ("source_sha256","a"*64),
+        ("host","other"),
+        ("work_root","C:/stranger"),
+        ("stop_after","published")):
+        wrong=dict(new)
+        wrong[key]=value
+        assert _offline_verified_acoustic_continuation(
+            repo=repo,root=root,source_file=dest/"source.pdf",
+            old_scope=old,proposed_scope=wrong,stage_retries=0) is None
+
+
+@pytest.mark.parametrize("stage_name",[
+    "figure_mapping","slides","narration","science_qa","tts","acoustic_qa",
+])
+def test_offline_continuation_cannot_trigger_any_provider_stage(stage_name):
+    from types import SimpleNamespace
+    from microgen_batch import enforce_offline_provider_boundary
+    with pytest.raises(RuntimeError,match="OFFLINE_ONLY_PROVIDER_STAGE_HOLD"):
+        enforce_offline_provider_boundary(
+            SimpleNamespace(offline_accepted_recovery_only=True),stage_name)
+    assert enforce_offline_provider_boundary(
+        SimpleNamespace(offline_accepted_recovery_only=False),stage_name) is None
+
+
+@pytest.mark.parametrize("stage_name",[
+    "figure_extraction","slide_slicing","video","acceptance",
+])
+def test_offline_continuation_permits_only_local_stages(stage_name):
+    from types import SimpleNamespace
+    from microgen_batch import enforce_offline_provider_boundary
+    assert enforce_offline_provider_boundary(
+        SimpleNamespace(offline_accepted_recovery_only=True),stage_name) is None

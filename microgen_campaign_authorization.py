@@ -89,6 +89,61 @@ def _identity(*, repo: Path, source_root: Path, work_root: Path,
     }
 
 
+def _offline_verified_acoustic_continuation(
+    *, repo:Path, root:Path, source_file:Path, old_scope:dict,
+    proposed_scope:dict, stage_retries:int
+) -> dict|None:
+    """Recognize a *non-provider* continuation; old paid consent stays frozen.
+
+    An exact source, model, host, owner and work-root scope is required.
+    Only a narrow code/verifier-only amendment is different. A real accepted
+    two-Gemini receipt, full original PCM lineage and known failed checkpoint
+    are checked before returning OFFLINE-ONLY; no further paid effect is
+    authorized under the old campaign consent.
+    """
+    if not isinstance(old_scope,dict) or not isinstance(proposed_scope,dict):
+        return None
+    base=dict(proposed_scope)
+    base["code_revision"]=old_scope.get("code_revision")
+    if (base!=old_scope or
+            old_scope.get("code_revision")==proposed_scope.get("code_revision")
+            or not isinstance(source_file,Path)):
+        return None
+    stage=root/source_file.parent.name
+    checkpoint=stage/".microgen_checkpoint.json"
+    if (not checkpoint.is_file() or checkpoint.is_symlink()
+            or stage.is_symlink()):
+        return None
+    try:
+        cp=json.loads(checkpoint.read_text(encoding="utf8"))
+    except (OSError,UnicodeError,ValueError):
+        return None
+    if (not isinstance(cp,dict) or
+            cp.get("package_commit")!=old_scope.get("code_revision")):
+        return None
+    from microgen_post_acoustic_reuse_resume import (
+        reconcile_verified_audio_receipt,
+    )
+    from microgen_batch import stage_valid
+    from microgen_quality import dependency_fingerprint
+    verified=reconcile_verified_audio_receipt(
+        repo,stage,cp,old_scope["code_revision"],
+        proposed_scope["code_revision"],stage_valid,
+        dependency_fingerprint,source_file.parent)
+    if not isinstance(verified,dict):
+        return None
+    return {
+        "status":"OFFLINE_ONLY_ATTESTED_ACOUSTIC_RECOVERY",
+        "publication_authorized":False,
+        "stage_retries":stage_retries,
+        "offline_continuation_only":True,
+        "source_reuse_receipt_sha256":
+            verified["source_accepted_reuse_receipt_sha256"],
+        "independent_acoustic_receipt_sha256":
+            verified["independent_acoustic_receipt_sha256"],
+    }
+
+
 def authorize_or_resume(*, repo: Path, source_root: Path, work_root: Path,
                         source_file: Path, stop_after: str, stage_retries: int,
                         multipart: bool, explicit_authorization: bool,
@@ -130,11 +185,22 @@ def authorize_or_resume(*, repo: Path, source_root: Path, work_root: Path,
                  and existing["status"] == STATUS
                  and existing["publication_authorized"] is False,
                  "Authorization receipt does not grant private generation")
-        _require(existing["scope"] == scope,
-                 "Campaign source/code/stage/provider scope changed; stop before provider")
         cap = existing["max_stage_retries"]
         _require(type(cap) is int and 0 <= stage_retries <= cap <= 3,
                  "Cannot increase campaign retry budget on restart")
+        if existing["scope"]!=scope:
+            # Changed code NEVER inherits an old paid allowance. An exact
+            # authenticated post-acoustic source/PCM recovery may, however,
+            # continue remaining LOCAL video stages under a separate
+            # zero-provider continuation. Preserve old consent untouched.
+            recovery=_offline_verified_acoustic_continuation(
+                repo=repo,root=root,source_file=source_file,
+                old_scope=existing["scope"],proposed_scope=scope,
+                stage_retries=stage_retries)
+            _require(recovery is not None,
+                     "Campaign source/code/stage/provider scope changed; "
+                     "stop before provider")
+            return recovery
         # An observed terminal stage error already consumed an authorized
         # attempt. Without fresh causal evidence, a new process/session must
         # not replay that potentially metered operation under the same

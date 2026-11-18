@@ -21,6 +21,7 @@ class PostAcousticResumeError(RuntimeError):
 # speech prompts, source renderers, voices, math policy or video generators.
 ALLOWED_RECONCILIATION_CODE_DELTA=frozenset({
     "microgen_batch.py",
+    "microgen_campaign_authorization.py",
     "microgen_post_acoustic_reuse_resume.py",
     "microgen_verified_tts_reuse.py",
     "microgen_recovery_registry_v6.json",

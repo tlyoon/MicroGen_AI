@@ -48,6 +48,16 @@ Unknown extra drift, missing reviewer lineage, forged records, and
 interrupted provider reservations remain mandatory holds. Successful
 reconciliation automatically restarts the original timed lecture
 video/split/acceptance stages without reissuing model requests.
+**Provider authorization is not transferable across code commits.** After an
+independently accepted single-cue acoustic correction, a verifier-only code
+change may continue the *existing* HP private campaign under a separate
+offline-only scope only when the prior grant (source, owner, host, voice,
+provider configuration, work root and endpoint), historic Git revision,
+original paid-request journal and complete 21-slide acoustic evidence all
+verify. Preserve the old grant and its SHA unchanged. The normal batch
+must reject any new Gemini/TTS/science/acoustic provider stage in this
+mode, and may advance only to local video and private acceptance.
+Unknown scope or scientific code changes remain mandatory stops.
 
 ## 1. Authority, precedence, and objective
 

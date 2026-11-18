@@ -1125,6 +1125,15 @@ def preflight_private_timed_acceptance(stage: Path) -> dict:
             "pages": len(pages), "cues": plan["total_cues"]}
 
 
+def enforce_offline_provider_boundary(args, stage_name:str)->None:
+    """Never run model/TTS source stages under a code-migrated paid grant."""
+    if (getattr(args,"offline_accepted_recovery_only",False)
+            and stage_name in (GEMINI_STAGES | {"tts"})):
+        raise RuntimeError(
+            "OFFLINE_ONLY_PROVIDER_STAGE_HOLD: no paid source, "
+            "scientific, acoustic or TTS operation may be retried")
+
+
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     if lease is not None:
         lease.assert_held()
@@ -1394,6 +1403,11 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 "the source, relevant code, or authorized configuration "
                 "before a new bounded campaign."
             )
+        # An authenticated code-only acoustic repair continuation retains
+        # ZERO paid provider authorization. It can perform only local
+        # slicing, video and acceptance after all old scientific/model
+        # receipts verify, and must not run even one new Gemini/TTS request.
+        enforce_offline_provider_boundary(args,stage_name)
         invalidate_from(cp, stage_name)
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
@@ -1752,9 +1766,15 @@ def main() -> int:
                     )
                 except BoundedCampaignAuthorizationError as exc:
                     raise SystemExit(str(exc)) from exc
+                args.offline_accepted_recovery_only=bool(
+                    authorization.get("offline_continuation_only",False))
                 print(f"[batch] provider-scope={authorization['status']}; "
-                      "private campaign only; no publication", flush=True)
-                args.bounded_provider_scope_verified = True
+                      "private campaign only; no publication"
+                      +("; ALL future Gemini/TTS requests prohibited"
+                         if args.offline_accepted_recovery_only else ""),
+                      flush=True)
+                args.bounded_provider_scope_verified=(
+                    not args.offline_accepted_recovery_only)
             elif not args.authorize_provider_usage:
                 raise SystemExit(
                     "No standing scope for additional targets: never "

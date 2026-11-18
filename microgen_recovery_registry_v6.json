@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261118-OFFLINE-ACCEPTED-ACOUSTIC-CODE-REVISION",
+      "classification": "orchestration",
+      "stages": ["acoustic_qa", "video", "acceptance"],
+      "exception": "BoundedCampaignAuthorizationError",
+      "message_marker": "Campaign source/code/stage/provider scope changed; stop before provider",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_campaign_authorization._offline_verified_acoustic_continuation",
+      "preconditions": "Old bounded private paid campaign's source, host, model environment and stage scope remain exact, but code revision changed solely for verified TTS reuse/acoustic checkpoint recovery after independent QA succeeded. Never inherit a previous paid call or reset the provider retry counter.",
+      "verification": "Confirm old owner grant unchanged, private HP source and endpoint unchanged, original successful two-Gemini corrected operator acoustic receipt and historic PCM SHA journal valid, Git diff restricted to verifier/authorization/runner code. Return offline-only status and enforce normal production guard against all Gemini/TTS provider stages; allow only local timed rendering and acceptance. Any model/source/campaign scope mismatch is a mandatory hold.",
+      "historical_evidence": "18 Nov 2026 Serway 2.7 old bcf192d private campaign: real source-bound single-cue TTS/ASR passed but legitimate post-acoustic SHA drift blocked before video. New 655bfd9 verifier fixed hashes; old bounded provider consent correctly refused a changed code commit. Real read-only HP scope recovery plus source, model, host, malformed receipt and no-provider stage-injection tests.",
+      "last_validated": "2026-11-18",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261118-POST-ACOUSTIC-REUSE-SHA-RECONCILIATION",
       "classification": "orchestration",
       "stages": ["acoustic_qa", "video", "acceptance"],
