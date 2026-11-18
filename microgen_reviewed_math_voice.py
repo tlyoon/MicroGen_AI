@@ -317,6 +317,23 @@ def reviewed_math_voice(text: str) -> str:
             "vee ex",value,flags=re.I)
         value=clarify_x_component(value)
 
+    # A source-grounded *constant-acceleration* scope in the average-
+    # velocity identity may contain the compact spoken "for constant a_x".
+    # Real independent Gemini 3.5/3.8 and a bounded third reviewer did NOT
+    # corroborate the old "ay sub ex" audio on 18 Nov 2026, although the
+    # printed physics and all other lecture slides passed. Do not weaken QA
+    # or retry the identical WAV. Express ONLY this fully identified math
+    # context in plain speech, keeping the acceleration's x-axis identity,
+    # numerical values, source slide, and raw narration unchanged. This is
+    # idempotent and applies to any source with the same mathematical role.
+    value=re.sub(
+        r"(?P<mean>\barithmetic\s+mean\b(?:(?![.!?]).){0,200}?)"
+        r"\bfor\s+constant\s+ay\s+(?:sub\s+)?ex\b"
+        r"(?!\s+(?:squared|cubed|times|multiplied|plus|minus|"
+        r"divided|equals|greater|less)\b)",
+        lambda m:m["mean"]+"for constant acceleration along the x axis",
+        value,flags=re.IGNORECASE)
+
     # Recurrent two-Gemini x/y confusion in compact a_x speech is a
     # pronunciation hazard, not harmless orthographic ASR variation.
     # Expand ONLY an independently source-identifiable acceleration label
