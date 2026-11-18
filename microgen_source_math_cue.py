@@ -259,4 +259,15 @@ def verified_source_math_row(
         slide_no, cue_no, cue.get("spoken_text"), blocks, page)
     if not expected:
         return False
-    return all(cue.get(key) == value for key, value in expected.items())
+    from microgen_pdf_glyph_normalization import exact_source_glyph_equal
+    text_keys = {
+        "pdf_text", "pdf_texts", "semantic_source_quote",
+        "semantic_source_quotes",
+    }
+    # Full source geometry and mathematical evidence are reconstructed
+    # independently. Only the exact seven PDF-extractor Unicode decoding
+    # errors may differ in literal text fields; all signs remain unchanged.
+    return all(
+        exact_source_glyph_equal(cue.get(key), value)
+        if key in text_keys else cue.get(key) == value
+        for key, value in expected.items())

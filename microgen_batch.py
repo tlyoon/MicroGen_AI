@@ -1162,6 +1162,27 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         args.source_wait,
         args.commit,
     )
+    # Repair any interrupted exclusive original-PCM import first; only
+    # exact known hashes can be removed, before provider stage decisions.
+    from microgen_exclusive_audio_import import (
+        recover_interrupted_audio_import,
+    )
+    recovered_import = recover_interrupted_audio_import(stage)
+    if recovered_import != "NO_PREACOUSTIC_IMPORT_PENDING":
+        print(f"[{subchapter}] offline pre-acoustic import recovery="
+              f"{recovered_import}; no provider replay",flush=True)
+    # Recover a terminated multi-asset timed-acoustic replacement BEFORE
+    # deciding which checkpointed provider or video stage may resume.
+    # Only a complete SHA-bound old/new inventory can be rolled back,
+    # without ASR, TTS, new paid authorization, or an acoustic QA waiver.
+    from microgen_timed_acoustic_transaction import (
+        recover_interrupted_timed_acoustic,
+    )
+    recovered_audio = recover_interrupted_timed_acoustic(stage)
+    if recovered_audio != "NO_TIMED_ACOUSTIC_TRANSACTION":
+        print(f"[{subchapter}] measured acoustic asset recovery="
+              f"{recovered_audio}; independent QA remains mandatory",
+              flush=True)
     dest = destination_for(args.source_root, subchapter)
     offline_mapping = bool(getattr(args, "offline_figure_mapping", False))
     log_path = args.work_root / f"{subchapter}.log"
@@ -1300,6 +1321,27 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 print(f"[{subchapter}] verified same-source PCM resumed "
                       f"from private campaign {reusable['from']}; "
                       "independent two-model acoustic QA MUST rerun",
+                      flush=True)
+                continue
+            # A prior same-voice acoustic fix may have changed whole-slide WAVs
+            # without regenerating the measured cue chunks. For new private
+            # campaigns, recover byte-exact ORIGINAL PCM from retained cues
+            # under the source/PDF/math and voice proof, NOT the old ASR pass.
+            # The normal acoustic stage then performs source-bound <=2-slide
+            # TIMED cue repair and independent QA; video cannot use stale cues.
+            from microgen_preacoustic_timed_pcm_reuse import (
+                maybe_reuse_preacoustic_timed_pcm,
+            )
+            restored = maybe_reuse_preacoustic_timed_pcm(
+                stage,work_root=args.work_root,
+                source_sha=quality.sha256(stage/"source.pdf"),
+                cp=cp,checkpoint_path=checkpoint_path,
+                mark_complete=mark_complete,stage_valid=stage_valid,dest=dest)
+            if restored:
+                print(f"[{subchapter}] original measured PCM recovered "
+                      f"from {restored['from']}, "
+                      f"previous acoustic approval NOT reused; "
+                      "continuing to fresh independent acoustic QA",
                       flush=True)
                 continue
 

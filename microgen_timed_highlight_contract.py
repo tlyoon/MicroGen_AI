@@ -49,7 +49,9 @@ def _require(stage: Path, name: str) -> Path:
 
 
 def _equivalent_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text).casefold()
+    from microgen_pdf_glyph_normalization import correct_attested_glyphs
+    normalized = unicodedata.normalize(
+        "NFKC", correct_attested_glyphs(text)).casefold()
     return "".join(ch for ch in normalized if ch.isalnum())
 
 
@@ -222,6 +224,9 @@ def inspect_timed_highlights(stage: Path) -> dict:
                             compact, numbers, MAX_GROUP_BLOCKS,
                         )
                         from microgen_source_math_cue import source_math_quote_valid
+                        from microgen_pdf_glyph_normalization import (
+                            correct_attested_glyphs,
+                        )
                         texts = cue.get("pdf_texts")
                         quotes = cue.get("semantic_source_quotes")
                         if (not isinstance(group,list) or
@@ -234,6 +239,10 @@ def inspect_timed_highlights(stage: Path) -> dict:
                             raise HighlightContractError("Untrusted PDF element group")
                         regions=[]
                         for region, item_text, quote in zip(group,texts,quotes):
+                            decoded_item=(correct_attested_glyphs(item_text)
+                                          if isinstance(item_text,str) else item_text)
+                            decoded_quote=(correct_attested_glyphs(quote)
+                                           if isinstance(quote,str) else quote)
                             if (not isinstance(region,list) or len(region)!=4 or
                                     any(type(v) not in (int,float) or
                                         not math.isfinite(v) for v in region) or
@@ -241,12 +250,12 @@ def inspect_timed_highlights(stage: Path) -> dict:
                                     not (8 <= len(item_text) <= 350 or
                                         (cue.get("source_math_evidence") ==
                                          "EXACT_SOURCE_MATH_V1" and
-                                         source_math_quote_valid(item_text))) or
+                                         source_math_quote_valid(decoded_item))) or
                                     not isinstance(quote,str) or
                                     not (8 <= len(quote) <= 200 or
                                         (cue.get("source_math_evidence") ==
                                          "EXACT_SOURCE_MATH_V1" and
-                                         source_math_quote_valid(item_text) and
+                                         source_math_quote_valid(decoded_item) and
                                          quote == item_text[:200]))):
                                 raise HighlightContractError("Malformed grouped PDF element")
                             part=fitz.Rect(region)
@@ -254,12 +263,13 @@ def inspect_timed_highlights(stage: Path) -> dict:
                                     not page.rect.contains(part) or
                                     _equivalent_text(item_text) not in
                                     _equivalent_text(page.get_textbox(part)) or
-                                    (len(compact(quote)) < 8 and not (
+                                    (len(compact(decoded_quote)) < 8 and not (
                                         cue.get("source_math_evidence") ==
                                         "EXACT_SOURCE_MATH_V1" and
-                                        source_math_quote_valid(item_text) and
-                                        compact(quote) == compact(item_text[:200]))) or
-                                    compact(quote) not in compact(item_text)):
+                                        source_math_quote_valid(decoded_item) and
+                                        compact(decoded_quote) ==
+                                        compact(correct_attested_glyphs(item_text[:200])))) or
+                                    compact(decoded_quote) not in compact(decoded_item)):
                                 raise HighlightContractError("Grouped element not source grounded")
                             regions.append(part)
                         group_union=regions[0]

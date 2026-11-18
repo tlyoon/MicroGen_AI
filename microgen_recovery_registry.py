@@ -130,10 +130,19 @@ def classify_log_attempt(stage_name: str, output: bytes,
         and (not item["message_marker"]
              or item["message_marker"] in message)
     ]
-    if len(matches) > 1:
-        raise RecoveryRegistryError("Ambiguous overlapping verified recovery signatures")
     if not matches:
         return None
+    # An exact historical failure pattern takes precedence over an older
+    # generic same-exception fallback. Other overlaps are still ambiguous:
+    # never select by insertion order or silently waive a QA hold.
+    if len(matches) > 1:
+        strongest=max(len(item["message_marker"]) for item in matches)
+        matches=[
+            item for item in matches
+            if len(item["message_marker"]) == strongest
+        ]
+    if len(matches) != 1:
+        raise RecoveryRegistryError("Ambiguous overlapping verified recovery signatures")
     item = matches[0]
     return {
         "failure_id": item["id"],

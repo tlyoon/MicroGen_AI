@@ -673,19 +673,32 @@ def _repair(stage:Path, report:dict, texts:list[str],
                                      dir=stage.parent) as private:
         scratch=Path(private)
         # Candidate results cannot mutate original audio before independent ASR.
+        # An entire revoiced WAV is NOT a substitute for cue-measured PCM:
+        # if a timed manifest exists, regenerate the *same* source-bound
+        # constituent cues, reassemble actual PCM, and independently review
+        # the resulting slide before updating its immutable timing evidence.
         proposals={}
-        for i in numbers:
-            candidate=scratch/f"slide{i}.wav"
-            synthesize(texts[i-1],candidate,old_records[i-1])
-            if not candidate.is_file():
-                raise AutonomousAcousticError("TTS retry produced no candidate WAV")
-            require_structurally_usable_audio(candidate)
-            if (wav_characteristics(candidate)["sample_rate_hz"]!=
-                old_records[i-1]["sample_rate_hz"]):
-                raise AutonomousAcousticError("Candidate audio format or voice differs")
-            if not _strict_candidate(candidate,texts[i-1],recognizers):
-                raise AutonomousAcousticError("TTS retry still has independently detected mismatch")
-            proposals[i]=candidate
+        timed_repair=None
+        if (stage/".microgen_timed_highlights.json").is_file():
+            from microgen_timed_acoustic_repair import prepare_timed_repair
+            timed_repair=prepare_timed_repair(
+                stage,numbers,texts,old_records,scratch,synthesize,
+                lambda candidate,expected: _strict_candidate(
+                    candidate,expected,recognizers))
+            proposals={i:scratch/f"slide{i}.wav" for i in numbers}
+        else:
+            for i in numbers:
+                candidate=scratch/f"slide{i}.wav"
+                synthesize(texts[i-1],candidate,old_records[i-1])
+                if not candidate.is_file():
+                    raise AutonomousAcousticError("TTS retry produced no candidate WAV")
+                require_structurally_usable_audio(candidate)
+                if (wav_characteristics(candidate)["sample_rate_hz"]!=
+                    old_records[i-1]["sample_rate_hz"]):
+                    raise AutonomousAcousticError("Candidate audio format or voice differs")
+                if not _strict_candidate(candidate,texts[i-1],recognizers):
+                    raise AutonomousAcousticError("TTS retry still has independently detected mismatch")
+                proposals[i]=candidate
         # Build full, internally consistent candidate provenance in scratch.
         for i in range(1,len(texts)+1):
             if i not in proposals:
@@ -705,6 +718,32 @@ def _repair(stage:Path, report:dict, texts:list[str],
         verify_manifest(scratch,texts)
         if _input_snapshot(stage,len(texts))!=report["input_snapshot_sha256"]:
             raise AutonomousAcousticError("Inputs changed during TTS correction")
+        if timed_repair is not None:
+            from microgen_timed_acoustic_transaction import install_timed_acoustic
+            from microgen_timed_highlight_contract import inspect_timed_highlights
+
+            replacements={}
+            for i in numbers:
+                replacements[f"slide{i}.wav"]=scratch/f"slide{i}.wav"
+                record_path=scratch/f"cache_slide{i}.json"
+                record_path.write_text(
+                    json.dumps(records[i-1],indent=2),encoding="utf8")
+                replacements[f".microgen_tts_cache/slide{i}.json"]=record_path
+            replacements[".microgen_tts_provenance.json"]=(
+                scratch/".microgen_tts_provenance.json")
+            replacements.update(timed_repair["chunks"])
+            replacements[".microgen_timed_highlights.json"]=(
+                timed_repair["manifest"])
+
+            def validate_timed_acoustic():
+                verify_manifest(stage,texts)
+                check_wavs(stage,len(texts))
+                inspect_timed_highlights(stage)
+            install_timed_acoustic(stage,replacements,validate_timed_acoustic)
+            return len(numbers)
+
+        # Legacy non-timed voice support remains an independent transaction
+        # boundary; it may never bypass source or ASR acceptance.
         # Preserve an immutable private backup, then replace WAV+manifest+metadata.
         backup=scratch/"original_backup"
         backup.mkdir()
@@ -720,15 +759,15 @@ def _repair(stage:Path, report:dict, texts:list[str],
         try:
             for i in numbers:
                 dest=stage/f"slide{i}.wav"
-                shutil.copy2(scratch/f"slide{i}.wav",dest)
                 changed.append(dest)
+                shutil.copy2(scratch/f"slide{i}.wav",dest)
                 metadata=stage/".microgen_tts_cache"/f"slide{i}.json"
+                changed.append(metadata)
                 metadata.parent.mkdir(exist_ok=True)
                 metadata.write_text(json.dumps(records[i-1],indent=2),encoding="utf8")
-                changed.append(metadata)
             target=stage/".microgen_tts_provenance.json"
-            shutil.copy2(scratch/".microgen_tts_provenance.json",target)
             changed.append(target)
+            shutil.copy2(scratch/".microgen_tts_provenance.json",target)
             verify_manifest(stage,texts)
             check_wavs(stage,len(texts))
         except Exception:
