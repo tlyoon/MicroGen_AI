@@ -60,7 +60,8 @@ def _normalized(stage: Path) -> list[str]:
     return texts
 
 
-def _providers(models_override:tuple[str,str]|None=None) -> tuple[Callable,Callable,tuple[str,str]]:
+def _providers(models_override:tuple[str,str]|None=None, *,
+               single_slot_only:bool=False) -> tuple[Callable,Callable,tuple[str,str]]:
     from dotenv import load_dotenv
     from gemini_keys import get_gemini_api_keys
     config=Path(os.environ.get("MICROVID_CONFIG_DIR",
@@ -85,7 +86,10 @@ def _providers(models_override:tuple[str,str]|None=None) -> tuple[Callable,Calla
     # Every independent model may use the configured key pool. Preserve
     # distinct model identities while avoiding repeat requests to a key that
     # has already failed during this model's recognition pass.
-    ordered_keys = keys[index:] + keys[:index]
+    # Historical single-reviewer retakes have a hard one-send budget.
+    # Disable the normal key-pool failover for this narrow recovery path.
+    ordered_keys=(keys[index:index+1] if single_slot_only else
+                  keys[index:] + keys[:index])
 
     def key_pool_recognizer(model:str) -> Callable:
         engines = [gemini_audio_recognizer(key,model=model)
@@ -811,6 +815,10 @@ def verify_receipt(stage:Path) -> dict:
     # failure trace at every downstream video/acceptance verification.
     from microgen_verified_acoustic_replay import verify_replay_evidence
     verify_replay_evidence(stage,receipt)
+    # The new one-sided retake receipt is also re-attested offline by
+    # every downstream video/acceptance read, never trusted by status alone.
+    from microgen_one_sided_acoustic_replay import verify_one_sided_replay
+    verify_one_sided_replay(stage,receipt)
     return receipt
 
 
@@ -929,6 +937,42 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                       "no additional recognition calls or audio regeneration",
                       flush=True)
             return receipt
+        # A prior failed *two-Gemini* private review on identical WAV/source
+        # is not an authorization to rebill 42 slides. Offline reclassify
+        # both original blind transcripts; permit at most one fresh dissenting
+        # reviewer retake for each of <=2 slides with exact math checking.
+        from microgen_one_sided_acoustic_replay import (
+            replay_with_one_sided_rechecks,
+        )
+        one_sided=replay_with_one_sided_rechecks(stage,texts)
+        if one_sided is not None:
+            report=one_sided["report"]
+            _verify(stage,report,texts)
+            receipt={
+                "schema_version":1,
+                "status":"AUTONOMOUS_INDEPENDENT_ASR_SCREEN_PASSED",
+                "slide_count":len(texts),
+                "recognition_models":report["recognition_models"],
+                "repaired_audio_slides":0,
+                "source_inputs":{
+                    "script_tts_sha256":digest_file(stage/"script_tts.json"),
+                    "tts_provenance_sha256":digest_file(
+                        stage/".microgen_tts_provenance.json")},
+                "independent_report":report,
+                "verified_one_sided_historical_asr":one_sided["evidence"],
+                "automatic_technical_review":True,
+                "human_approval_required":False,
+                "pronunciation_perfection_certified":False,
+                "publication_allowed":False,
+            }
+            with (stage/RECEIPT).open("x",encoding="utf8") as f:
+                f.write(json.dumps(receipt,indent=2,ensure_ascii=False))
+            verify_receipt(stage)
+            print("[Acoustic QA] original two Gemini blind reviewers "
+                  "reused on source-identical PCM; only bounded dissenting "
+                  "model rechecks required; no whole-slide TTS repair",
+                  flush=True)
+            return receipt
     if engines is None:
         first,second,found=_providers()
         engines=(first,second)
@@ -952,6 +996,15 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                   +str(model_failover["status"])+
                   "; actual independent models="+str(models),flush=True)
     report=_recheck_disagreements(stage,report,texts,engines,models,memo)
+    # Historical Serway 2.7 slide 7: SHA-identical WAV was accepted by both
+    # independent Gemini models previously, but one later pass reported one
+    # sensitive edit while the other remained source-exact. Before any TTS,
+    # retake ONLY that dissenting recognizer once on the same WAV. A fresh
+    # source-correct transcript is required; no disagreement is waived.
+    from microgen_one_sided_acoustic_recheck import (
+        recheck_one_sided_sensitive,
+    )
+    report=recheck_one_sided_sensitive(stage,report,texts,engines,memo)
     if auto_provider_recovery and report.get("review_required_slides"):
         # Historical slide-11 shape: a single 40 / 4 t split with one
         # source-correct model. A third blind Gemini reviewer may confirm,
