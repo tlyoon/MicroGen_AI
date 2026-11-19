@@ -34,6 +34,19 @@ def test_historical_verified_21_slide_timed_pcm_recovered_with_current_code(tmp_
     from microgen_preacoustic_timed_pcm_reuse import VERIFIER_ONLY_UPGRADES
     for name in set(MATH_POLICY+SPEECH_PRODUCER+tuple(VERIFIER_ONLY_UPGRADES)):
         shutil.copy2(policy/name,new/name)
+    # The older source was synthesized under an older authorization-policy
+    # module. The PRE-acoustic importer correctly refuses changed SPEECH
+    # producer bytes: the later offline-only reconciliation is permitted
+    # exclusively AFTER actual two-model accepted acoustic repair.
+    # Test this hard boundary before restoring the ORIGINAL exact policy
+    # in a temporary, source-identical positive pre-acoustic fixture.
+    from microgen_preacoustic_timed_pcm_reuse import PreAcousticReuseError
+    assert not _same_source_and_speech_producer(source,new)
+    with pytest.raises(PreAcousticReuseError,
+                       match="Voice producer or source policy changed"):
+        _original_pcm_candidate(source,new,tmp_path/"unused",21)
+    shutil.copy2(source/"microgen_campaign_authorization.py",
+                 new/"microgen_campaign_authorization.py")
     for n in range(1,22):
         shutil.copy2(source/f"slide{n}.pdf",new/f"slide{n}.pdf")
     candidate=tmp_path/"candidate"
