@@ -30,6 +30,7 @@ ALLOWED_RECONCILIATION_CODE_DELTA=frozenset({
     "docs/SOURCE_OPERATOR_SINGLE_CUE_RECOVERY_20261118.md",
     "tests/test_microgen_source_operator_cue_recovery.py",
     "tests/test_microgen_post_acoustic_reuse_resume.py",
+    "tests/test_microgen_preacoustic_timed_pcm_reuse.py",
 })
 
 
