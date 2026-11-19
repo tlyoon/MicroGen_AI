@@ -118,11 +118,27 @@ def _offline_verified_acoustic_continuation(
         cp=json.loads(checkpoint.read_text(encoding="utf8"))
     except (OSError,UnicodeError,ValueError):
         return None
-    if (not isinstance(cp,dict) or
-            cp.get("package_commit") not in (
-                old_scope.get("code_revision"),
-                proposed_scope.get("code_revision"))):
+    if not isinstance(cp,dict):
         return None
+    intermediate=cp.get("package_commit")
+    old=old_scope.get("code_revision")
+    new=proposed_scope.get("code_revision")
+    if (not isinstance(intermediate,str)
+            or re.fullmatch(r"[0-9a-f]{40}",intermediate) is None
+            or not isinstance(old,str)
+            or not isinstance(new,str)):
+        return None
+    # A prior verifier-only failed restart can already have moved the
+    # checkpoint to an intermediate commit. Do NOT trust its text value
+    # without verifying both ancestral relations in the real local Git
+    # history. The complete source/media/receipt proof below also binds
+    # the exact staged module to this intermediate revision.
+    for ancestor,descendant in ((old,intermediate),(intermediate,new)):
+        check=subprocess.run(
+            ["git","merge-base","--is-ancestor",ancestor,descendant],
+            cwd=repo,capture_output=True,timeout=20)
+        if check.returncode!=0:
+            return None
     from microgen_post_acoustic_reuse_resume import (
         reconcile_verified_audio_receipt,
     )

@@ -61,7 +61,9 @@ def test_real_21_slide_accepted_recovery_read_only(genuine_accepted_hp_stage):
     assert accepted["new_paid_requests"] is False
     assert accepted["publication_allowed"] is False
     assert (stage/".microgen_checkpoint.json").read_bytes()==before
-    assert cp["dependency_fingerprints"]["tts"]==accepted[
+    # A newer offline authorization verifier legitimately changes the
+    # fingerprint; the verified transaction will rekey it atomically.
+    assert cp["dependency_fingerprints"]["tts"]!=accepted[
         "fingerprints"]["tts"]
 
 
@@ -134,7 +136,10 @@ def test_authorization_code_delta_returns_offline_only_never_paid(
     old=json.loads(
         (root/".microgen_bounded_provider_authorization.json"
          ).read_text(encoding="utf8"))["scope"]
-    new={**old,"code_revision":PATCH}
+    import subprocess
+    current=subprocess.check_output(["git","rev-parse","HEAD"],
+                                    cwd=repo,text=True).strip()
+    new={**old,"code_revision":current}
     expected={"status":"SOURCE_BOUND_ONE_CUE_AUDIO_CHECKPOINT_RECONCILED",
               "source_accepted_reuse_receipt_sha256":"1"*64,
               "independent_acoustic_receipt_sha256":"2"*64}
