@@ -98,28 +98,79 @@ class AutonomousAudioTests(unittest.TestCase):
             self.assertEqual(set(evidence["slide_assessments"].values()),
                              {"REVIEW_REQUIRED_TRANSCRIPTION_UNAVAILABLE"})
 
-    def test_repeated_failed_audits_keep_fresh_status_only_evidence(self):
+    def test_repeated_failed_audits_do_not_replay_same_paid_recognition(self):
         with tempfile.TemporaryDirectory() as td:
             stage=audio_stage(Path(td))
             before=[digest_file(stage/f"slide{i}.wav") for i in (1,2)]
+            calls=[]
             def unavailable(_):
+                calls.append("failed provider call")
                 raise RuntimeError("503 UNAVAILABLE")
-            for _ in range(2):
-                with self.assertRaises(gate.AutonomousAcousticError):
-                    gate.audit_stage(stage,engines=(unavailable,unavailable),
-                                     models=("model-A","model-B"))
+            with self.assertRaisesRegex(gate.AutonomousAcousticError,
+                                        "transcription unavailable"):
+                gate.audit_stage(stage,engines=(unavailable,unavailable),
+                                 models=("model-A","model-B"))
+            self.assertEqual(len(calls),2)
+            with self.assertRaisesRegex(gate.AutonomousAcousticError,
+                                        "UNCHANGED_ACOUSTIC_REVIEW_HOLD"):
+                gate.audit_stage(stage,engines=(unavailable,unavailable),
+                                 models=("model-A","model-B"))
+            self.assertEqual(len(calls),2,"Same reviewer must never be called twice")
             records=sorted(stage.glob(".microgen_acoustic_blocked_*.json"))
-            self.assertEqual(len(records),2)
-            for record in records:
-                data=json.loads(record.read_text())
-                self.assertEqual(data["review_required_slides"],[1,2])
-                self.assertEqual(data["unavailable_recognizer_passes"],[0,1])
-                self.assertEqual(data["recognition_models"],["model-A","model-B"])
-                self.assertEqual(data["model_difference_fractions"]["1"],[])
-                self.assertFalse(data["accepted_for_video"])
-                self.assertNotIn("transcripts",data)
+            self.assertEqual(len(records),1)
+            data=json.loads(records[0].read_text())
+            self.assertEqual(data["review_required_slides"],[1,2])
+            self.assertEqual(data["unavailable_recognizer_passes"],[0,1])
+            self.assertEqual(data["recognition_models"],["model-A","model-B"])
+            self.assertEqual(data["model_difference_fractions"]["1"],[])
+            self.assertEqual(data["root_cause_family"],"INDEPENDENT_RECOGNIZER_UNAVAILABLE")
+            self.assertFalse(data["safe_auto_repair"])
+            self.assertFalse(data["accepted_for_video"])
+            self.assertNotIn("transcripts",data)
             self.assertEqual(before,[digest_file(stage/f"slide{i}.wav")
                                      for i in (1,2)])
+
+    def test_unchanged_private_audio_is_held_but_new_evidence_not_conflated(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td))
+            texts=gate._normalized(stage)
+            original=gate._input_snapshot(stage,len(texts))
+            record=stage/".microgen_acoustic_blocked_regression.json"
+            record.write_text(json.dumps({
+                "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
+                "input_snapshot_sha256":original,
+                "recognition_models":["model-A","model-B"],
+                "review_required_slides":[1],
+            }),encoding="utf8")
+            with self.assertRaisesRegex(
+                    gate.AutonomousAcousticError,
+                    "UNCHANGED_ACOUSTIC_REVIEW_HOLD"):
+                gate._hold_unchanged_failed_review(
+                    stage,texts,("model-A","model-B"))
+            # A genuinely different authorized reviewer is not the same
+            # external operation, but this does not grant its API budget.
+            self.assertIsNone(gate._hold_unchanged_failed_review(
+                stage,texts,("model-A","model-C")))
+            with (stage/"slide1.wav").open("ab") as f:
+                f.write(b"changed source bytes")
+            self.assertIsNone(gate._hold_unchanged_failed_review(
+                stage,texts,("model-A","model-B")))
+
+    def test_corrupt_prior_acoustic_failure_never_authorizes_paid_replay(self):
+        with tempfile.TemporaryDirectory() as td:
+            stage=audio_stage(Path(td))
+            p=stage/".microgen_acoustic_blocked_corrupt.json"
+            p.write_text("{not valid",encoding="utf8")
+            calls=[]
+            def recognizer(_):
+                calls.append("unsafe model call")
+                return WORDS[0]
+            with self.assertRaisesRegex(
+                    gate.AutonomousAcousticError,
+                    "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD"):
+                gate.audit_stage(stage,engines=(recognizer,recognizer),
+                                 models=("model-A","model-B"))
+            self.assertEqual(calls,[])
 
     def test_partial_asr_is_rechecked_once_without_exposing_script(self):
         with tempfile.TemporaryDirectory() as td:

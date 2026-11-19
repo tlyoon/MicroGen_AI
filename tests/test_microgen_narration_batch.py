@@ -70,6 +70,53 @@ class BatchNarrationTests(unittest.TestCase):
             generate_batched(s,src,recover,**kw)
             self.assertEqual(calls,["S1","S9","S9","S17"])
 
+    def test_real_read_timeout_splits_once_and_caches_source_bound_children(self):
+        class ReadTimeout(Exception):
+            pass
+        s, src = self.make_inputs(8)
+        calls = []
+        def generate(part, source):
+            calls.append([x["id"] for x in part])
+            if len(part) == 8:
+                try:
+                    raise ReadTimeout("The read operation timed out")
+                except ReadTimeout as exc:
+                    raise RuntimeError("Hybrid narration generation failed") from exc
+            return {x["id"]: {"narration": x["title"]} for x in part}
+        with tempfile.TemporaryDirectory() as root:
+            kw = dict(cache_dir=Path(root), model="gemini-3.8-flash", batch_size=8,
+                      prompt_fingerprint=lambda part: "prompt:" + ",".join(x["id"] for x in part))
+            result = generate_batched(s, src, generate, **kw)
+            self.assertEqual(len(result), 8)
+            self.assertEqual([len(c) for c in calls], [8, 4, 4])
+            self.assertTrue((Path(root) / "batch_0000.split.json").exists())
+            generate_batched(s, src, generate, **kw)
+            self.assertEqual(len(calls), 3)
+            generate_batched(s, [{"page": 2, "content": "new source"}], generate, **kw)
+            self.assertEqual([len(c) for c in calls], [8, 4, 4, 8, 4, 4])
+
+    def test_split_restart_skips_failed_oversized_call_and_preserves_first_half(self):
+        class ReadTimeout(Exception):
+            pass
+        s, src = self.make_inputs(8)
+        calls = []
+        fail_second = [True]
+        def generate(part, source):
+            calls.append((part[0]["id"], len(part)))
+            if len(part) == 8:
+                raise ReadTimeout("network")
+            if part[0]["id"] == "S5" and fail_second[0]:
+                raise RuntimeError("provider temporarily unavailable")
+            return {x["id"]: {"narration": x["title"]} for x in part}
+        with tempfile.TemporaryDirectory() as root:
+            kw = dict(cache_dir=Path(root), model="flash", batch_size=8)
+            with self.assertRaisesRegex(RuntimeError, "provider temporarily"):
+                generate_batched(s, src, generate, **kw)
+            fail_second[0] = False
+            result = generate_batched(s, src, generate, **kw)
+            self.assertEqual(len(result), 8)
+            self.assertEqual(calls, [("S1", 8), ("S1", 4), ("S5", 4), ("S5", 4)])
+
     def test_missing_slide_is_never_cached(self):
         s,src=self.make_inputs(4)
         with tempfile.TemporaryDirectory() as root:

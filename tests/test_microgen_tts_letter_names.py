@@ -53,6 +53,30 @@ class LetterNameTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertEqual(tts.normalize_scientific_speech(raw), expected)
 
+    def test_spaced_math_axis_and_coordinate_of_time_are_spoken_explicitly(self):
+        cases={
+            "The velocity along the x axis decreases.":
+                "The velocity along the ex axis decreases.",
+            "Plot the y axis next.":
+                "Plot the why axis next.",
+            "For position x of t equals two t cubed.":
+                "For position ex of tee equals two t cubed.",
+            "Then y of t is negative.":
+                "Then why of tee is negative.",
+        }
+        for raw,expected in cases.items():
+            with self.subTest(raw=raw):
+                spoken=tts.normalize_scientific_speech(raw)
+                self.assertEqual(spoken,expected)
+                self.assertEqual(tts.normalize_scientific_speech(spoken),spoken)
+                microgen_pronunciation.require_safe_speech(raw,spoken)
+        for ordinary in ("x-ray imaging", "Use xylitol.",
+                         "Vitamin X is a fictional label.",
+                         "At x, find the value.", "That is why we study this."):
+            with self.subTest(ordinary=ordinary):
+                self.assertEqual(tts.normalize_scientific_speech(ordinary),
+                                 ordinary)
+
     def test_regular_english_and_other_abbreviations_untouched(self):
         untouched = [
             "Yesterday was sunny.", "The Y-shaped path split.",

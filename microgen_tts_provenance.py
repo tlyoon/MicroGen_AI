@@ -145,6 +145,66 @@ def write_manifest(folder: Path, records: list[dict], inputs: list[str]) -> Path
     return path
 
 
+def inspect_normalized_input_drift(folder: Path, inputs: list[str]) -> dict:
+    """Read-only, integrity-checked repair inventory for old same-voice WAVs.
+
+    This is *not* new audio provenance or acoustic acceptance. It identifies
+    which previously signed inputs changed after a speech-normalizer update
+    while preserving every original WAV. Never trust an unverified WAV or
+    forged voice record to reduce a future rerender budget.
+    """
+    folder = Path(folder)
+    path = folder / MANIFEST_FILE
+    if path.is_symlink() or not path.is_file():
+        raise TTSProvenanceError("Unsafe or missing historical TTS manifest")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf8"))
+    except (ValueError, OSError) as exc:
+        raise TTSProvenanceError("Unreadable historical TTS manifest") from exc
+    rows = manifest.get("slides") if isinstance(manifest, dict) else None
+    if (not isinstance(inputs, list) or not inputs
+            or any(not isinstance(t, str) or not t for t in inputs)
+            or not isinstance(rows, list) or len(rows) != len(inputs)
+            or manifest.get("schema_version") != SCHEMA_VERSION
+            or manifest.get("slide_count") != len(inputs)
+            or manifest.get("technical_provenance_verified") is not True):
+        raise TTSProvenanceError("Untrusted historical audio inventory")
+    voices = set()
+    changed = []
+    for i, (row, current) in enumerate(zip(rows, inputs), 1):
+        wav = folder / f"slide{i}.wav"
+        if (not isinstance(row, dict) or row.get("slide") != i
+                or row.get("schema_version") != SCHEMA_VERSION
+                or row.get("voice_identity_verified") is not True
+                or row.get("provider") not in {
+                    "gemini_flash_lite_tts", "gemini_flash_tts", "google_cloud_chirp3"}
+                or not row.get("voice_name")
+                or wav.is_symlink() or not wav.is_file()):
+            raise TTSProvenanceError("Untrusted source WAV or slide identity")
+        voices.add((row.get("provider"), row.get("voice_name"),
+                    row.get("speaking_rate"), row.get("language_code"),
+                    row.get("location"), row.get("sample_rate_hz")))
+        if digest_file(wav) != row.get("sha256"):
+            raise TTSProvenanceError("Historical WAV content changed")
+        if any(row.get(k) != v for k, v in wav_characteristics(wav).items()):
+            raise TTSProvenanceError("Historical WAV PCM metadata changed")
+        original = row.get("normalized_input_sha256")
+        if (not isinstance(original, str) or len(original) != 64
+                or any(c not in "0123456789abcdef" for c in original)):
+            raise TTSProvenanceError("Missing original spoken-input identity")
+        if original != digest_text(current):
+            changed.append(i)
+    if (len(voices) != 1 or manifest.get("provider") != rows[0]["provider"]
+            or manifest.get("voice_name") != rows[0]["voice_name"]):
+        raise TTSProvenanceError("Mixed or forged historical voice identity")
+    return {"changed_input_slides": changed,
+            "unchanged_input_slides": [i for i in range(1, len(rows)+1)
+                                       if i not in changed],
+            "source_text_current": not changed,
+            "original_audio_preserved": True,
+            "independent_acoustic_review_passed": False}
+
+
 def verify_manifest(folder: Path, inputs: list[str]) -> dict:
     folder = Path(folder)
     try:

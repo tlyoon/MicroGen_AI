@@ -211,11 +211,51 @@ def _compose_prompt(slides: list[dict[str, Any]], source_blocks: list[dict[str, 
     return "\n\n".join(
         [
             _read_prompt("gen_script_prompt_v8_hybrid.md"),
+            "## SOURCE-ANCHORED TIMED NARRATION (MANDATORY)\n"
+            "Explain the source-backed mathematical meaning while visibly "
+            "naming the relevant element on each FIXED slide. For each "
+            "reasonably short narration sentence/cue, reuse two distinctive "
+            "words appearing in the same visible PDF text block wherever "
+            "possible. For a one-element title card with only one distinctive "
+            "word, repeat its full visible title and section number exactly. "
+            "Do not paraphrase every on-screen label away. Preserve equations, "
+            "numbers, signs, and source meaning. A *derived* numerical result "
+            "may be mathematically correct yet ABSENT from the fixed slide; "
+            "do not narrate that result (in digits or words) as an active "
+            "cue unless the value is actually visible in the PDF text. "
+            "Instead explain how to evaluate the on-slide expression, "
+            "without claiming an unseen numeral. NEVER fabricate an anchor, "
+            "rewrite a slide or add inaccurate filler merely to pass lexical "
+            "matching. If a cue cannot genuinely be tied to a visible element, "
+            "downstream offline grounding must reject it before paid TTS.\n\n"
             "## FIXED LESSON AND SOURCE CONTEXT\n```json\n"
             + json.dumps(payload, ensure_ascii=False, indent=2)
             + "\n```",
         ]
     )
+
+
+def _narration_request_fingerprint(
+    batch_slides: list[dict[str, Any]],
+    source_blocks: list[dict[str, Any]],
+) -> str:
+    """Pin a batch cache entry to the *actual* request and generator code.
+
+    The former external-template-only cache identity silently reused old
+    answers after source-anchoring instructions changed inside this module.
+    Hash only the prompt and code, never expose private textbook text in the
+    cache filename or report.
+    """
+    identity = {
+        "request_prompt": _compose_prompt(batch_slides, source_blocks),
+        "generator_sha256": hashlib.sha256(
+            Path(__file__).read_bytes()).hexdigest(),
+        "thinking_level": THINKING_LEVEL,
+        "model": MODEL_NAME,
+    }
+    return hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _gemini_compatible_schema(value: Any) -> Any:
@@ -353,6 +393,8 @@ def main() -> None:
         cache_dir=Path(".microgen_narration_batches"),
         model=MODEL_NAME,
         prompt_hash=hashlib.sha256(prompt_path.read_bytes()).hexdigest(),
+        prompt_fingerprint=lambda batch: _narration_request_fingerprint(
+            batch, source_blocks),
     )
 
     # Preserve v7 title-card behaviour: the first audio says the displayed title/topic only.
@@ -373,6 +415,23 @@ def main() -> None:
             tts_text = str(tts_text).strip() if tts_text is not None and str(tts_text).strip() else narration
             _speech_hygiene(narration, slide["id"])
             _speech_hygiene(tts_text, slide["id"])
+            # Recycle the reviewed mathematics-letter pronunciations before
+            # source-bound TTS/audio QA: a_x/v_x, d x/d t, x(t), time t C.
+            # Only the voice input changes; the scholarly narration stays
+            # untouched and independent WAV evidence is still mandatory.
+            from microgen_reviewed_math_voice import (
+                reviewed_math_voice, voice_input_risk_status,
+            )
+            from text_to_speech_v25 import normalize_scientific_speech
+            voice_preflight = voice_input_risk_status(
+                tts_text, normalize_scientific_speech)
+            if voice_preflight["unresolved_source_risk_count"]:
+                raise RuntimeError(
+                    f"Slide {idx}: unresolved source math pronunciation "
+                    "before paid TTS; revise source-grounded narration")
+            tts_text = normalize_scientific_speech(
+                reviewed_math_voice(tts_text))
+            _speech_hygiene(tts_text, slide["id"])
             timing = "1 sec" if idx == 1 else _reading_time(narration)
             out.write(f"**Slide {idx} [{timing}]: \n{narration}**\n\n")
             sidecar_slides.append(
@@ -382,6 +441,7 @@ def main() -> None:
                     "title": slide["title"],
                     "narration": narration,
                     "tts_text": tts_text,
+                    "tts_math_voice_preflight": voice_preflight,
                     "estimated_spoken_time": timing,
                 }
             )

@@ -14,6 +14,22 @@
 
 **Status: authoritative for current MicroGen_AI TTS development and QA, superseding any earlier mandatory manual-approval instructions for this pipeline.** This is the *original* MicroGen_AI project, not MicroGen_AI_Web.
 
+## Binding owner amendment (13 November 2026, release closure v1.2)
+
+**Automatic recovery must be part of normal pipeline execution, not depend
+on the owner repeatedly asking the developer to fix the next blocker.**
+The [controlling Release Closure Development Contract v1.2](
+RELEASE_CLOSURE_DEVELOPMENT_CONTRACT_20261107.md) requires automatic
+recognition, historically grounded remedy selection, source/QA verification,
+checkpoint repair and downstream stage continuation in the ordinary
+`microgen_batch.py` execution path. Future resolved blockers MUST become
+reusable general-purpose, finite, tested production mechanisms. Historical
+failure replay and actual forward stage progression are required evidence;
+a manual workaround, stalled QA response, or conversational promise is not
+closure. This applies to science, TTS, acoustic QA, highlighting, video and
+private acceptance. It does not waive independent QA, expand paid campaigns,
+or authorize publishing, and new/untrusted failures still fail closed.
+
 ## User-directed policy
 - No human approval, listening confirmation, academic sign-off, figure sign-off, element-highlight sign-off, reviewer signature or manual QA checkpoint is required to **develop, test, open draft PRs, continue automation, or evaluate technical release readiness**.
 - Machine tests and evidence decide progression. The default QA policy is `autonomous`. A separate `human-certified` mode is available only if someone explicitly requests formal human certification; it is **not a prerequisite**.

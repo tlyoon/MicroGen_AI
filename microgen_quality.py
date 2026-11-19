@@ -296,6 +296,25 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
     # publication, preventing receipt/artifact drift.
     figure_provenance = None
     provenance_file = stage / "figure_composition_receipt.json"
+    source_caption_provenance = None
+    if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
+        from microgen_source_caption_vector_recovery import (
+            validate_source_caption_vector_recovery, CaptionVectorRecoveryError,
+        )
+        try:
+            source_caption_provenance = validate_source_caption_vector_recovery(stage)
+        except CaptionVectorRecoveryError as exc:
+            raise QualityError(f"Source-caption figure provenance invalid: {exc}") from exc
+    from microgen_source_kinematics_graph_guard import require_graph_source_evidence
+    source_graph_provenance = require_graph_source_evidence(stage)
+    lateral_source_provenance = None
+    if (stage/".microgen_lateral_vector_figure_recovery.json").is_file():
+        from microgen_lateral_vector_figure_recovery import (
+            verify_lateral_figure_receipt,
+        )
+        lateral_source_provenance = verify_lateral_figure_receipt(stage)
+        if lateral_source_provenance is None:
+            raise QualityError("Source vector figure receipt was not verified")
     if provenance_file.is_file():
         from microgen_figure_composition import validate_figure_receipt
         # Source-crop integrity is not equivalent to composite-panel approval.
@@ -327,6 +346,33 @@ def manifest_for(stage: Path, *, require_footer: bool = False) -> dict:
         "audio_seconds": wav["total_seconds"],
         "video_seconds": video["seconds"],
     }
+    if (stage / ".microgen_verified_upstream_import.json").is_file():
+        from microgen_verified_upstream_reuse import verify_import_receipt
+        try:
+            imported = verify_import_receipt(stage)
+        except (OSError, RuntimeError) as exc:
+            raise QualityError(f"Source-bound upstream import invalid: {exc}") from exc
+        result["verified_upstream_import_receipt_sha256"] = (
+            imported["receipt_sha256"]
+        )
+        result["verified_upstream_import_stages"] = imported["stages"]
+    if source_graph_provenance is not None:
+        result["source_kinematic_graph_audit_receipt_sha256"] = (
+            source_graph_provenance["receipt_sha256"]
+        )
+        result["source_kinematic_graph_matching"] = source_graph_provenance["matching"]
+    if lateral_source_provenance is not None:
+        result["lateral_vector_figure_recovery_receipt_sha256"] = (
+            lateral_source_provenance["receipt_sha256"]
+        )
+        result["lateral_vector_figures"] = lateral_source_provenance["figures"]
+    if source_caption_provenance is not None:
+        result["source_caption_vector_recovery_receipt_sha256"] = (
+            source_caption_provenance["receipt_sha256"]
+        )
+        result["source_caption_vector_figures"] = (
+            source_caption_provenance["figures"]
+        )
     if small_figures:
         result["figure_display_warnings"] = small_figures
         result["scientific_review_pending"] = True
@@ -371,6 +417,48 @@ def published_manifest_valid(dest: Path) -> bool:
         for name, digest in figure_sha256.items():
             if sha256(dest / name) != digest:
                 return False
+        if "verified_upstream_import_receipt_sha256" in data:
+            filename = ".microgen_verified_upstream_import.json"
+            if sha256(dest / filename) != data["verified_upstream_import_receipt_sha256"]:
+                return False
+            from microgen_verified_upstream_reuse import verify_import_receipt
+            receipt = verify_import_receipt(dest, require_cache=False)
+            if (receipt is None
+                    or receipt["stages"] != data.get("verified_upstream_import_stages")):
+                return False
+        if "source_kinematic_graph_audit_receipt_sha256" in data:
+            name = ".microgen_source_kinematic_graph_audit.json"
+            if sha256(dest / name) != data["source_kinematic_graph_audit_receipt_sha256"]:
+                return False
+            from microgen_source_kinematics_graph_guard import (
+                require_graph_source_evidence,
+            )
+            verified = require_graph_source_evidence(dest)
+            if (verified is None
+                    or verified["matching"] != data.get("source_kinematic_graph_matching")):
+                return False
+        if "lateral_vector_figure_recovery_receipt_sha256" in data:
+            name = ".microgen_lateral_vector_figure_recovery.json"
+            if sha256(dest / name) != data["lateral_vector_figure_recovery_receipt_sha256"]:
+                return False
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            verified = verify_lateral_figure_receipt(dest)
+            if (verified is None
+                    or verified["figures"] != data.get("lateral_vector_figures")):
+                return False
+        if "source_caption_vector_recovery_receipt_sha256" in data:
+            name = ".microgen_source_caption_vector_recovery.json"
+            if sha256(dest / name) != data["source_caption_vector_recovery_receipt_sha256"]:
+                return False
+            from microgen_source_caption_vector_recovery import (
+                validate_source_caption_vector_recovery,
+            )
+            verified = validate_source_caption_vector_recovery(dest)
+            if (verified is None
+                    or verified["figures"] != data.get("source_caption_vector_figures")):
+                return False
         if "figure_composition_receipt_sha256" in data:
             if sha256(dest / "figure_composition_receipt.json") != data["figure_composition_receipt_sha256"]:
                 return False
@@ -404,6 +492,14 @@ def publish_bundle(stage: Path, dest: Path, *, manifest: dict | None = None, sti
         raise QualityError("Case-insensitive duplicate figure names in publication manifest")
     files = ["slides.pdf", "slides.tex", "script.txt", "script_tts.json", "slides.mp4"]
     files += sorted(set(info.get("figure_sha256", {})))
+    if info.get("verified_upstream_import_receipt_sha256"):
+        files.append(".microgen_verified_upstream_import.json")
+    if info.get("source_caption_vector_recovery_receipt_sha256"):
+        files.append(".microgen_source_caption_vector_recovery.json")
+    if info.get("lateral_vector_figure_recovery_receipt_sha256"):
+        files.append(".microgen_lateral_vector_figure_recovery.json")
+    if info.get("source_kinematic_graph_audit_receipt_sha256"):
+        files.append(".microgen_source_kinematic_graph_audit.json")
     if info.get("figure_composition_receipt_sha256"):
         files.append("figure_composition_receipt.json")
     if info.get("figure_review_approval_sha256"):
@@ -514,11 +610,15 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         "figure_extraction": ("source.pdf", "crop_figs_v3.py"),
         "figure_mapping": ("source.pdf", "map_and_rename_v5.py",
                            "microgen_figure_composition.py",
+                           "microgen_mapping_cache_recovery.py",
+                           "microgen_lateral_vector_figure_recovery.py",
                            "figure_composition_receipt.json"),
         "figure_merge": ("source.pdf", "merge_lettered_figs_v2.py",
                          "figure_composition_receipt.json"),
         "slides": ("source.pdf", "gen_slides_v20.py",
-                   "gen_slides_prompt_v20_hybrid.txt"),
+                   "gen_slides_prompt_v20_hybrid.txt",
+                   "microgen_slide_reflow.py",
+                   "microgen_layout_retry_guard.py"),
         "narration": ("source.pdf", "slides.pdf", "gen_script_v13.py",
                       "gen_script_prompt_v8_hybrid.md"),
         "science_qa": ("source.pdf", "slides.pdf", "slides.tex",
@@ -546,16 +646,83 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
                       "script_tts.json", "slides.mp4"),
     }
     inputs = list(dependencies.get(name, ("source.pdf",)))
+    # Source-bound mathematical voice clarification is part of the NORMAL
+    # narration stage, not an untracked postprocessing exemption. Bind
+    # original/repaired sidecar, raw script, recovery policy and receipt
+    # when available, invalidating stale checkpoints after a policy edit.
+    if name == "narration":
+        for policy in ("script.txt", "script_tts.json",
+                       "microgen_source_bound_voice_recovery.py",
+                       ".microgen_source_bound_voice_recovery.json"):
+            if (stage / policy).is_file():
+                inputs.append(policy)
+    # The V6 recovery policy and classifier are executable dependencies
+    # of every model/scientific stage it can classify. When their source
+    # changes, old QA fingerprints must not quietly retain acceptance.
+    if name in {"science_qa", "tts", "acoustic_qa", "video", "acceptance"}:
+        for policy in ("microgen_recovery_registry.py",
+                       "microgen_recovery_registry_v6.json"):
+            if (stage / policy).is_file():
+                inputs.append(policy)
     if name == "slides":
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
+        # A changed auto-recovery path must invalidate old slide-stage
+        # acceptance, without breaking legacy minimal offline fixtures.
+        for optional in ("microgen_missing_source_figure_candidates.py",
+                         "microgen_source_caption_vector_recovery.py",
+                         "microgen_source_kinematics_graph_guard.py"):
+            if (stage / optional).is_file():
+                inputs.append(optional)
+    if name in {"slides", "narration", "science_qa", "tts",
+                "acoustic_qa", "video", "acceptance", "published"}:
+        if (stage / ".microgen_source_kinematic_graph_audit.json").is_file():
+            from microgen_source_kinematics_graph_guard import (
+                require_graph_source_evidence,
+            )
+            if require_graph_source_evidence(stage) is None:
+                raise QualityError("Source-derived kinematic graph evidence missing")
+            inputs.append(".microgen_source_kinematic_graph_audit.json")
+    if name in {"slides", "science_qa", "tts", "acoustic_qa",
+                "video", "acceptance", "published", "figure_mapping", "figure_merge"}:
+        if (stage / ".microgen_lateral_vector_figure_recovery.json").is_file():
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            if verify_lateral_figure_receipt(stage) is None:
+                raise QualityError("Missing source-vector figure provenance")
+            inputs.append(".microgen_lateral_vector_figure_recovery.json")
+    if name in {"slides", "science_qa", "acceptance", "published"}:
+        if (stage / ".microgen_source_caption_vector_recovery.json").is_file():
+            inputs.append(".microgen_source_caption_vector_recovery.json")
+    if name in {"science_qa", "tts", "acoustic_qa", "video",
+                "acceptance", "published"}:
+        if (stage / ".microgen_verified_upstream_import.json").is_file():
+            from microgen_verified_upstream_reuse import verify_import_receipt
+            verify_import_receipt(stage)
+            inputs.append(".microgen_verified_upstream_import.json")
+    if name in {"narration", "tts"} and (stage/"microgen_reviewed_math_voice.py").is_file():
+        # A reviewed spoken-variable rule change invalidates source-bound
+        # voice inputs; never reuse stale narration/TTS stage receipts.
+        inputs.append("microgen_reviewed_math_voice.py")
+    if name == "narration" and (stage/"microgen_narration_batch.py").is_file():
+        # The live v13 narrator delegates all resume/cache identities to
+        # this shared helper. Its changes must invalidate a saved narration
+        # stage rather than leave stale responses marked complete.
+        inputs.append("microgen_narration_batch.py")
     if name == "tts":
         from microgen_timed_cue_planner import PLAN_FILE
         # Preserve compatibility with minimal offline/regression stages that
         # contain only the legacy TTS entrypoint. Fingerprint optional code
         # modules when actually staged; never require fabricated files.
         for candidate in ("microgen_flash_tts.py",
+                          "microgen_private_dev_policy.py",
+                          "microgen_campaign_authorization.py",
+                          "microgen_tts_provenance.py",
                           "microgen_timed_cue_tts.py",
-                          "microgen_timed_cue_planner.py"):
+                          "microgen_timed_cue_planner.py",
+                          "microgen_cue_semantic_mapping.py",
+                          "microgen_source_math_cue.py",
+                          "microgen_worked_equation_recovery.py"):
             if (stage/candidate).is_file():
                 inputs.append(candidate)
         if (stage/PLAN_FILE).exists():
@@ -564,7 +731,32 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         pairs_mode=os.environ.get("MICROGEN_TIMED_CUES","0")
         if pairs_mode not in ("0","1"):
             raise QualityError("Invalid timed-cue opt-in mode")
+    if name in {"video", "acceptance"}:
+        if (stage/"microgen_source_math_cue.py").is_file():
+            # The final PCM/video math-region auditor uses this same
+            # source-PDF rule. Code changes invalidate old media receipts.
+            inputs.append("microgen_source_math_cue.py")
+        if (stage/"microgen_worked_equation_recovery.py").is_file():
+            inputs.append("microgen_worked_equation_recovery.py")
+    if name in {"tts","acoustic_qa","video","acceptance"}:
+        if (stage/".microgen_verified_audio_reuse.json").is_file():
+            from microgen_verified_tts_reuse import verify_reuse_receipt
+            verify_reuse_receipt(stage)
+            inputs.append(".microgen_verified_audio_reuse.json")
     if name == "acoustic_qa":
+        # Changing the script-blind mathematical ASR typography comparator
+        # invalidates old acoustic pass/hold evidence, NEVER valid TTS PCM.
+        # Optional for legacy fixtures; present in normal packaged jobs.
+        if (stage/"microgen_acoustic_math_transcript.py").is_file():
+            inputs.append("microgen_acoustic_math_transcript.py")
+        # Changes to normalizer/provenance integrity checks must invalidate
+        # an old acoustic checkpoint as well as changes to ASR matching.
+        if (stage/"microgen_tts_provenance.py").is_file():
+            inputs.append("microgen_tts_provenance.py")
+        if (stage/"microgen_private_acoustic_trace.py").is_file():
+            inputs.append("microgen_private_acoustic_trace.py")
+        if (stage/"microgen_verified_acoustic_replay.py").is_file():
+            inputs.append("microgen_verified_acoustic_replay.py")
         inputs += sorted(p.name for p in stage.glob("slide*.wav"))
         if (stage / ".microgen_autonomous_acoustic_qa.json").is_file():
             inputs.append(".microgen_autonomous_acoustic_qa.json")
@@ -574,6 +766,7 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
         inputs += sorted(p.name for p in stage.glob("Figure*.png"))
         for optional in (".microgen_autonomous_parts.json",
                          "figure_composition_receipt.json",
+                         ".microgen_source_caption_vector_recovery.json",
                          ".microgen_tts_provenance.json"):
             if (stage/optional).is_file():
                 inputs.append(optional)
@@ -624,14 +817,14 @@ def dependency_fingerprint(stage: Path, name: str) -> str:
     # checkpoint; an old whole-slide WAV is not measured cue evidence.
     if name == "tts":
         pairs.append(("_timed_cues_mode",os.environ.get("MICROGEN_TIMED_CUES","0")))
-        # Only TIMED TTS depends on semantic cue assistance. Do not
-        # invalidate accepted legacy static audio when unrelated semantic
-        # settings change; reviewed timed budgets must still release a
-        # deterministic failure hold on meaningfully changed inputs.
+        # The semantic model is only part of explicitly timed TTS. Keep
+        # static-audio checkpoints unchanged when semantic settings vary,
+        # while allowing authorized timed-semantic changes to invalidate
+        # their relevant cache / release a deterministic hold.
         if os.environ.get("MICROGEN_TIMED_CUES","0") == "1":
-            pairs.append(("_semantic_assist",
+            pairs.append(("_timed_semantic_assist",
                           os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST","0")))
-            pairs.append(("_semantic_max_slides",
+            pairs.append(("_timed_semantic_max_slides",
                           os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES","4")))
     # Changing TTS voice or speed invalidates audio, not upstream narration.
     if name in {"tts", "video", "published"}:

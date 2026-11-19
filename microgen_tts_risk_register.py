@@ -19,8 +19,11 @@ from typing import Callable
 SCHEMA_VERSION = 1
 # Case-sensitive literal mathematical variables, not global letter substitution.
 _MATH_COMPOUND = re.compile(
-    r"(?<![A-Za-z])(?P<variable>[xyXY])\s*[-\u2010-\u2015]\s*"
+    r"(?<![A-Za-z])(?P<variable>[xyXY])(?:\s*[-\u2010-\u2015]\s*|\s+)"
     r"(?P<noun>values?|axis|axes|intercepts?|coordinates?|components?)\b"
+)
+_MATH_COORDINATE_OF_TIME = re.compile(
+    r"(?<![A-Za-z])(?P<variable>[xyXY])\s+of\s+(?P<argument>[tT])\b"
 )
 _MATH_CDOT = re.compile(
     r"(?P<cue>\b(?:at|point|approaches|of|equals|variable|constant|coefficient)\s+)"
@@ -77,6 +80,12 @@ def find_pronunciation_risks(raw: str, normalized: str) -> list[Risk]:
         expected=letter+" "+match["noun"].lower()
         add(match,"math_letter_compound",expected,expected in normalized.lower(),
             "Letter name may be heard as a lexical word, e.g. Y as 'yay'.")
+    for match in _MATH_COORDINATE_OF_TIME.finditer(raw):
+        letter = "why" if match["variable"].lower()=="y" else "ex"
+        expected=letter+" of tee"
+        approved=expected in normalized.lower()
+        add(match,"coordinate_of_time",expected if approved else None,approved,
+            "Explicit variable-of-time speech reduces ambiguous letter names; acoustic proof remains necessary.")
     for match in _MATH_CDOT.finditer(raw):
         add(match,"math_c_sentence","see.",bool(re.search(r"\bsee\.(?=\s|$)",normalized)),
             "Letter C at a sentence boundary may be read as 'circa'.")

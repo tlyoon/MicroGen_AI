@@ -1,7 +1,9 @@
-"""Diagnose missing generated figure assets against SOURCE textbook PDF graphics.
+"""Diagnose and selectively recover missing source-PDF figure assets.
 
-No hallucinated figures, no automatic pixel promotion to the slide mapping:
-produce SHA-authenticated *candidate* source-region PNGs and fail closed.
+A uniquely styled numbered source caption plus adjacent vector-region geometry
+can safely recover a literal PDF render through the normal slide pipeline.
+All ambiguous or raster-only cases still yield unverified candidates and
+fail closed; no guessed figures are promoted.
 """
 from __future__ import annotations
 import hashlib
@@ -191,8 +193,32 @@ def check_graphics_with_source_candidates(tex_file):
     from microgen_quality import check_graphics, QualityError
     path=Path(tex_file)
     try:
-        return check_graphics(path)
+        figures=check_graphics(path)
+        # If an earlier normal step recovered a figure, its source-bound
+        # receipt remains mandatory on every subsequent graphics check.
+        from microgen_source_caption_vector_recovery import (
+            validate_source_caption_vector_recovery,
+        )
+        validate_source_caption_vector_recovery(path.resolve().parent)
+        return figures
     except (QualityError,FileNotFoundError):
+        # Shared normal slide-generator path: recover only a uniquely
+        # caption-attested vector drawing in its original PDF page. Never
+        # turn ambiguous candidate crops into a published illustration.
+        from microgen_source_caption_vector_recovery import (
+            CaptionVectorRecoveryError, recover_caption_anchored_vectors,
+            validate_source_caption_vector_recovery,
+        )
+        try:
+            repaired = recover_caption_anchored_vectors(path.resolve().parent)
+            verified = validate_source_caption_vector_recovery(path.resolve().parent)
+            if verified:
+                print("[source figures] automatic source-caption vector recovery "
+                      f"verified: {repaired}", flush=True)
+                return check_graphics(path)
+        except (CaptionVectorRecoveryError, OSError, ValueError) as exc:
+            print("[source figures] caption-vector recovery abstained: "
+                  f"{type(exc).__name__}: {exc}", flush=True)
         result=diagnose_before_graphics_gate(path.resolve().parent)
         if result:
             print("[source figures] candidate review saved before failed figure gate: "+

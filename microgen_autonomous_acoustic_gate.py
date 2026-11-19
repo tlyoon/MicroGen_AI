@@ -24,6 +24,7 @@ from microgen_tts_acoustic_qa import (
 from microgen_tts_evidence import verify_acoustic_evidence
 from microgen_tts_provenance import (
     verify_manifest, write_manifest, make_record, digest_file,
+    TTSProvenanceError, inspect_normalized_input_drift,
 )
 from microgen_tts_wave_integrity import require_structurally_usable_audio
 from microgen_quality import check_wavs, QualityError
@@ -32,6 +33,11 @@ RECEIPT=".microgen_autonomous_acoustic_qa.json"
 MAX_REPAIR_SLIDES=2
 MAX_DISAGREEMENT_RECHECK_SLIDES=2
 DEFAULT_MODELS=("gemini-3.5-flash", "gemini-3.8-flash")
+# Two model-level alternatives, distinct from the primary two. These are
+# only tried on UNAVAILABLE model passes, never to fish for an ASR pass
+# after real scientific/phonetic disagreement. Every candidate still uses
+# the existing per-model bounded Gemini key-pool transport policy.
+BOUNDED_AUDIO_REVIEWER_FALLBACK=("gemini-3.5-transcribe", "gemini-2.5-flash")
 PASS="ASR_SCREEN_PASS_LISTENING_REQUIRED"
 REPAIRABLE="REVIEW_REQUIRED_PRONUNCIATION_RISK"
 
@@ -54,7 +60,8 @@ def _normalized(stage: Path) -> list[str]:
     return texts
 
 
-def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
+def _providers(models_override:tuple[str,str]|None=None, *,
+               single_slot_only:bool=False) -> tuple[Callable,Callable,tuple[str,str]]:
     from dotenv import load_dotenv
     from gemini_keys import get_gemini_api_keys
     config=Path(os.environ.get("MICROVID_CONFIG_DIR",
@@ -70,14 +77,19 @@ def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
         raise AutonomousAcousticError("Invalid configured Gemini key preference") from exc
     if not 0<=index<len(keys):
         raise AutonomousAcousticError("Preferred Gemini key index unavailable")
-    models=(os.environ.get("MICROGEN_ACOUSTIC_MODEL_A",DEFAULT_MODELS[0]),
-            os.environ.get("MICROGEN_ACOUSTIC_MODEL_B",DEFAULT_MODELS[1]))
-    if models[0]==models[1] or not all(models):
+    models=(models_override if models_override is not None else
+            (os.environ.get("MICROGEN_ACOUSTIC_MODEL_A",DEFAULT_MODELS[0]),
+             os.environ.get("MICROGEN_ACOUSTIC_MODEL_B",DEFAULT_MODELS[1])))
+    if (not isinstance(models,tuple) or len(models)!=2
+            or models[0]==models[1] or not all(models)):
         raise AutonomousAcousticError("Two distinct Gemini audio reviewers required")
     # Every independent model may use the configured key pool. Preserve
     # distinct model identities while avoiding repeat requests to a key that
     # has already failed during this model's recognition pass.
-    ordered_keys = keys[index:] + keys[:index]
+    # Historical single-reviewer retakes have a hard one-send budget.
+    # Disable the normal key-pool failover for this narrow recovery path.
+    ordered_keys=(keys[index:index+1] if single_slot_only else
+                  keys[index:] + keys[:index])
 
     def key_pool_recognizer(model:str) -> Callable:
         engines = [gemini_audio_recognizer(key,model=model)
@@ -95,9 +107,16 @@ def _providers() -> tuple[Callable,Callable,tuple[str,str]]:
                     preferred_slot = slot
                     return transcript
                 except Exception as exc:
-                    # Never log the credential or expected narration.
+                    # Keep only safe provider status/category. Old code
+                    # erased the diagnostic reason and treated every 400,
+                    # 401, 429 and 503 as the same acoustic failure.
+                    from microgen_tts_service_recovery import (
+                        failure_kind,safe_http_status,
+                    )
                     print(f"[Acoustic QA] {model} key slot #{slot+1} "
-                          f"unavailable ({type(exc).__name__}); "
+                          f"unavailable ({type(exc).__name__}, "
+                          f"kind={failure_kind(exc)}, "
+                          f"http_status={safe_http_status(exc)}); "
                           "trying next configured slot",flush=True)
             raise AutonomousAcousticError(
                 f"Independent acoustic recognizer {model} unavailable "
@@ -124,18 +143,25 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
                     reference_words=len(tokens(texts[slide-1]))
                 except (ValueError,IndexError):
                     reference_words=0
-                if (reference_words>=25 and
-                        len(tokens(transcript)) < 0.45*reference_words):
+                from microgen_tts_acoustic_qa import is_meta_transcript
+                contaminated=is_meta_transcript(transcript)
+                short=(reference_words>=25 and
+                       len(tokens(transcript)) < 0.45*reference_words)
+                if contaminated or short:
+                    reason=("explanatory/nontranscript" if contaminated
+                            else "short partial")
                     print(f"[Acoustic QA] model {models[index]} returned "
-                          f"short partial transcript for {path.name}; "
+                          f"{reason} audio response for {path.name}; "
                           "one independent recheck",flush=True)
                     try:
                         candidate=str(engines[index](path)).strip()
-                        if len(tokens(candidate))>len(tokens(transcript)):
+                        if (not is_meta_transcript(candidate)
+                                and (not short or
+                                     len(tokens(candidate))>len(tokens(transcript)))):
                             transcript=candidate
                     except Exception:
-                        # The original partial response stays untrusted and
-                        # the final acoustic report will fail closed.
+                        # Never repair audio or manufacture missing words from
+                        # the expected script when a reviewer is unreliable.
                         pass
                 memo[key]=transcript
             return memo[key]
@@ -144,6 +170,315 @@ def _transcripts(stage: Path, texts: list[str], engines: tuple[Callable,Callable
     return audit_with_recognizer(
         stage,texts,caching(0),normalize_scientific_speech,
         independent_recognizer=caching(1),recognition_models=models)
+
+
+def _recover_unavailable_reviewers(
+        stage: Path, texts: list[str], engines: tuple[Callable,Callable],
+        models: tuple[str,str], report: dict, memo: dict, *,
+        provider_factory: Callable = _providers,
+) -> tuple[dict, tuple[Callable,Callable], tuple[str,str], dict, dict]:
+    """Automatically replace only an UNAVAILABLE independent Gemini model.
+
+    Recheck the SAME immutable original WAVs using at most two pinned fallback
+    model identities; retain already successful transcripts from the other
+    independent reviewer, but discard all earlier output from the changed
+    model so one reported pass never mixes providers across slides.
+
+    Genuine disagreement, missing math content or phonetic defects are not
+    eligible for model switching. Every final report still has two distinct
+    reviewers and the normal strict discrepancy/sensitive-token gates.
+    """
+    original=models
+    attempted=[]
+    remaining=set(report.get("unavailable_recognizer_passes",[]))
+    if not remaining:
+        return report,engines,models,memo,{}
+    if any(type(i) is not int or i not in (0,1) for i in remaining):
+        raise AutonomousAcousticError("Malformed independent ASR unavailable-model index")
+    for index in (0,1):
+        if index not in remaining:
+            continue
+        recovered=False
+        for candidate in BOUNDED_AUDIO_REVIEWER_FALLBACK:
+            if candidate in models:
+                continue
+            proposed=list(models)
+            proposed[index]=candidate
+            proposed=tuple(proposed)
+            # Do not perform another first-model transcript call: the first
+            # review's SHA-bound answer remains cached under its SAME model.
+            candidate_memo={key:value for key,value in memo.items()
+                            if isinstance(key,tuple) and len(key)==2
+                            and key[0]!=index}
+            try:
+                fresh=provider_factory(proposed)
+                if fresh[2]!=proposed:
+                    raise AutonomousAcousticError("Model identity drift in failover provider")
+                newengines=list(engines)
+                newengines[index]=fresh[index]
+                newengines=tuple(newengines)
+                trial=_transcripts(stage,texts,newengines,proposed,memo=candidate_memo)
+            except (OSError,RuntimeError,ValueError,TypeError,KeyError) as exc:
+                from microgen_tts_service_recovery import (
+                    failure_kind,safe_http_status,
+                )
+                attempted.append({"reviewer_index":index,"model":candidate,
+                                  "status":"UNAVAILABLE",
+                                  "error_class":type(exc).__name__,
+                                  "failure_kind":failure_kind(exc),
+                                  "http_status":safe_http_status(exc)})
+                continue
+            lost=set(trial.get("unavailable_recognizer_passes",[]))
+            attempted.append({"reviewer_index":index,"model":candidate,
+                              "status":("VERIFIED_TRANSCRIPT_RESPONSE"
+                                        if index not in lost
+                                        else "UNAVAILABLE")})
+            if index in lost:
+                continue
+            report,engines,models,memo=trial,newengines,proposed,candidate_memo
+            remaining=lost
+            recovered=True
+            break
+        if not recovered:
+            # No fallback is a pass. Keep original model identities in the
+            # failure result, and retain an explicit exhausted budget trace.
+            return report,engines,models,memo,{
+                "status":"FINITE_GEMINI_REVIEWER_FALLBACK_EXHAUSTED",
+                "original_models":list(original),
+                "actual_models":list(models),
+                "attempts":attempted,
+                "publication_allowed":False,
+            }
+    return report,engines,models,memo,{
+        "status":"UNAVAILABLE_GEMINI_MODEL_REPLACED_FOR_ASR_ONLY",
+        "original_models":list(original),
+        "actual_models":list(models),
+        "attempts":attempted,
+        "publication_allowed":False,
+    }
+
+
+def _authorized_finite_math_witness(stage:Path)->bool:
+    """Only an actively version-pinned HP private campaign can bill one ASR.
+
+    An exhausted prior run or manually-invoked CLI on an arbitrary folder
+    cannot obtain permission from this method. An injection-test provider
+    is not a paid request and is verified by the caller's mocked tests.
+    """
+    try:
+        import socket
+        stage=Path(stage).resolve()
+        root=Path(os.environ.get("LOCALAPPDATA","/missing"))/"MicroGen_AI_Checkpoints"
+        if (os.name!="nt" or socket.gethostname().casefold()!="hp"
+                or stage.parent.parent!=root or not stage.is_dir()
+                or stage.is_symlink() or stage.parent.is_symlink()
+                or (stage/"source.pdf").is_symlink()
+                or any(stage.glob(".microgen_acoustic_blocked_*.json"))
+                or (stage/RECEIPT).exists()):
+            return False
+        grant=json.loads((stage.parent/
+            ".microgen_bounded_provider_authorization.json").read_text(
+                encoding="utf8"))
+        checkpoint=json.loads((stage/".microgen_checkpoint.json").read_text(
+                encoding="utf8"))
+        scope=grant.get("scope",{})
+        if (grant.get("schema_version")!=1
+                or grant.get("status")!=
+                "BOUNDED_PRIVATE_PROVIDER_SCOPE_AUTHORIZED"
+                or grant.get("publication_authorized") is not False
+                or not isinstance(scope,dict)
+                or scope.get("host")!="hp"
+                or scope.get("stop_after")!="acceptance"
+                or scope.get("code_revision")!=checkpoint.get("package_commit")
+                or not checkpoint.get("completed",{}).get("tts")
+                or checkpoint.get("completed",{}).get("acoustic_qa")
+                or scope.get("work_root")!=str(stage.parent)
+                or scope.get("source_sha256")!=digest_file(stage/"source.pdf")):
+            return False
+        return True
+    except (OSError,ValueError,KeyError,TypeError,AttributeError):
+        return False
+
+
+def _reserve_finite_math_witness(stage:Path, candidates:list[int],
+                                 model:str, snapshot:dict)->bool:
+    """One restart-safe, atomic paid-call intent. Never replay unknown calls.
+
+    The reservation is created BEFORE requesting the third Gemini reviewer.
+    If the process or provider fails ambiguously, the same campaign cannot
+    reissue that model request, even from a new ChatGPT conversation.
+    Content and private ASR are not written into this bounded receipt.
+    """
+    if (not isinstance(stage,Path) or not isinstance(candidates,list)
+            or not 1<=len(candidates)<=MAX_MATH_TIEBREAK_SLIDES
+            or any(type(n) is not int or n<1 for n in candidates)
+            or len(set(candidates))!=len(candidates)
+            or not isinstance(model,str) or not model.startswith("gemini-")
+            or not isinstance(snapshot,dict)
+            or not snapshot or any(not isinstance(v,str) or len(v)!=64
+                    for v in snapshot.values())):
+        return False
+    path=stage/".microgen_independent_math_witness_attempt.json"
+    if path.exists() or path.is_symlink():
+        return False
+    decision={
+        "schema_version":1,
+        "status":"RESERVED_PAID_THIRD_REVIEWER_NO_IMPLICIT_RETRY",
+        "candidate_slides":candidates,
+        "chosen_model":model,
+        "source_snapshot_sha256":hashlib.sha256(
+            json.dumps(snapshot,sort_keys=True).encode("utf8")).hexdigest(),
+        "max_paid_third_asr_calls":len(candidates),
+        "publication_allowed":False,
+    }
+    try:
+        with path.open("x",encoding="utf8") as file:
+            file.write(json.dumps(decision,sort_keys=True,indent=2))
+        return True
+    except (OSError,FileExistsError):
+        return False
+
+
+MAX_MATH_TIEBREAK_SLIDES=2
+# Exactly one third-model identity is chosen per audit, and never to look
+# for a reviewer that agrees with the target. A mismatch still fails closed.
+MATH_TIEBREAK_MODELS=("gemini-2.5-pro","gemini-3.5-flash","gemini-2.5-flash")
+
+
+def _bounded_independent_math_tiebreak(
+        stage:Path, texts:list[str], report:dict, models:tuple[str,str],
+        *, provider_factory:Callable=_providers)->dict:
+    """Use one extra BLIND Gemini ASR witness for tiny number/letter splits.
+
+    The normal full-source two-model review and its bounded retakes have
+    already run. Only a single 40->4 t type split, one otherwise strict
+    source-matching original reviewer, zero source risk, and at most two
+    slides qualify. One distinct fixed third model gets ONE finite pool
+    attempt per qualifying slide. It never receives the expected text.
+    The original two transcripts are preserved for receipt re-verification.
+    """
+    from microgen_tts_acoustic_qa import (
+        verified_numeric_fragment_tiebreak, verified_isolated_decimal_asr_witness,
+        verified_isolated_component_letter_witness, _input_snapshot,
+    )
+    original_snapshot=_input_snapshot(stage,len(texts))
+    candidates=[]
+    kinds={}
+    for row in report.get("slides",[]):
+        if (row.get("assessment")!="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE"
+                or row.get("source_pronunciation_risks")):
+            continue
+        n=row.get("slide")
+        trans=row.get("transcripts")
+        if not (type(n) is int and 1<=n<=len(texts)
+                and isinstance(trans,list) and len(trans)==2
+                and all(isinstance(t,str) and t for t in trans)):
+            continue
+        # A hypothetical source-correct third string is ONLY an offline
+        # structural eligibility screen. It NEVER proves an acoustic pass.
+        if verified_numeric_fragment_tiebreak(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="math_fragment"
+        elif verified_isolated_decimal_asr_witness(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="isolated_decimal"
+        elif verified_isolated_component_letter_witness(
+                texts[n-1],trans[0],trans[1],texts[n-1]):
+            kinds[n]="component_letter"
+        if n in kinds:
+            candidates.append(n)
+    if not candidates or len(candidates)>MAX_MATH_TIEBREAK_SLIDES:
+        return report
+    if provider_factory is _providers and not _authorized_finite_math_witness(stage):
+        report["independent_math_tiebreak"]={
+            "status":"PAID_WITNESS_SCOPE_UNAUTHORIZED",
+            "attempted_slides":[],"resolved_slides":[],
+            "eligible_slides":candidates,"publication_allowed":False,
+        }
+        return report
+    alternatives=[m for m in MATH_TIEBREAK_MODELS if m not in models]
+    if not alternatives:
+        return report
+    witness_model=alternatives[0]
+    actual=(models[0],witness_model)
+    if provider_factory is _providers and not _reserve_finite_math_witness(
+            Path(stage),candidates,witness_model,original_snapshot):
+        report["independent_math_tiebreak"]={
+            "status":"PAID_WITNESS_ALREADY_RESERVED_OR_INVALID",
+            "attempted_slides":[],"resolved_slides":[],
+            "eligible_slides":candidates,"publication_allowed":False,
+        }
+        return report
+    attempts=[]
+    resolved=[]
+    # Models are dynamically selected only by distinctness and fixed
+    # fallback priority. Never change model based on a failed third opinion.
+    try:
+        fresh=provider_factory(actual)
+        if fresh[2]!=actual:
+            raise AutonomousAcousticError("Independent math witness model identity drift")
+        recognizer=fresh[1]
+    except (OSError,RuntimeError,ValueError,TypeError,KeyError) as exc:
+        report["independent_math_tiebreak"]={
+            "status":"THIRD_GEMINI_REVIEWER_UNAVAILABLE",
+            "attempted_slides":candidates,"resolved_slides":[],
+            "witness_model":witness_model,"error_class":type(exc).__name__,
+            "publication_allowed":False,
+        }
+        return report
+    for n in candidates:
+        wav=stage/f"slide{n}.wav"
+        try:
+            third=str(recognizer(wav)).strip()
+            if not 5<=len(third)<=12000:
+                raise AutonomousAcousticError("Unreliable independent math witness")
+            if _input_snapshot(stage,len(texts))!=original_snapshot:
+                raise AutonomousAcousticError("Audio/source changed during third ASR review")
+            row=report["slides"][n-1]
+            original=row["transcripts"]
+            if kinds[n]=="math_fragment":
+                ok=verified_numeric_fragment_tiebreak(
+                    texts[n-1],original[0],original[1],third)
+            elif kinds[n]=="isolated_decimal":
+                ok=verified_isolated_decimal_asr_witness(
+                    texts[n-1],original[0],original[1],third)
+            else:
+                ok=verified_isolated_component_letter_witness(
+                    texts[n-1],original[0],original[1],third)
+            attempts.append({"slide":n,"kind":kinds[n],
+                             "status":("SOURCE_BOUND_WITNESS_CORROBORATED" if ok
+                                       else "WITNESS_DISAGREES_OR_INVALID")})
+            if not ok:
+                continue
+            row["third_independent_review"]={
+                "status":("SOURCE_BOUND_MATH_SPLIT_WITNESS"
+                          if kinds[n]=="math_fragment" else
+                          "SOURCE_BOUND_ISOLATED_DECIMAL_WITNESS"
+                          if kinds[n]=="isolated_decimal" else
+                          "SOURCE_BOUND_COMPONENT_LETTER_WITNESS"),
+                "model":witness_model,
+                "transcript":third,
+                "audio_sha256":digest_file(wav),
+                "expected_spoken_sha256":hashlib.sha256(
+                    texts[n-1].encode("utf8")).hexdigest(),
+                "publication_allowed":False,
+            }
+            row["assessment"]=PASS
+            resolved.append(n)
+        except Exception as exc:
+            attempts.append({"slide":n,"status":"WITNESS_UNAVAILABLE",
+                             "error_class":type(exc).__name__})
+            break
+    report["review_required_slides"]=[
+        row["slide"] for row in report["slides"] if row["assessment"]!=PASS]
+    report["independent_math_tiebreak"]={
+        "status":("VERIFIED_BOUNDED_WITNESS" if resolved else
+                  "MATH_WITNESS_UNRESOLVED"),
+        "attempted_slides":candidates,"resolved_slides":resolved,
+        "witness_model":witness_model,"attempts":attempts,
+        "publication_allowed":False,
+    }
+    return report
 
 
 def _recheck_disagreements(stage:Path, report:dict, texts:list[str],
@@ -231,13 +566,17 @@ def _strict_candidate(candidate:Path, expected:str,
             transcripts.append(value)
         except Exception:
             return False
-    for speech in transcripts:
-        findings=mismatch_details(expected,speech)
-        if (findings["difference_fraction_upper_bound"]>0.05 or
-            findings["sensitive_mismatches"] or findings["circa_red_flags"] or
-            findings["letter_y_yay_red_flags"]):
-            return False
-    return (mismatch_details(*transcripts)["difference_fraction_upper_bound"]<=0.05)
+    from microgen_tts_acoustic_qa import verified_minor_asr_variation
+    minor=verified_minor_asr_variation(expected,*transcripts)
+    if not minor:
+        for speech in transcripts:
+            findings=mismatch_details(expected,speech)
+            if (findings["difference_fraction_upper_bound"]>0.05 or
+                findings["sensitive_mismatches"] or findings["circa_red_flags"] or
+                findings["letter_y_yay_red_flags"]):
+                return False
+    return (minor or
+            mismatch_details(*transcripts)["difference_fraction_upper_bound"]<=0.05)
 
 
 def _render_same_voice(text:str, destination:Path, expected_record:dict) -> None:
@@ -254,20 +593,78 @@ def _render_same_voice(text:str, destination:Path, expected_record:dict) -> None
     require_structurally_usable_audio(destination)
 
 
+def _classify_review_blocker(report:dict) -> dict:
+    """Categorize *evidence*, not putative audio defects, before auto-repair.
+
+    Input is the existing source-bound independent two-model review. A math
+    source risk or conflicting/absent recognition must never consume the
+    limited same-voice TTS repair budget or be reported as a proven WAV error.
+    This is a pure offline classifier: no model, ASR or TTS requests.
+    """
+    categories={
+        "source_pronunciation_risk":[],
+        "transcriber_disagreement":[],
+        "recognition_unavailable":[],
+        "repair_candidate":[],
+        "other_ambiguous":[],
+    }
+    rows=report.get("slides",[])
+    if not isinstance(rows,list):
+        raise AutonomousAcousticError("Malformed independent acoustic report")
+    flagged=report.get("review_required_slides",[])
+    if (not isinstance(flagged,list) or any(type(n) is not int for n in flagged)
+            or len(set(flagged))!=len(flagged)
+            or any(n<1 or n>len(rows) for n in flagged)):
+        raise AutonomousAcousticError("Invalid acoustic slide identities")
+    for n in flagged:
+        row=rows[n-1]
+        if row.get("slide")!=n:
+            raise AutonomousAcousticError("Acoustic report slide order mismatch")
+        assessment=row.get("assessment")
+        if row.get("source_pronunciation_risks"):
+            categories["source_pronunciation_risk"].append(n)
+        elif assessment=="REVIEW_REQUIRED_TRANSCRIBERS_DISAGREE":
+            categories["transcriber_disagreement"].append(n)
+        elif assessment=="REVIEW_REQUIRED_TRANSCRIPTION_UNAVAILABLE":
+            categories["recognition_unavailable"].append(n)
+        elif assessment==REPAIRABLE:
+            categories["repair_candidate"].append(n)
+        else:
+            categories["other_ambiguous"].append(n)
+    if report.get("unavailable_recognizer_passes") or categories["recognition_unavailable"]:
+        reason="INDEPENDENT_RECOGNIZER_UNAVAILABLE"
+    elif categories["source_pronunciation_risk"]:
+        reason="SOURCE_PRONUNCIATION_RISK_HOLD"
+    elif categories["transcriber_disagreement"]:
+        reason="ASR_DISAGREEMENT_HOLD"
+    elif categories["other_ambiguous"]:
+        reason="AMBIGUOUS_ACOUSTIC_EVIDENCE_HOLD"
+    elif len(categories["repair_candidate"])>MAX_REPAIR_SLIDES:
+        reason="REPAIR_CANDIDATE_BUDGET_HOLD"
+    else:
+        reason="BOUNDED_SAME_VOICE_REPAIR_ELIGIBLE"
+    return {
+        "root_cause_family":reason,
+        "review_categories":categories,
+        "safe_auto_repair":reason=="BOUNDED_SAME_VOICE_REPAIR_ELIGIBLE",
+        "max_repair_slides":MAX_REPAIR_SLIDES,
+    }
+
+
 def _repair(stage:Path, report:dict, texts:list[str],
             recognizers:tuple[Callable,Callable], *,
             synthesize:Callable) -> int:
-    """One candidate per affected slide; no mixed providers, no silent overwrites."""
+    """One candidate per *eligible* slide; never rewrite ambiguous audio."""
     from microgen_tts_provenance import wav_characteristics
     numbers=report["review_required_slides"]
     if not numbers:
         return 0
-    if len(numbers)>MAX_REPAIR_SLIDES:
-        raise AutonomousAcousticError("Acoustic errors exceed bounded local repair budget")
-    if any(report["slides"][i-1]["assessment"]!=REPAIRABLE or
-           report["slides"][i-1]["source_pronunciation_risks"]
-           for i in numbers):
-        raise AutonomousAcousticError("Unsafe or ambiguous acoustic error: no automatic rewrite")
+    review=_classify_review_blocker(report)
+    if not review["safe_auto_repair"]:
+        raise AutonomousAcousticError(
+            review["root_cause_family"] +
+            ": independent evidence requires bounded resolution; "
+            "do not rewrite or replay original speech")
     original_manifest=verify_manifest(stage,texts)
     old_records=original_manifest["slides"]
     expected_props={(r["provider"],r["voice_name"],r["sample_rate_hz"])
@@ -280,19 +677,32 @@ def _repair(stage:Path, report:dict, texts:list[str],
                                      dir=stage.parent) as private:
         scratch=Path(private)
         # Candidate results cannot mutate original audio before independent ASR.
+        # An entire revoiced WAV is NOT a substitute for cue-measured PCM:
+        # if a timed manifest exists, regenerate the *same* source-bound
+        # constituent cues, reassemble actual PCM, and independently review
+        # the resulting slide before updating its immutable timing evidence.
         proposals={}
-        for i in numbers:
-            candidate=scratch/f"slide{i}.wav"
-            synthesize(texts[i-1],candidate,old_records[i-1])
-            if not candidate.is_file():
-                raise AutonomousAcousticError("TTS retry produced no candidate WAV")
-            require_structurally_usable_audio(candidate)
-            if (wav_characteristics(candidate)["sample_rate_hz"]!=
-                old_records[i-1]["sample_rate_hz"]):
-                raise AutonomousAcousticError("Candidate audio format or voice differs")
-            if not _strict_candidate(candidate,texts[i-1],recognizers):
-                raise AutonomousAcousticError("TTS retry still has independently detected mismatch")
-            proposals[i]=candidate
+        timed_repair=None
+        if (stage/".microgen_timed_highlights.json").is_file():
+            from microgen_timed_acoustic_repair import prepare_timed_repair
+            timed_repair=prepare_timed_repair(
+                stage,numbers,texts,old_records,scratch,synthesize,
+                lambda candidate,expected: _strict_candidate(
+                    candidate,expected,recognizers))
+            proposals={i:scratch/f"slide{i}.wav" for i in numbers}
+        else:
+            for i in numbers:
+                candidate=scratch/f"slide{i}.wav"
+                synthesize(texts[i-1],candidate,old_records[i-1])
+                if not candidate.is_file():
+                    raise AutonomousAcousticError("TTS retry produced no candidate WAV")
+                require_structurally_usable_audio(candidate)
+                if (wav_characteristics(candidate)["sample_rate_hz"]!=
+                    old_records[i-1]["sample_rate_hz"]):
+                    raise AutonomousAcousticError("Candidate audio format or voice differs")
+                if not _strict_candidate(candidate,texts[i-1],recognizers):
+                    raise AutonomousAcousticError("TTS retry still has independently detected mismatch")
+                proposals[i]=candidate
         # Build full, internally consistent candidate provenance in scratch.
         for i in range(1,len(texts)+1):
             if i not in proposals:
@@ -312,6 +722,32 @@ def _repair(stage:Path, report:dict, texts:list[str],
         verify_manifest(scratch,texts)
         if _input_snapshot(stage,len(texts))!=report["input_snapshot_sha256"]:
             raise AutonomousAcousticError("Inputs changed during TTS correction")
+        if timed_repair is not None:
+            from microgen_timed_acoustic_transaction import install_timed_acoustic
+            from microgen_timed_highlight_contract import inspect_timed_highlights
+
+            replacements={}
+            for i in numbers:
+                replacements[f"slide{i}.wav"]=scratch/f"slide{i}.wav"
+                record_path=scratch/f"cache_slide{i}.json"
+                record_path.write_text(
+                    json.dumps(records[i-1],indent=2),encoding="utf8")
+                replacements[f".microgen_tts_cache/slide{i}.json"]=record_path
+            replacements[".microgen_tts_provenance.json"]=(
+                scratch/".microgen_tts_provenance.json")
+            replacements.update(timed_repair["chunks"])
+            replacements[".microgen_timed_highlights.json"]=(
+                timed_repair["manifest"])
+
+            def validate_timed_acoustic():
+                verify_manifest(stage,texts)
+                check_wavs(stage,len(texts))
+                inspect_timed_highlights(stage)
+            install_timed_acoustic(stage,replacements,validate_timed_acoustic)
+            return len(numbers)
+
+        # Legacy non-timed voice support remains an independent transaction
+        # boundary; it may never bypass source or ASR acceptance.
         # Preserve an immutable private backup, then replace WAV+manifest+metadata.
         backup=scratch/"original_backup"
         backup.mkdir()
@@ -327,15 +763,15 @@ def _repair(stage:Path, report:dict, texts:list[str],
         try:
             for i in numbers:
                 dest=stage/f"slide{i}.wav"
-                shutil.copy2(scratch/f"slide{i}.wav",dest)
                 changed.append(dest)
+                shutil.copy2(scratch/f"slide{i}.wav",dest)
                 metadata=stage/".microgen_tts_cache"/f"slide{i}.json"
+                changed.append(metadata)
                 metadata.parent.mkdir(exist_ok=True)
                 metadata.write_text(json.dumps(records[i-1],indent=2),encoding="utf8")
-                changed.append(metadata)
             target=stage/".microgen_tts_provenance.json"
-            shutil.copy2(scratch/".microgen_tts_provenance.json",target)
             changed.append(target)
+            shutil.copy2(scratch/".microgen_tts_provenance.json",target)
             verify_manifest(stage,texts)
             check_wavs(stage,len(texts))
         except Exception:
@@ -374,7 +810,53 @@ def verify_receipt(stage:Path) -> dict:
         "script_tts_sha256":digest_file(stage/"script_tts.json"),
         "tts_provenance_sha256":digest_file(stage/".microgen_tts_provenance.json")}):
         raise AutonomousAcousticError("Source/acoustic receipt SHA drift")
+    # Unlike fresh reviewer calls, a recovered historical transcript must
+    # remain cryptographically linked to the authentic original private
+    # failure trace at every downstream video/acceptance verification.
+    from microgen_verified_acoustic_replay import verify_replay_evidence
+    verify_replay_evidence(stage,receipt)
+    # The new one-sided retake receipt is also re-attested offline by
+    # every downstream video/acceptance read, never trusted by status alone.
+    from microgen_one_sided_acoustic_replay import verify_one_sided_replay
+    verify_one_sided_replay(stage,receipt)
+    from microgen_source_operator_cue_recovery import (
+        verify_source_operator_repair,
+    )
+    verify_source_operator_repair(stage,receipt)
     return receipt
+
+
+def _hold_unchanged_failed_review(stage:Path, texts:list[str],
+                                  models:tuple[str,str]) -> None:
+    """Do not rebill the same failed source/WAVs under identical reviewers.
+
+    The durable blocked receipt is evidence of an *attempt*, not evidence
+    that any specific WAV is wrong. An updated raw WAV/provenance snapshot or
+    different independently authorized reviewers is a materially new scope.
+    This runs on the normal direct CLI as well as the batch entrypoint.
+    """
+    snapshot=_input_snapshot(stage,len(texts))
+    for old in sorted(stage.glob(".microgen_acoustic_blocked_*.json")):
+        if (old.is_symlink() or not old.is_file()
+                or old.stat().st_size>128_000):
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        try:
+            earlier=json.loads(old.read_text(encoding="utf8"))
+        except (OSError,ValueError):
+            # An unreadable prior record is not a license to retry paid work.
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        if not isinstance(earlier,dict):
+            raise AutonomousAcousticError(
+                "UNVERIFIABLE_PRIOR_ACOUSTIC_REVIEW_HOLD")
+        if (earlier.get("status")=="INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED"
+            and earlier.get("input_snapshot_sha256")==snapshot
+            and earlier.get("recognition_models")==list(models)):
+            raise AutonomousAcousticError(
+                "UNCHANGED_ACOUSTIC_REVIEW_HOLD: source and WAV inputs "
+                "already received an independent blocked review with these "
+                "models; no duplicate paid acoustic submission")
 
 
 def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
@@ -384,7 +866,27 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     if (stage/RECEIPT).exists():
         return verify_receipt(stage)
     texts=_normalized(stage)
-    verify_manifest(stage,texts)
+    try:
+        verify_manifest(stage,texts)
+    except TTSProvenanceError as exc:
+        # Diagnose normalizer changes BEFORE any new paid ASR request. The
+        # original WAVs remain immutable; this report is an actionable
+        # source/voice-pinned re-render inventory, not acoustic clearance.
+        try:
+            drift=inspect_normalized_input_drift(stage,texts)
+        except TTSProvenanceError as corrupt:
+            raise AutonomousAcousticError(
+                "UNVERIFIED_AUDIO_PROVENANCE_HOLD: cannot trust original WAV "
+                "identity or isolate source input drift") from corrupt
+        if drift["changed_input_slides"]:
+            raise AutonomousAcousticError(
+                "SOURCE_NORMALIZER_DRIFT_HOLD: re-render source-changed "
+                f"slides {drift['changed_input_slides']} in the previously "
+                "pinned voice and re-run independent acoustic QA within a "
+                "new valid finite campaign; old WAVs preserved") from exc
+        raise AutonomousAcousticError(
+            "UNVERIFIED_AUDIO_PROVENANCE_HOLD: historical manifest differs "
+            "despite unchanged normalized inputs") from exc
     check_wavs(stage,len(texts))
     from microgen_tts_wave_integrity import analyze_pcm
     for n in range(1,len(texts)+1):
@@ -393,6 +895,108 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
             raise AutonomousAcousticError(
                 f"Slide {n} PCM defects block independent ASR: "
                 +", ".join(evidence["blocking_defects"]))
+    auto_provider_recovery=engines is None
+    if auto_provider_recovery:
+        # A prior uncertain billable source-operator-cue repair cannot be
+        # retried merely because the normal runner restarts. An installed
+        # correction is accepted only through its complete verified receipt.
+        from microgen_source_operator_cue_recovery import (
+            maybe_repair_rejected_operator,JOURNAL as OPERATOR_JOURNAL,
+        )
+        if (stage/OPERATOR_JOURNAL).exists() or (
+                stage/OPERATOR_JOURNAL).is_symlink():
+            raise AutonomousAcousticError(
+                "SOURCE_OPERATOR_CUE_RESERVATION_HOLD: completed receipt "
+                "absent; reconcile the durable one-send journal offline")
+        operator_repair=maybe_repair_rejected_operator(stage,texts)
+        if operator_repair is not None:
+            verify_receipt(stage)
+            print("[Acoustic QA] only one source-bound mathematical cue "
+                  "revoiced, actual PCM/timed manifest transaction committed, "
+                  "two fresh blind Gemini reviews passed; original remaining "
+                  "WAVs and historical reviewers cryptographically retained",
+                  flush=True)
+            return operator_repair
+        # Automatic production recovery for a corrected source-BLIND
+        # transcript normalizer: reclassify BOTH original Gemini reviewers
+        # only when the former private WAV/source/model evidence is exactly
+        # SHA-identical and the mathematical comparator actually changed.
+        # No old PASS assessment is trusted and no paid call is replayed.
+        from microgen_verified_acoustic_replay import (
+            maybe_replay_verified_acoustic,
+        )
+        replay=maybe_replay_verified_acoustic(stage,texts)
+        if replay is not None:
+            report=replay["report"]
+            _verify(stage,report,texts)
+            receipt={
+                "schema_version":1,
+                "status":"AUTONOMOUS_INDEPENDENT_ASR_SCREEN_PASSED",
+                "slide_count":len(texts),
+                "recognition_models":report["recognition_models"],
+                "repaired_audio_slides":0,
+                "source_inputs":{
+                    "script_tts_sha256":digest_file(stage/"script_tts.json"),
+                    "tts_provenance_sha256":digest_file(
+                        stage/".microgen_tts_provenance.json")},
+                "independent_report":report,
+                "verified_historical_asr_reclassification":replay["evidence"],
+                "automatic_technical_review":True,
+                "human_approval_required":False,
+                "pronunciation_perfection_certified":False,
+                "publication_allowed":False,
+            }
+            with (stage/RECEIPT).open("x",encoding="utf8") as f:
+                f.write(json.dumps(receipt,indent=2,ensure_ascii=False))
+            verify_receipt(stage)
+            if replay["evidence"]["paid_recognition_calls"] == 1:
+                print("[Acoustic QA] SHA-bound original two-Gemini blind "
+                      "transcripts reused; one independent third-model "
+                      "component witness corroborated; no repeat of the "
+                      "original two-model review or WAV regeneration",
+                      flush=True)
+            else:
+                print("[Acoustic QA] SHA-bound original two-Gemini evidence "
+                      "strictly reclassified after exact notation-policy fix; "
+                      "no additional recognition calls or audio regeneration",
+                      flush=True)
+            return receipt
+        # A prior failed *two-Gemini* private review on identical WAV/source
+        # is not an authorization to rebill 42 slides. Offline reclassify
+        # both original blind transcripts; permit at most one fresh dissenting
+        # reviewer retake for each of <=2 slides with exact math checking.
+        from microgen_one_sided_acoustic_replay import (
+            replay_with_one_sided_rechecks,
+        )
+        one_sided=replay_with_one_sided_rechecks(stage,texts)
+        if one_sided is not None:
+            report=one_sided["report"]
+            _verify(stage,report,texts)
+            receipt={
+                "schema_version":1,
+                "status":"AUTONOMOUS_INDEPENDENT_ASR_SCREEN_PASSED",
+                "slide_count":len(texts),
+                "recognition_models":report["recognition_models"],
+                "repaired_audio_slides":0,
+                "source_inputs":{
+                    "script_tts_sha256":digest_file(stage/"script_tts.json"),
+                    "tts_provenance_sha256":digest_file(
+                        stage/".microgen_tts_provenance.json")},
+                "independent_report":report,
+                "verified_one_sided_historical_asr":one_sided["evidence"],
+                "automatic_technical_review":True,
+                "human_approval_required":False,
+                "pronunciation_perfection_certified":False,
+                "publication_allowed":False,
+            }
+            with (stage/RECEIPT).open("x",encoding="utf8") as f:
+                f.write(json.dumps(receipt,indent=2,ensure_ascii=False))
+            verify_receipt(stage)
+            print("[Acoustic QA] original two Gemini blind reviewers "
+                  "reused on source-identical PCM; only bounded dissenting "
+                  "model rechecks required; no whole-slide TTS repair",
+                  flush=True)
+            return receipt
     if engines is None:
         first,second,found=_providers()
         engines=(first,second)
@@ -402,9 +1006,36 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
     if (len(engines)!=2 or len(models)!=2 or
         not all(models) or models[0]==models[1]):
         raise AutonomousAcousticError("Distinct independent Gemini recognizers required")
+    # Normal CLI and batch both consult the immutable historical failure
+    # BEFORE the first billable recognition request.
+    _hold_unchanged_failed_review(stage,texts,models)
     memo={}
     report=_transcripts(stage,texts,engines,models,memo=memo)
+    model_failover={}
+    if auto_provider_recovery and report.get("unavailable_recognizer_passes"):
+        (report,engines,models,memo,model_failover)=_recover_unavailable_reviewers(
+            stage,texts,engines,models,report,memo)
+        if model_failover:
+            print("[Acoustic QA] bounded model-level fallback: "
+                  +str(model_failover["status"])+
+                  "; actual independent models="+str(models),flush=True)
     report=_recheck_disagreements(stage,report,texts,engines,models,memo)
+    # Historical Serway 2.7 slide 7: SHA-identical WAV was accepted by both
+    # independent Gemini models previously, but one later pass reported one
+    # sensitive edit while the other remained source-exact. Before any TTS,
+    # retake ONLY that dissenting recognizer once on the same WAV. A fresh
+    # source-correct transcript is required; no disagreement is waived.
+    from microgen_one_sided_acoustic_recheck import (
+        recheck_one_sided_sensitive,
+    )
+    report=recheck_one_sided_sensitive(stage,report,texts,engines,memo)
+    if auto_provider_recovery and report.get("review_required_slides"):
+        # Historical slide-11 shape: a single 40 / 4 t split with one
+        # source-correct model. A third blind Gemini reviewer may confirm,
+        # but no contrary number/sign/exponent or missing passage is waived.
+        report=_bounded_independent_math_tiebreak(stage,texts,report,models)
+    if model_failover:
+        report["independent_model_failover"]=model_failover
     correction_count=0
     try:
         # Provider outages are not pronunciation defects. Never spend the
@@ -418,6 +1049,8 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 stage,report,texts,engines,
                 synthesize=synthesize or _render_same_voice)
             report=_transcripts(stage,texts,engines,models,memo=memo)
+            if model_failover:
+                report["independent_model_failover"]=model_failover
         _verify(stage,report,texts)
         receipt={
             "schema_version":1,
@@ -449,8 +1082,24 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
         stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         failed=stage/f".microgen_acoustic_blocked_{signature}_{stamp}.json"
         rows=report.get("slides",[])
+        classification=_classify_review_blocker(report)
+        # Prior terminal acoustic reviews recorded only counts, losing the
+        # original model-blind disagreement and forcing new billed requests.
+        # Keep a bounded SHA-bound PRIVATE trace on owner-authorized HP only;
+        # never send to Git, source folders or publication outputs.
+        from microgen_private_acoustic_trace import (
+            retain_private_failed_acoustic_review,
+        )
+        private_trace_retained = retain_private_failed_acoustic_review(
+            stage, texts, report, models)
         diagnostic={
             "status":"INDEPENDENT_ACOUSTIC_SCREEN_BLOCKED",
+            # Stable, sanitized, automated recurrence classification.
+            # Do not log the expected script or blind ASR transcripts.
+            "root_cause_family":classification["root_cause_family"],
+            "review_categories":classification["review_categories"],
+            "safe_auto_repair":classification["safe_auto_repair"],
+            "max_repair_slides":MAX_REPAIR_SLIDES,
             "input_snapshot_sha256":snap,
             "audit_utc":stamp,
             "qa_code_sha256":digest_file(Path(__file__)),
@@ -472,6 +1121,7 @@ def audit_stage(stage:Path, *, engines:tuple[Callable,Callable]|None=None,
                 for row in rows},
             "source_pronunciation_risk_slides":[
                 row["slide"] for row in rows if row.get("source_pronunciation_risks")],
+            "private_blind_transcripts_retained":private_trace_retained,
             "failure_type":type(exc).__name__,
             "accepted_for_video":False,
             "human_approval_required":False,

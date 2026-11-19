@@ -150,6 +150,16 @@ def _cached_figure_request(cache_name: str, prompt: str, image_files: list[Path]
 
 def mapping():
     pages_root = Path("pages")
+    # Recycle only completed SHA-keyed Gemini replies from earlier source- and
+    # code-pinned, owner-authorized private campaigns. _cached_figure_request
+    # independently recalculates exact MODEL+PROMPT+IMAGE hashes before each
+    # reuse, never treating a prior FAILED figure stage as accepted.
+    from microgen_mapping_cache_recovery import reuse_verified_mapping_cache
+    recovered=reuse_verified_mapping_cache(Path.cwd())
+    if recovered["responses_copied"]:
+        print("[figure mapping] source-bound historical Gemini replies "
+              f"recovered={recovered['responses_copied']}; every cached "
+              "prompt/image key must still match current request",flush=True)
     collector = FigureCollector(pages_root)
     page_dirs = sorted(
         [p for p in pages_root.glob("page_*") if p.is_dir()],
@@ -181,10 +191,18 @@ def mapping():
             key=lambda p: int(re.search(r"(\d+)", p.stem).group(1)),
         )
         if not fig_files:
-            if has_numbered_figure_caption(caption_text):
-                raise RuntimeError(f"Page {page_dir.name} has captions but no extracted crops")
-            print("No formally numbered figures on this page")
-            continue
+            if not has_numbered_figure_caption(caption_text):
+                print("No formally numbered figures on this page")
+                continue
+            if not Path("source.pdf").is_file():
+                raise RuntimeError(
+                    f"Page {page_dir.name} has captions but no extracted crops "
+                    "and no immutable source PDF for literal vector recovery")
+            # The complete captioned source figure may be all PDF vector
+            # paths, invisible to Docling picture extraction. Fall through
+            # to strict, source-attested lateral graph recovery below.
+            print("[figure mapping] no Docling crops for a formal caption; "
+                  "testing exact original PDF vector graph geometry",flush=True)
 
         for start in range(0, len(fig_files), BATCH_SIZE):
             batch = fig_files[start:start + BATCH_SIZE]
@@ -236,6 +254,38 @@ Extracted caption text:
             except Exception as exc:
                 raise RuntimeError(f"Figure mapping batch failed on {page_dir.name}: {exc}") from exc
 
+        # Source-PDF vector graphs can be absent from Docling's raster crop
+        # inventory while Gemini correctly reports the true formal caption.
+        # Recover only exact caption-attested, axes-labeled multi-panel source
+        # vectors. Do not convert a Gemini UNLABELED response into a guess.
+        declared = set(re.findall(
+            r"(?im)^\s*[-*]?\s*(?:\*\*)?Figure\s+(\d+\.\d+[a-z]?)\b",
+            caption_text,
+        ))
+        mapped = {
+            entry["destination"].removeprefix("Figure ").removesuffix(".png")
+            for group in collector.items.values() for entry in group
+            if entry["source_page"] == page_dir.name
+        }
+        missing = declared - mapped
+        if missing:
+            from microgen_lateral_vector_figure_recovery import (
+                recover_lateral_figure, LateralFigureError,
+            )
+            try:
+                restored = recover_lateral_figure(
+                    Path.cwd(), page_dir, caption_text, collector,
+                    only_labels=missing,
+                )
+                print(f"[figure mapping] independently source-attested "
+                      f"lateral vector recovery on {page_dir.name}: "
+                      + ", ".join(restored), flush=True)
+            except (LateralFigureError, OSError, ValueError) as exc:
+                raise RuntimeError(
+                    f"Captioned page {page_dir.name} has missing mapped "
+                    f"source figure(s) {sorted(missing)}; source-vector "
+                    f"recovery safely abstained: {type(exc).__name__}: {exc}"
+                ) from exc
         if has_numbered_figure_caption(caption_text) and not any(
             entry["source_page"] == page_dir.name
             for group in collector.items.values() for entry in group
@@ -244,6 +294,14 @@ Extracted caption text:
 
     evidence=collector.finalize()
     validate_figure_receipt(pages_root)
+    from microgen_lateral_vector_figure_recovery import (
+        verify_lateral_figure_receipt,
+    )
+    verified_lateral=verify_lateral_figure_receipt(Path.cwd())
+    if verified_lateral:
+        print("[figure mapping] source-vector recovery hashes and original "
+              "PDF graph geometry reverified: "
+              +str(verified_lateral["figures"]), flush=True)
     for png in pages_root.glob("*.png"):
         target = Path.cwd() / png.name
         if target.is_file():

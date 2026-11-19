@@ -92,12 +92,51 @@ def _split_frame(frame: str, mode: str) -> tuple[str, int] | None:
     raise ValueError(f"Unknown safe reflow mode {mode}")
 
 
+def _bound_height_only_figure(frame: str) -> list[str]:
+    """Constrain a height-only graphic by the slide's actual line width.
+
+    Some textbook figures are panoramic: height=0.4\\textheight alone may
+    produce a bitmap wider than Beamer's text area. Preserve the image file,
+    original height limit, math, and aspect ratio; add only a width ceiling.
+    Reject unknown graphics options and avoid altering already-width-bounded
+    figures. Never crop or downscale the page itself.
+    """
+    rx = re.compile(r"\\includegraphics\[([^\]\n]*)\]\{([^}\n]+)\}")
+    result=[]
+    for found in rx.finditer(frame):
+        raw=found.group(1)
+        opts=[x.strip() for x in raw.split(",")]
+        if (not any(re.fullmatch(r"height\s*=\s*[^,]+", x) for x in opts)
+                or any(re.match(r"(?:width|totalheight|scale)\s*=", x) for x in opts)
+                or any("=" in x and not re.match(
+                    r"(?:height|keepaspectratio)\s*=", x) for x in opts)
+                or any(x and x != "keepaspectratio" and not x.startswith("height=")
+                       for x in opts)):
+            continue
+        if "keepaspectratio" not in opts:
+            opts.append("keepaspectratio")
+        opts.append(r"width=\linewidth")
+        changed=(frame[:found.start()] +
+                 r"\includegraphics["+",".join(opts)+"]{"+found.group(2)+"}" +
+                 frame[found.end():])
+        result.append(changed)
+    return result
+
+
 def reflow_document(source: str, mode: str) -> list[tuple[str,str,int]]:
     matches=list(FRAME_RX.finditer(source))
     if not matches or len(matches)!=source.count(r"\begin{frame}") or len(matches)!=source.count(r"\end{frame}"):
         return []
     result=[]
     for m in matches:
+        if mode=="graphics":
+            # One verified image-fit mutation per compiled candidate; never
+            # silently modify unrelated figures in other slides.
+            for replacement in _bound_height_only_figure(m.group()):
+                revised=source[:m.start()]+replacement+source[m.end():]
+                if _math_evidence(revised)==_math_evidence(source):
+                    result.append((revised,m.group(0)[:110],1))
+            continue
         transformed=_split_frame(m.group(),mode)
         if transformed is None:
             continue
@@ -235,9 +274,11 @@ def repair_layout(stage_tex: Path, *, timeout: float = 150,
             tmp.write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding="utf-8")
             tmp.replace(stage/".microgen_structural_reflow_receipt.json")
             return {"status":"accepted",**receipt}
-        # Evolve only from a *failed* trial. Put shorter, concept-level
-        # example blocks ahead of side-by-side column splitting.
-        for mode in ("examples","columns"):
+        # Prefer bounding a panoramic height-only figure before any
+        # structural frame split. This fixes genuine horizontal overflow
+        # without changing slide count, narration, mathematical content,
+        # or the referenced picture. Fall back to verified frame splits.
+        for mode in ("graphics","examples","columns"):
             for revised,frame_label,count in reflow_document(tex,mode):
                 if _math_evidence(revised)==before:
                     queue.append((mode,revised,history+[

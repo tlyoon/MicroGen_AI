@@ -37,6 +37,78 @@ def _check(slides: list[dict], response: dict) -> None:
             raise NarrationBatchError(f"Empty voice-ready narration: {sid}")
 
 
+def _read_timeout(exc: BaseException) -> bool:
+    """Only known transport read-timeouts qualify for a smaller request."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if type(exc).__name__ in {"ReadTimeout"}:
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def _generate_with_bounded_split(
+    slides: list[dict], source_blocks, generate, *, cache_dir: Path,
+    start: int, parent_key: str, prompt_fingerprint,
+) -> dict:
+    """One split for a timed-out large request, with SHA-bound child checkpoints.
+
+    A durable marker prevents retrying the same oversized request after restart.
+    No recursive splitting, no bypass of the caller's provider authorization.
+    """
+    marker = cache_dir / f"batch_{start:04d}.split.json"
+    split = False
+    if marker.is_file():
+        try:
+            split = json.loads(marker.read_text(encoding="utf-8")).get("key") == parent_key
+        except (ValueError, OSError, AttributeError):
+            split = False
+    if not split:
+        try:
+            return generate(slides, source_blocks)
+        except Exception as exc:
+            if len(slides) < 2 or not _read_timeout(exc):
+                raise
+            marker_tmp = marker.with_suffix(".json.tmp")
+            marker_tmp.write_text(json.dumps({"key": parent_key, "reason": "ReadTimeout"}),
+                                  encoding="utf-8")
+            marker_tmp.replace(marker)
+            print(f"[narration] read timeout: splitting {len(slides)} slides once",
+                  flush=True)
+    midpoint = len(slides) // 2
+    result = {}
+    for offset, part in ((0, slides[:midpoint]), (midpoint, slides[midpoint:])):
+        prompt = prompt_fingerprint(part) if prompt_fingerprint is not None else ""
+        if prompt_fingerprint is not None and (
+            not isinstance(prompt, str) or not prompt.strip()
+        ):
+            raise NarrationBatchError("Empty split narration request fingerprint")
+        key = hashlib.sha256(_canonical({
+            "parent": parent_key, "offset": offset, "slides": part, "prompt": prompt,
+        })).hexdigest()
+        path = cache_dir / f"batch_{start:04d}_split_{offset:04d}.json"
+        accepted = None
+        if path.is_file():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if payload.get("key") == key:
+                    _check(part, payload["narration"])
+                    accepted = payload["narration"]
+            except (OSError, ValueError, KeyError, TypeError, NarrationBatchError):
+                pass
+        if accepted is None:
+            accepted = generate(part, source_blocks)
+            _check(part, accepted)
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps({"key": key, "narration": accepted},
+                                      ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+        result.update(accepted)
+    _check(slides, result)
+    return result
+
+
 def generate_batched(
     slides: list[dict],
     source_blocks,
@@ -46,6 +118,7 @@ def generate_batched(
     model: str,
     prompt_hash: str = "",
     batch_size: int | None = None,
+    prompt_fingerprint: Callable[[list[dict]], str] | None = None,
 ) -> dict:
     """Generate exact, source-ordered slide narration with durable checkpoints.
 
@@ -72,10 +145,20 @@ def generate_batched(
     source_digest = hashlib.sha256(_canonical(source_blocks)).hexdigest()
     for start in range(0, len(slides), batch_size):
         batch = slides[start:start + batch_size]
+        # The request's *actual* composed prompt, not merely a separate
+        # prompt-template filename, controls cache identity. Otherwise
+        # instructions embedded in the generator can change while an older
+        # response is silently reused. Callback runs before cache lookup.
+        active_prompt = (prompt_fingerprint(batch)
+                         if prompt_fingerprint is not None else prompt_hash)
+        if prompt_fingerprint is not None and (
+                not isinstance(active_prompt, str) or not active_prompt.strip()):
+            raise NarrationBatchError("Empty narration request fingerprint")
         sig = {
-            "schema": 2, "source_sha256": source_digest,
+            "schema": 3 if prompt_fingerprint is not None else 2,
+            "source_sha256": source_digest,
             "slides": batch, "model": model,
-            "prompt_sha256": prompt_hash, "size": batch_size,
+            "prompt_sha256": active_prompt, "size": batch_size,
         }
         key = hashlib.sha256(_canonical(sig)).hexdigest()
         cache_file = cache_dir / f"batch_{start:04d}.json"
@@ -91,7 +174,10 @@ def generate_batched(
         if accepted is None:
             print(f"[narration] generating slides {start+1}-{start+len(batch)} "
                   f"of {len(slides)}", flush=True)
-            accepted = generate(batch, source_blocks)
+            accepted = _generate_with_bounded_split(
+                batch, source_blocks, generate, cache_dir=cache_dir,
+                start=start, parent_key=key, prompt_fingerprint=prompt_fingerprint,
+            )
             _check(batch, accepted)
             payload = {"key": key, "narration": accepted}
             pending = cache_file.with_suffix(".json.tmp")

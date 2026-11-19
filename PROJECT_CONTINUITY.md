@@ -416,3 +416,276 @@ The user **explicitly changed the original MicroGen_AI default TTS choice** to m
 **New primary:** Gemini API `gemini-3.8-flash-lite-tts`, voice `Kore`, educational style from Web source, complete WAV. **First fallback:** `gemini-3.8-flash-tts`, same `Kore`. **Last optional fallback:** Google Cloud Chirp3 HD named `en-US-Chirp3-HD-Kore` (matches Web's actual source code; README's `Aoede` sentence conflicts). Cloud never default; must explicitly enable paid Cloud fallback and supply cumulative attempted-character budget. Original API repo uses only whole-batch same-engine fallback for strict voice-provenance consistency; the Web project also has optional per-slide voice-similarity fallback. Explicit `MICROGEN_FORMAL_TTS_PROVIDER=unconfigured` continues to block generation, and explicit `=google_cloud` preserves historical legacy Cloud routes. Historical `en-US-Chirp-HD-F` identity is kept for old provenance/isolated diagnostics and is NOT the new default narrator.
 
 New API-only files `microgen_flash_tts.py`, `microgen_flash_chapter_tts.py`, synthetic tests and `docs/HP_PR270_GEMINI_FLASHLITE_TTS_FROM_WEB_REFERENCE.md`. Patched existing `text_to_speech_v25.py`, `microgen_tts_provider_policy.py`, `microgen_tts_provenance.py`, `requirements.txt` and one old expectation in `tests/test_microgen_cloud_tts_diagnostic_policy.py`. HP SDK `google-genai` upgraded 2.28.0 -> 2.34.0, no local LLM. Source-grounded real Chapter1 CLI preflight exit 0, 6 sections, 57 exact requests, 35,714 characters, 0 provider calls, 0 WAVs generated, no publication. Chapter generator requires `--authorize-paid-gemini-tts` before invoking paid API and delivers PR269-compatible capture manifest plan. Audio and 6 real private MP4s only after separate actual paid production run; pronunciation/academe/rights release remains separate. Do NOT start per-PDF fix loops.
+
+## 13 Nov 2026 — HP original MicroGen_AI acoustic continuation (new candidate)
+
+- Selected original API project `tlyoon/MicroGen_AI` / HP Windows, not the
+  Dell-115 Selenium web project. Predecessor: 12–13 Nov `Generate Thomas`.
+- PR #291 remains draft and unmerged; previous exact head `48172eb`
+  has 2/2 successful Windows CI jobs. New candidate source changes require
+  a fresh SHA-pinned CI run before merge.
+- Real private `20261113_HP_G2_QUADRATIC_VOICE_4817_PRIVATE`:
+  verified source/figure/slides reused, narration and Gemini scientific QA
+  passed for 17 slides with zero corrections; 17 slide WAV and 71 PCM
+  cue WAV completed. Independent ASR failed safely (9: format mismatch,
+  11: forty/4t disagreement, 17: potential function-letter risk).
+  Old audio is preserved and video/G2/G3/G4 NOT accepted.
+- Reusable code remedy: mathematically exact `x(t)`, `v_x(t)`, `a_x(t)`
+  ASR-format aliases on normal acoustic comparator; strict anti-ambiguity
+  tests for changed arguments, signs and coefficients. New source-attested
+  spoken quadratic and cubic phrasing in the normal narration voice adapter
+  awaits genuinely new WAV evidence. Local focused tests must be rerun
+  before release; no academic/media approval inferred.
+- Fresh source-free local validation so far: earlier 73+28 tests passed;
+  new targeted voice/math/source preflight suite 124 passed. Full Windows
+  regression and exact-head hosted CI still required.
+- Next: complete focused/full tests, commit and publish this generalizable
+  code candidate to PR #291, then allow exactly one newly source/SHA-bound
+  finite private G2 run with fresh narration/TTS and blind acoustic review.
+  Only if acoustic passes may timed video and independent visual QA proceed.
+  Do not reissue spent identical recognizer calls or merge PR before G2.
+
+## 13 Nov 2026 follow-up — stale fixedpoint voice replay blocker and repair
+
+- Remedial G2 private workroot `20261113_HP_G2_ACOUSTIC_REMEDY_91D29_PRIVATE` was launched at `91d29c9`; source SHA and repo guards passed. **Invalid source-to-voice resumption:** six historical stages were imported including old `script_tts.json`, even though voice adapter content had changed, so TTS started stale PCM. Stop was initiated promptly; partial new WAVs were generated, **no acoustic/video/acceptance passed**. Preserve this incomplete folder, do not resume it or assert zero provider spending.
+- Root cause: text-only fixedpoint adapter preflight lacks a code hash, so old fully normalized spoken text looks current. Reusable repair now derives `voice_adapter_code_sha256` automatically over exact narration generator, speech normalizer and math-voice adapter source files; each new narrator voice receipt binds to it. Six-stage upstream importer checks bound receipts and otherwise automatically uses four source/slide stages plus original revalidated narration response caches. Acceptance TTS also fails before payment on missing/drifted binding. A new mock real-route stale-fixedpoint regression is added. **Retest and commit/CI of new candidate pending.**
+- Priority: complete exact-head offline+Windows test, verify old real source stage is rejected before provider, then only one new workroot/source-SHA-bound fresh voice/acoustic campaign. G2/G3/G4 not accepted without independent actual audio/video verification.
+
+## 13 Nov 2026 — Full G2 acoustic reviewer disambiguation and safe replay candidate
+
+- Real bounded HP G2 20261113_HP_G2_VOICE_CODEBOUND_105664_PRIVATE
+  at exact original source SHA 923c1768656433f29ba3a2ba413ea81eb5db9383f81d25873358b58709ae14aa
+  completed upstream, narration/science QA and 17 slide + 72 measured cue WAVs.
+- **Actual two-model Gemini QA** passed 16 slides including prior 9 and 11;
+  only slide 17 failed ASR_DISAGREEMENT_HOLD. Original two blind responses:
+  "position x of t, equal b multiplied by t cubed minus c multiplied by t"
+  versus "position x at time t equals ..."; source voice used
+  "position ex at time tee equals ...". No changed coefficients, sign or power.
+  Full private SHA-bound trace retained; 0 MP4 and G2 NOT yet accepted.
+- Corrected only context-bound script-blind mathematical typography in
+  microgen_acoustic_math_transcript.py: exact position x(t) assignment,
+  time factor after explicit coefficient multiplication, x-component
+  subscript spelling; changed arguments, powers and operators remain
+  genuine mismatches. **Offline replay** of all 17 real original Gemini
+  transcripts yielded 17 independent screen passes under existing
+  acoustic evidence verifier, without a new Gemini call.
+- New production microgen_verified_acoustic_replay.py requires exact
+  HP/private scope, previous failed review and checksum-bound trace,
+  matching all input snapshot WAV/sidecar/voice hashes, reviewer identities,
+  original textbook PDF, and changed comparator source SHA. Recomputed
+  reports are validated again on every downstream receipt check. No
+  source text, WAVs or model results sent to Git.
+- Focused and full offline HP tests / exact-head Windows CI required
+  before new one-use G2 campaign. A previous paid campaign cannot be
+  restarted; new code must use normal verified TTS PCM reuse and strict
+  prior-Gemini-evidence replay. G2 remains open until timed video and
+  decoded visual/final acceptance actually pass.
+
+
+## 13 Nov 2026 — authentic G2 timed-video block and calibrated QA
+
+- Exact code 3d04f3d acoustic reclassification passed 17/17 genuine dual
+  Gemini transcripts on immutable reused WAVs, followed by 17-source-slide
+  renders in private campaign 20261113_HP_G2_ASR_REPLAY_3D04_PRIVATE.
+  Source expected ~689.36 s and actual full candidate ~689.62 s. Video
+  correctly failed before release while independent visual QA still had
+  generic ROI calibration errors. No accepted MP4 or G2 receipt.
+- 17-slide real independent frame diagnostic exposed 3 general causes:
+  (1) PDF rasterization vs H.264 static baseline MAE ~9 despite strong
+  decoded on/off difference >52; (2) source PDF region shared across
+  distinct correct cues is not an independent OFF control; (3) very large
+  text source ROIs cannot achieve generic figure-localization 6x ratio.
+- Production microgen_measured_highlight_video_qa now requires real decoded
+  on/off controls only from nonoverlapping regions, calibrated dynamic
+  contrast and area-aware localized visibility. The real 689.62-second
+  decoded-candidate-only diagnostic PASSED 72 elements, 310 independent OFF
+  checks, 16 correctly excluded overlapping controls and 41 baseline
+  calibrations. This is NOT a formal multipart acceptance receipt.
+- New tests added; follow up with full HP suite, exact Git commit/Windows CI,
+  fresh source/SHA-bound private G2 (reuse audio and original Gemini blind
+  transcripts only), then genuine sub-600-second video part QA and final
+  source-grounded acceptance. Keep media unpublished; G2 still open.
+
+
+## 13 Nov 2026 22:45 MYT — G3 advance, genuine first-source failure and reusable fix
+
+- G2 baseline **PASS** at commit ad7467835d2233679542eb158b3174d0af644104.
+  G3 contractual criteria: two additional real-source accepted subsections;
+  one combined media >=600 s split into verified <600-s parts; one real-media
+  bounded interruption/resume/fault-injection recovery proof.
+- Selected Serway section 2.6 SHA
+  5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032
+  (2 original source PDF pages), and section 2.7 SHA
+  03676ed9dc5ded9e07874902c5e2d3689d4293cdc086b9819003770310293102
+  (5 original PDF pages). Not yet two completed acceptances.
+- New bounded HP private source/commit G3 section 2.6 campaign:
+  20261113_HP_G3_SERWAY26_AD746_PRIVATE. Completed authentic figure
+  extraction, figure mapping, merge and 13-slide deck. Gemini 503/read
+  timeouts were automatically recovered by normal keyed provider failover.
+  Both genuine 13-slide narrator model batches returned and are present in
+  SHA-keyed .microgen_narration_batches. Narration stage then rejected
+  Slide 6 due to a real source math voice preflight hold; first run exited
+  1 and recorded last_error=narration BEFORE paid TTS. Grant consumed;
+  it must NEVER be restarted unchanged or relabeled PASS.
+- Analysis of **all 13 genuine saved provider responses** showed 3 precise
+  residual risks: slide 6 delta x; slides 8 and 9 true figure-panel c
+  references. Generic source-faithful TTS-only normalizer expansion for
+  delta x/y/t and numbered Figure/Fig. X.Y panel a-f now in
+  microgen_reviewed_math_voice.py (not any per-PDF clause). Source text,
+  scholarly narration, math signs/numbers and original failure preserved.
+  Production voice_adapter_code_sha256 invalidates previous voice sidecar.
+  All 13 unchanged authentic model texts now pass voice_input_risk_status
+  with ZERO residual risk using new code (no Gemini/TTS calls). Focused
+  tests 66 passed. Current edits require full HP suite and commit.
+- Crucially, current production microgen_verified_upstream_reuse already
+  supports importing exactly verified 4 upstream stages and the TWO
+  original genuine model narrator batch replies after source + slides SHA
+  and generator/prompt and request key revalidation. New bounded campaign
+  must use it automatically; no old failed stage or receipts transferred.
+- G3 real-media recovery component already has 3/3 PASS using genuine G2
+  accepted long-video source/parts, actual production recover_timed_long:
+  partial rollback, tamper-protection, completed real H264+decoded visual
+  validation. Generalized source-independent opt-in integration test at
+  tests/test_microgen_g3_real_media_recovery.py; re-ran 3/3 PASS.
+  Issue #278 has evidence comment ID 6856125552.
+- Next: finish full HP regression and exact Git commit; then run a NEW
+  bounded SHA/source/commit pinned section 2.6 real campaign to acceptance,
+  followed by independently new section 2.7 long candidate and complete
+  G3 3/3 matrix. No manual per-slide edits; no public publication.
+
+
+## 13 Nov 2026 — G3 source-numbered-reference false hold (second cross-section blocker)
+
+- Previous G3 code fa5b45b32fb4b0fd23cb89dbc4aee1d59ff17d1e
+  was tested 2152 passed, 21 skipped, 201 subtests, code clean and pushed
+  to PR #291. New section 2.6 campaign:
+  20261113_HP_G3_SERWAY26_VOICE_FA5B_PRIVATE. Verified reuse of the
+  original FOUR source/figure/slide stages AND both exact-keyed original
+  13-slide Gemini narration model caches worked; source-pronunciation
+  preflight passed. Campaign ended with a genuine source-grounding blocker
+  `UNATTESTED_VISIBLE_NUMERIC_CUE` on slide 4 cue 3, before any further
+  scientific QA requests, and exit 1. This paid scope is consumed; do not
+  re-run unchanged.
+- Authentic frozen source slide 4 contained `Figure 2.10` while narrator
+  rendered `Figure 2 point 10`. Existing numeric parsing incorrectly
+  compared scalar 2.1 versus raw 2 and 10. Read-only analysis of all
+  13 true slides also detected source `Section 2.7.` versus spoken
+  `Section 2 point 7`, and `Quick Quiz 2.6` versus
+  `Quick Quiz 2 point 6`. No invented numbers: all are extractable visible
+  PDF reference text. These are structural categorical-ID vs scalar-decimal
+  errors, not source or narrator errors. Slide/speech were NOT changed.
+- General remedy added to production microgen_cue_semantic_mapping.numbers:
+  exact typed references Figure/Fig(+panel), Section/Sec,
+  Quick Quiz/Quiz, Example/Ex, Equation/Eq all mapped source/speech to
+  the SAME identifier; unrelated printed quantitative values remain scalar.
+  Distinct category/figure/panel/number remains incompatible; decimal
+  punctuation recognized but incomplete multi-dot numbers fail closed.
+- Read-only rerun against unchanged 13 real cached slides/voice confirms
+  46/46 cue units, 0 missing visible number/reference claims. Exact
+  production `preflight_private_timed_acceptance` on an isolated shadow
+  admitted all 13 within the unmodified semantic_max_slides=4 budget.
+  Focused source-free QA: 103 passed / 1 skipped. No Gemini calls, no
+  bypassed or fabricated acceptance or source text changes.
+- **G3 remains open.** Need full HP suite at the new candidate, exact
+  commit and remote PR, then proceed to the second *distinct* source 2.7
+  real private campaign and one fresh source/commit bounded 2.6 retry,
+  preserving terminal previous evidence. Never loop the same one-use grant.
+
+## 14 November 2026 — G3 §2.6 semantic abstention: reusable normal-path remediation
+
+- Authorized HP original API-based MicroGen_AI, not MicroGen_AI_Web.
+  Baseline clean pushed PR #291 head fcbd1b391491e092ccd879e476cf453b928d2a32.
+  Existing finite private campaign `20261113_HP_G3_SERWAY26_REFS_FCBD_PRIVATE`
+  had successfully completed figure extraction/mapping/merge, slides, narration
+  and independent science QA but **failed TTS** at `Slide 10: Semantic model
+  returned incomplete proposal (array_length=0)`. Terminal source hash
+  5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032;
+  failure receipt preserved, grant consumed, no accepted media.
+- Genuine PDF/text examination: slide 10 of the 13-slide lecture is a
+  multiple-choice Concept Check with 1 printed question and three printed
+  answer options; the unresolved final cue is a non-assertive "Think about how
+  ... before advancing" prompt, rather than a factual source quotation.
+  Gemini returned an empty response, which was a legitimate fail-closed
+  abstention, NOT a damaged TTS/WAV or provider login issue.
+- Normal code `microgen_timed_cue_planner.question_reflection_source_block`
+  deterministically anchors ONLY sufficiently constrained, final,
+  non-numeric, non-assertive pedagogical prompts to ONE explicitly printed
+  question on a genuine quiz slide. It requires the real quiz heading,
+  one question, >=2 answer options, and topical overlap. All other ungrounded
+  content still follows source-bound semantic QA or terminal hold. New
+  `question_context_role` is enforced, including detection of tamper or
+  marker removal, in the normal `microgen_timed_cue_tts._verified_plan`
+  before ANY billed audio. Audio and visible PDF remain unchanged.
+- New tests `tests/test_microgen_question_reflection_recovery.py` prove
+  production path and fail-closed cases, including genuine §2.6 slide 10:
+  **32 focused tests passed**, zero Gemini calls or media changes. Full
+  repository HP suite currently running. Neither 2.6 nor 2.7 has a new
+  private G3 acceptance receipt yet; G3 must remain IN_PROGRESS.
+- Next: complete suite, commit/push normal pipeline+contract+tests;
+  fresh source/code-pinned 2.6 campaign using normal safe verified upstream
+  reuse and independent scientific/acoustic/timed media QA; then §2.7 second
+  distinct real source, long-video proof, and evidence-based G3 closure.
+
+## 15 Nov 2026 — G3 real acoustic three-slide blocker decomposed and code recovery
+
+- Correct original API-based MicroGen_AI on HP only. Last accepted G2
+  `ad74678`; current prior PR #291 head `b3364f2`, draft/unmerged.
+  20261114_HP_G3_SERWAY26_CONTEXT_B336_PRIVATE/2.6 terminal after
+  13-slide / 46-source-grounded-PCM TTS. Acoustic failure
+  `REPAIR_CANDIDATE_BUDGET_HOLD` 3 flagged slides [2,11,13] vs existing
+  max 2 safe rerenders; zero videos, NO acceptance. Do not restart old
+  one-use grant or fabricate three audio repairs.
+- Actual SHA-bound two-Gemini original blind ASR transcripts were reviewed
+  directly on HP from
+  `.microgen_private_acoustic_failed_b417adcc9541395cc15a.json`;
+  the source original SHA is 5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032.
+  Slide 2 only roadmap/road map and antiparallel/anti parallel.
+  Slide 11 only nonzero/non zero; both reviewers same actual meaning.
+  New script-blind exact lexical compound normalizer makes 2/11 zero
+  mismatched words (original two recognizer transcripts unchanged).
+  NEGATION 'non' added to sensitive tokens: nonzero->zero remains a hard
+  failure even inside an otherwise very long passage.
+- Slide 13 **real audible script expansion**, not harmless disagreement:
+  both Gemini reviewers show ~double expected content. The actual
+  `slide13_cue2.wav` lasted **50.04 seconds** for 38 source tokens,
+  versus typical 82–144 WPM elsewhere. Under source+WAV offline replay
+  1/46 candidate chunks failed new severely overlong threshold.
+- Normal production `microgen_flash_tts.render_batch` rejects such a
+  clip after actual PCM validation and retries ONLY through existing
+  finite same-provider/model/voice attempt slots; whole-batch fallback
+  is used only as already authorized, never voice mixing or paid infinite
+  loops. The final candidate and original voice, mathematical source,
+  2-model acoustic, video and acceptance gates remain independently
+  mandatory. Private receipt records per-cue retry counts.
+- New tests `tests/test_microgen_g3_acoustic_compound_duration.py`:
+  128 focused source-free related tests passed; opt-in 18/18 source+WAV
+  + original dual Gemini trace checks passed. No source change or model
+  calls for these offline tests. Full HP tests/commit/remote integration
+  and fresh private 2.6 campaign needed next, then genuine independent
+  §2.7 long-video campaign before G3 closes.
+
+## 15 Nov 2026 — G3 §2.6 accepted; §2.7 vector-caption blocker and normal-path recovery
+
+**Correct project:** Original API-based MicroGen_AI on HP only, NOT MicroGen_AI_Web. PR #291 remains draft/unmerged. G2 accepted Serway §2.5 on prior commit ad74678 (689.62s split into 323.16 + 366.50 seconds) with real H.264 interruption-recovery already tested (3 scenarios).
+
+**First real G3 additional source PASS:** §2.6 campaign 20261115_HP_G3_SERWAY26_ACOUSTIC_BCE1_PRIVATE at commit bce1b8a4adfea36c7e575dcb8d18322b74a64d29, original source SHA 5b6c6d6750e6b0ce8b693c5da361ac9f973480ecfa55e6a6097194820fc6a032. All 11 stages completed; independent gemini-3.5-flash and gemini-3.8-flash acoustic ASR PASS, 13 slides, 46 source-PCM timed cues, 448.0s real H264 slides.mp4, decoded-frame highlight QA PASS, private technical acceptance PASS with 0 acoustic-repaired WAVs. Separate academic/phonetic/publication certification is not claimed.
+
+**Second distinct real source §2.7**, source SHA 03676ed9dc5ded9e07874902c5e2d3689d4293cdc086b9819003770310293102, five textbook pages. First private one-use attempt 20261115_HP_G3_SERWAY27_BCE1_PRIVATE on HP passed offline figure extraction all five pages (actual SHA receipt), and Gemini figure mapping pages 1-2 mapped Figures 2.10 and 2.11 (three panel crops). Real Figure 2.12 on source page 3 is a SIX-PANEL vector graph next to unique bold blue caption. Docling extracted only a separate unlabeled red-arrow illustration fig_7.png, while independent Gemini correctly returned "UNLABELED: SKIP" for that unrelated crop. Old mapping correctly failed closed "Captioned page page_3 has no mapped figure." Do not pretend this was an AI misclassification: actual complete graph is missing from raster crop inventory.
+
+**New source-independent NORMAL production resolution, not per-PDF waiver:** microgen_lateral_vector_figure_recovery.py requires a unique styled bold blue caption, 3-8 consecutive panel labels on a horizontal row, individually identifiable vector graph geometry with independent horizontal time t and vertical v/a axis labels, and safe adjacent geometry. It recrops ONLY the actual original PDF vector artwork (no generated drawing, no OCR, no figure invention), attaches SHA source/page/crop/figure-composition provenance, verifies literal PDF rerender after figure copy/cleanup and on subsequent QA. New map_and_rename_v5.py recognizes captioned PDF-vector pages even when Docling has zero crops and invokes this recovery only for genuinely unmapped caption labels, otherwise fails closed. The original Figure 2.12 panel geometry is 6 labels "abcdef", 12 source axis-label spans, 740×142px exact original source render. It was visually checked against the actual original source page. Genuine failed page with exact original saved Gemini mapping response reproduced and recovered in isolated offline shadow at zero provider cost. Synthetic positive, missing letter, wrong label, corrupted receipt/crop and real response replay negative tests passed. The original failed 2.7 campaign remains terminal and its original model/crop evidence unchanged.
+
+**Normal recovery also avoids re-billing provider calls:** microgen_mapping_cache_recovery.py imports only complete bounded model-response cache JSON from earlier matching source-SHA, source/file/code pinned authorized private HP campaigns, with security/symlink guard; original map_and_rename_v5._cached_figure_request MUST independently recompute full prompt/model/page/crop SHA for each imported reply, so source/model/prompt drift triggers a fresh request. No failed old stage/checkpoint is imported as success. No source adjacent publication, no unrestricted provider grants. Strict tests cover trusted same-source, wrong SHA/permit, malformed cache. Both new modules, figure mapping dependencies, stage revalidation, acceptance snapshots, private manifests, upstream reusable evidence and cross-session contract are bound to exact receipt and code SHA; no bypass of science, acoustic, timed/video QA.
+
+**Proof so far:** 65 focused tests including actual page3 recovery pass; 61 focused tests after model-response cache integration pass (2 optional skips). Full HP repository suite and exact-commit Windows CI still required before new subsection campaign. A fresh bounded private §2.7 generation at new tested SHA is required; §2.7 and G3 NOT YET ACCEPTED. One ≥600s NEW source lecture must be split into verified <600s parts to close G3. Continue autonomously from this checkpoint; never repeat old spent provider request unchanged. G3 final fail-closed validator stored at %LOCALAPPDATA%\MicroGen_AI_Checkpoints\g3_verify_closure_20261115.py; must update old hardcoded SHA and §2.7 new campaign ID before final PASS.
+
+## 15 Nov 2026 — G3 §2.7 20-slide narration and source-vector kinematics graph fixes
+
+Original API-based MicroGen_AI on authorized HP only (never MicroGen_AI_Web). Prior G3 §2.6 private acceptance remains PASS; genuine §2.7 campaign \`20261115_HP_G3_SERWAY27_VECTOR_EBBC_PRIVATE\` pinned to \`ebbc8c9\` completed four stages (figure extraction/mapping/merge, 20 slides) and source-attested Figure 2.12 vector graph. It **stopped at narration preflight BEFORE TTS**: source math letter spellings \`x sub f\`, \`x sub i\`, \`x car/trooper\`, \`x B\`, \`v x car\` and chart panel \`Graph c\` created predictable spoken-letter ambiguity. The failed private campaign and its complete original three Gemini narration batches stay immutable; do NOT re-use its terminal provider request or falsely accept it. New generic, spoken-input-only improvements in \`microgen_reviewed_math_voice.py\` convert only literal scientific subscript/vehicle-index and graph-panel contexts, never global x/c substitution, and leave the original source/visible narration untouched. An offline shadow replay of all 20 real cached Gemini narration responses produced **0 residual pronunciation risks** with source SHA unchanged. All new WAVs must still pass two independent Gemini acoustic reviewers.
+
+Separately, the *visual* source textbook Figure 2.12 exposes a genuine physics error in the generated 20-slide deck: one answer slide claimed graph (b) had zero slope and graph (c) had constant negative slope, although the original vector strokes show (a) linear increasing velocity, (b) positive increasing slope, and (c) positive slope followed by zero. The correct source-derived matches are velocity curves a→acceleration e, b→d, c→f. Because existing scientific QA reviewed only extracted text, a future similar error could escape; do not silently mark technical acceptance. New general \`microgen_source_kinematics_graph_guard.py\` independently identifies a uniquely styled 6-panel v_x–t/a_x–t PDF vector quiz, extracts each graph's true Bézier/line/step structure, checks panel labels and x/y axis evidence, uniquely derives the mathematical derivatives, and replaces only source-contradictory slide *text* with source-derived correct graph matching **before pdflatex**. Unknown or ambiguous graphs safely abstain, not invented. The normal slide pipeline invokes it automatically; stage validators, private acceptance, reusable upstream proof, release fingerprints and manifests re-check a source-SHA + exact source-vector + corrected-TeX SHA receipt. Never grant publication rights based on this automatic screen.
+
+Real source shadow replay recovered the mappings (a:e,b:d,c:f), produced corrected real \`slides.tex\`, compiled two successful pdflatex passes into a genuine 20-page \`slides.pdf\`, and verified rendered text and SHA-bound receipt. Existing prior campaigns untouched. Full independent scientific, narration, dual Gemini acoustic, timed-video and ≥600-second auto-split acceptance **remain mandatory**. Continue to new exact SHA/versioned one-use campaign after full HP tests + Windows-only hosted CI. G3 OPEN until §2.7 passes private acceptance, ≥600s source accepted with each delivered video <600s, original G2 + two separate G3 source receipts and real interruption/recovery revalidated. No public/academic/phoneme-complete claim.
+
+### 15 November 2026 — Cache discovery must count campaigns, not checkpoints files
+
+The genuine HP §2.7 \`ca08ed8\` campaign exposed a separate normal-path cache-discovery failure: the checkpoint root contains hundreds of files and 282 directories, but \`microgen_mapping_cache_recovery.reuse_verified_mapping_cache\` counted ALL immediate entries against its MAX_SCAN_DIRS=400 limit. It consequently abstained before searching any legitimate source-authorized campaign. The identical first two current/old Gemini page mapping request keys and source SHA were independently verified; repeated Gemini requests incurred 503 rate/timeouts unnecessarily. The production fix filters for real non-symlink **directory campaigns** before applying the bounded scan; it retains all existing per-campaign grant, source-SHA, model+prompt+image hash, failure, permission and symlink guards. A real HP isolated shadow automatically imported all 10 authentic source-bound historical response JSON records with **zero provider sends**, while the current already-running previous-SHA private campaign remains isolated and unchanged. Synthetic tests with 450 unrelated files and with >400 actual directories respectively show successful safe reuse and fail-closed true-cap behavior. Do not manually inject old cache files into a live one-use grant. The normal recovery must work next time after this shared code fix is tested and pinned. G3 requires real §2.7 independent acceptance, long-video split and final source receipts; no claim of completion from cache repair alone.

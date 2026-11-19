@@ -17,6 +17,26 @@ from gemini_lane import (
 T = TypeVar("T")
 
 
+class GeminiProviderPoolUnavailable(RuntimeError):
+    """Known mixed transient/billing exhaustion; no automatic paid replay.
+
+    An exhausted prepayment key cannot be fixed by changing scientific QA
+    inputs, while a different key's timeout does not prove that it is out of
+    credits. Keep the exact mixed history instead of claiming all keys are
+    billing-depleted or marking an independent review defective.
+    """
+
+
+def _mixed_provider_pool_hold() -> GeminiProviderPoolUnavailable:
+    """No raw response, credentials, source prompts or paid retry entitlement."""
+    return GeminiProviderPoolUnavailable(
+        "GEMINI_MIXED_TRANSIENT_BILLING_EXHAUSTED: "
+        "Gemini configured key pool has both a transient provider outage "
+        "and a prepayment/credit blocker; do not replay the possibly "
+        "billed request or claim scientific QA acceptance"
+    )
+
+
 def _error_code(exc: BaseException) -> int | None:
     code = getattr(exc, "code", None)
     if callable(code):
@@ -187,6 +207,7 @@ def call_with_key_failover(
     effective_rotation_threshold = min(transient_retries_per_key, retries + 1)
     last_key_error: BaseException | None = None
     billing_failed_keys = 0
+    transient_failed_keys = 0
 
     for key_index, key in enumerate(keys, start=1):
         transient_failures = 0
@@ -215,6 +236,7 @@ def call_with_key_failover(
                     key_index < len(keys)
                     and transient_failures >= effective_rotation_threshold
                 ):
+                    transient_failed_keys += 1
                     print(
                         f"[Gemini keys] {label}: key #{key_index} had "
                         f"{transient_failures} consecutive transient failures "
@@ -224,6 +246,13 @@ def call_with_key_failover(
                     break
 
                 if attempt >= retries:
+                    # Reverse order of the actual incident: key #1 reports
+                    # credit depletion, final key reports a 504/503 timeout.
+                    # The old code discarded the earlier 402 and mislabeled
+                    # the entire already-paid stage as an unknown exception.
+                    if (key_index == len(keys) and billing_failed_keys
+                            and is_transient_gemini_error(exc)):
+                        raise _mixed_provider_pool_hold() from None
                     raise
 
                 delay = min(cap, base * (2 ** attempt))
@@ -246,6 +275,17 @@ def call_with_key_failover(
             f"{label} stopped because every configured Gemini key reported "
             f"billing/prepayment failure: {last_key_error}"
         ) from last_key_error
+    if (last_key_error is not None and is_billing_gemini_error(last_key_error)
+            and 0 < billing_failed_keys < len(keys)
+            and transient_failed_keys > 0):
+        # Actual HP source-grounded scientific QA (18 Nov): first Gemini key
+        # 504 deadline, second key 402 depleted prepayment. Historic code
+        # produced a generic RuntimeError -> ambiguous whole-stage hold.
+        # We can classify this exact external dependency without guessing
+        # whether the timed-out request was billed or treating BOTH keys as
+        # credit-exhausted. Only a later separately authorized request may
+        # attempt the stage after provider access is independently restored.
+        raise _mixed_provider_pool_hold() from None
     if last_key_error is not None:
         raise RuntimeError(
             f"{label} failed because all {len(keys)} configured Gemini API keys "

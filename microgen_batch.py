@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import re
 import shutil
@@ -92,6 +93,21 @@ def inspect_local_checkout(repo: Path, *, expected_commit: str | None = None) ->
     return head
 
 
+def pin_standing_private_revision(args) -> str:
+    """Bind normal single-HP checkpoints to their already-authorized Git HEAD.
+
+    Uses the same checked-out source verification as multi-PC mode. Never
+    derives a commit from a filename, modifies an old checkpoint, or
+    converts a dirty/unverified checkout into a paid campaign.
+    """
+    if not getattr(args,"standing_private_development",False):
+        raise RuntimeError("Private Git pin requested outside standing scope")
+    verified=inspect_local_checkout(
+        args.repo,expected_commit=args.commit)
+    args.commit=verified
+    return verified
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -132,24 +148,76 @@ def source_signature(path: Path) -> dict[str, int]:
     return {"size": int(st.st_size), "mtime_ns": int(st.st_mtime_ns)}
 
 
+class CheckpointIntegrityError(RuntimeError):
+    """An uncertain checkpoint must not silently authorize fresh paid work."""
+
+
 def load_checkpoint(path: Path) -> dict:
-    if not path.is_file():
+    """Read saved progress without mistaking corruption for a fresh run.
+
+    A newly absent checkpoint is fine ONLY when no interrupted atomic write
+    exists. Existing invalid JSON, unexpected types, symlinks, or an
+    interrupted .tmp save must block until evidence is reconciled.
+    """
+    path = Path(path)
+    tmp = path.with_suffix(".tmp")
+    if path.is_symlink() or tmp.exists() or tmp.is_symlink():
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe link or uncommitted atomic write"
+        )
+    if not path.exists():
         return {"completed": {}}
+    if not path.is_file():
+        raise CheckpointIntegrityError("AMBIGUOUS_CHECKPOINT_HOLD: not a file")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return {"completed": {}}
-        data.setdefault("completed", {})
-        return data
-    except (OSError, json.JSONDecodeError):
-        return {"completed": {}}
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unreadable or malformed checkpoint"
+        ) from exc
+    if (not isinstance(data, dict)
+            or not isinstance(data.get("completed", {}), dict)
+            or any(not isinstance(k, str) or not isinstance(v, str)
+                   for k, v in data.get("completed", {}).items())
+            or not isinstance(data.get("dependency_fingerprints", {}), dict)
+            or (data.get("last_error") is not None
+                and not isinstance(data["last_error"], dict))
+            or (data.get("inflight_provider_stage") is not None
+                and not isinstance(data["inflight_provider_stage"], dict))):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: invalid checkpoint schema"
+        )
+    data.setdefault("completed", {})
+    return data
 
 
 def save_checkpoint(path: Path, data: dict) -> None:
+    """Crash-safe checkpoint publication, refusing an uncertain prior save.
+
+    The owning subchapter worker already holds the kernel lock. Opening the
+    fixed temp with x mode prevents silently overwriting another/incomplete
+    transaction; readers fail closed while any such temp exists.
+    """
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    if (path.is_symlink() or tmp.exists() or tmp.is_symlink()
+            or (path.exists() and not path.is_file())):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe or unfinished prior checkpoint"
+        )
+    if not isinstance(data, dict) or not isinstance(data.get("completed", {}), dict):
+        raise CheckpointIntegrityError("Cannot persist malformed checkpoint")
+    try:
+        with tmp.open("x", encoding="utf-8") as out:
+            json.dump(data, out, indent=2)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+    except FileExistsError as exc:
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: concurrent checkpoint writer"
+        ) from exc
 
 
 def copy_repo_into_stage(repo: Path, stage: Path) -> None:
@@ -182,6 +250,23 @@ def prepare_stage(
     stage = work_root / subchapter
     checkpoint_path = stage / ".microgen_checkpoint.json"
 
+    # A vanished checkpoint inside an *existing nonempty* work directory
+    # cannot be interpreted as a brand-new stage: figure/model/TTS outputs
+    # or an in-flight provider send may have survived the lost metadata.
+    # This check happens before copying code, accepting receipts or
+    # launching another billable operation. An empty directory is the only
+    # safe previously created directory that can initialize normally.
+    if stage.is_symlink() or (stage.exists() and not stage.is_dir()):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: unsafe preexisting stage directory"
+        )
+    if (stage.is_dir() and not checkpoint_path.exists()
+            and not checkpoint_path.is_symlink()
+            and any(stage.iterdir())):
+        raise CheckpointIntegrityError(
+            "AMBIGUOUS_CHECKPOINT_HOLD: prior stage artifacts exist but "
+            "its execution checkpoint is missing; no implicit paid replay"
+        )
     if stage.exists():
         cp = load_checkpoint(checkpoint_path)
         old_sig = cp.get("source_signature")
@@ -306,6 +391,12 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
         try:
             from microgen_figure_composition import validate_figure_receipt
             validate_figure_receipt(stage)
+            # Reconstruct every recovered lateral-captioned vector graph from
+            # the immutable original PDF; no unverified source crop import.
+            from microgen_lateral_vector_figure_recovery import (
+                verify_lateral_figure_receipt,
+            )
+            verify_lateral_figure_receipt(stage)
             return True
         except (OSError, ValueError, RuntimeError):
             return False
@@ -316,16 +407,26 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
                 quality.check_graphics(stage / "slides.tex")
+                from microgen_source_kinematics_graph_guard import (
+                    require_graph_source_evidence,
+                )
+                require_graph_source_evidence(stage)
                 return True
             count = quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)["pages"]
             if name == "narration":
                 quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
+                from microgen_source_bound_voice_recovery import (
+                    verify_source_voice_recovery,
+                )
+                verify_source_voice_recovery(stage)
             elif name == "science_qa":
                 from microgen_autonomous_science_qa import verify_receipt
                 quality.check_narration(stage / "script.txt", stage / "script_tts.json", count)
                 verify_receipt(stage)
             elif name == "tts":
                 quality.check_wavs(stage, count)
+                from microgen_verified_tts_reuse import verify_reuse_receipt
+                verify_reuse_receipt(stage)
             elif name == "acoustic_qa":
                 from microgen_autonomous_acoustic_gate import verify_receipt
                 verify_receipt(stage)
@@ -388,6 +489,11 @@ def invalidate_from(cp: dict, stage_name: str) -> None:
 def mark_complete(cp: dict, checkpoint_path: Path, stage_name: str, stage: Path) -> None:
     cp.setdefault("completed", {})[stage_name] = utc_now()
     cp.setdefault("dependency_fingerprints", {})[stage_name] = quality.dependency_fingerprint(stage, stage_name)
+    # Atomic checkpoint update: completed output can no longer be mistaken
+    # for an unresolved external submission after a normal return.
+    if (isinstance(cp.get("inflight_provider_stage"), dict)
+            and cp["inflight_provider_stage"].get("stage") == stage_name):
+        cp.pop("inflight_provider_stage")
     cp["last_error"] = None
     cp["updated_utc"] = utc_now()
     save_checkpoint(checkpoint_path, cp)
@@ -421,10 +527,20 @@ def unchanged_failure_hold(cp: dict, stage_name: str, stage: Path) -> bool:
 
 
 def wait_for_gemini_circuit(lease=None) -> None:
-    """Pause while the shared billing/capacity circuit is open.
+    """Finite pause for the shared Gemini billing/capacity circuit.
 
-    A failed/lost distributed lease must interrupt even a long capacity wait.
+    Do not hold the entire workflow forever for an unavailable external
+    dependency. A terminal pause lets the coordinator advance independent
+    authorized work. It never authorizes repeated paid submissions.
     """
+    raw = os.environ.get("MICROGEN_CIRCUIT_MAX_WAIT_SECONDS", "900")
+    try:
+        limit = float(raw)
+    except (ValueError, OverflowError) as exc:
+        raise RuntimeError("INVALID_FINITE_GEMINI_CIRCUIT_WAIT_BUDGET") from exc
+    if not (60 <= limit <= 7200) or not math.isfinite(limit):
+        raise RuntimeError("INVALID_FINITE_GEMINI_CIRCUIT_WAIT_BUDGET")
+    deadline = time.monotonic() + limit
     last = 0.0
     while True:
         if lease is not None:
@@ -432,16 +548,23 @@ def wait_for_gemini_circuit(lease=None) -> None:
         opened, data = circuit_is_open()
         if not opened:
             return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "GEMINI_CIRCUIT_BOUNDED_PAUSE: provider still unavailable "
+                "after finite wait; preserve stage checkpoint and continue "
+                "independent eligible sections"
+            )
         retry_after = float((data or {}).get("retry_after_epoch", 0) or 0)
         wait = max(1.0, retry_after - time.time())
         if time.time() - last >= 60:
             print(
                 f"[batch] Gemini circuit open ({(data or {}).get('type','unknown')}); "
-                f"pausing this stage, next probe in about {wait:.0f}s",
+                f"bounded next probe in about {min(wait, remaining):.0f}s",
                 flush=True,
             )
             last = time.time()
-        time.sleep(min(5.0 if lease is not None else 60.0, wait))
+        time.sleep(min(5.0 if lease is not None else 60.0, wait, remaining))
 
 
 def _assign_windows_kill_job(proc: subprocess.Popen):
@@ -698,8 +821,15 @@ def run_subprocess(
     gemini_stage: bool,
     retries: int,
     lease=None,
+    stage_name: str | None = None,
+    nonrepeatable_external_stage: bool = False,
 ) -> None:
+    # A failed whole-stage run may have submitted a paid provider request.
+    # Request-level replay is permitted only by the stage's own verified
+    # idempotency machinery, never by relaunching its entire Python driver.
+    # Unknown non-paid failures keep the established bounded retry policy.
     attempt = 0
+    circuit_resume_cycles = 0
     while True:
         if lease is not None:
             lease.assert_held()
@@ -725,13 +855,75 @@ def run_subprocess(
             log.write(f"\n[{label}] exit={returncode}\n")
         if returncode == 0:
             return
+        # Diagnose science/QA holds before treating a coincident provider
+        # circuit outage as permission to repeat the whole failed stage.
+        # V6: consult version-controlled historical failure signatures in
+        # the normal executable runner. Only actual traceback exceptions
+        # qualify. An unresolved science/acoustic defect is a durable hold,
+        # never a fresh paid retry or an implicit QA acceptance.
+        if (stage_name and
+                (stage / "microgen_recovery_registry_v6.json").is_file()):
+            from microgen_recovery_registry import (
+                classify_log_attempt, persist_stage_decision,
+            )
+            with log_path.open("rb") as evidence:
+                evidence.seek(attempt_offset)
+                current_attempt = evidence.read(1024 * 1024)
+            decision = classify_log_attempt(
+                stage_name, current_attempt, registry_folder=stage,
+            )
+            if decision is not None:
+                if decision["disposition"] == "DETERMINISTIC_HOLD":
+                    persist_stage_decision(
+                        stage, decision, attempt_number=attempt + 1,
+                    )
+                    raise RuntimeError(
+                        f"{label} failed with non-retryable "
+                        f"{decision['exception']} after {attempt + 1} "
+                        f"attempt(s); recovery_id={decision['failure_id']}; "
+                        "source-bound scientific/QA evidence still required"
+                    )
+                if decision["disposition"] == "PAUSED_EXTERNAL_DEPENDENCY":
+                    # Recognized finite provider exhaustion is NOT an
+                    # acoustic/scientific defect and is NOT evidence of a
+                    # usable paid result. Do not persist a deterministic
+                    # QA hold or submit another whole-stage request.
+                    # process_one records the typed external dependency and
+                    # keeps the original in-flight provider marker so a
+                    # restart cannot reissue this possibly billed stage.
+                    raise RuntimeError(
+                        "VERIFIED_EXTERNAL_DEPENDENCY_HOLD: "
+                        f"{label} exhausted an independently recognized "
+                        f"provider dependency after {attempt + 1} "
+                        f"whole-stage attempt(s); "
+                        f"recovery_id={decision['failure_id']}; "
+                        "preserve source/WAV/provider effect and advance "
+                        "only independently authorized work"
+                    )
 
-        # If the request tripped the shared circuit, this is an external pause,
-        # not a stage failure and must not consume the retry count.
+        # A post-send model error is an uncertain external effect, never
+        # proof that a paid request did not happen. The outer persisted
+        # inflight_provider_stage is reconciled independently on restart.
+        if nonrepeatable_external_stage:
+            raise RuntimeError(
+                f"AMBIGUOUS_PROVIDER_STAGE_HOLD: {label} failed after "
+                f"{attempt + 1} whole-stage attempt(s); do not repeat an "
+                "uncertain paid request without source-bound reconciliation"
+            )
+
+        # An external circuit pause is distinct from scientific QA and must
+        # not retry forever across repeated reopen/close cycles.
         if gemini_stage:
             opened, _ = circuit_is_open()
             if opened:
-                print(f"[{stage.name}] {label}: Gemini circuit opened; pausing", flush=True)
+                circuit_resume_cycles += 1
+                if circuit_resume_cycles > 2:
+                    raise RuntimeError(
+                        "GEMINI_CIRCUIT_RECOVERY_EXHAUSTED: repeated external "
+                        "outages after finite resume cycles; preserve checkpoint"
+                    )
+                print(f"[{stage.name}] {label}: Gemini circuit opened; "
+                      f"bounded pause {circuit_resume_cycles}/2", flush=True)
                 wait_for_gemini_circuit(lease)
                 continue
 
@@ -890,9 +1082,94 @@ def subchapter_ownership(args, subchapter: str):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+def preflight_private_timed_acceptance(stage: Path) -> dict:
+    """Full-lecture, zero-provider-cost admission before accepted G2 TTS.
+
+    Require a real PDF-grounded element plan or evidence that the existing
+    tightly bounded semantic proposal can be requested. This reuses the
+    production planner's exact lexical matcher and semantic budget checker.
+    It never sends prompts, alters scripts/WAVs, publishes a cue plan, or
+    increases the existing Gemini/voice budget.
+    """
+    from microgen_timed_cue_planner import (
+        PLAN_FILE, prepare_slide_pages, propose_plan,
+        _require_budget_preflight, CuePlanningError,
+    )
+    from microgen_timed_cue_tts import _verified_plan
+    stage = Path(stage)
+    pages = prepare_slide_pages(stage)
+    if (stage / PLAN_FILE).exists() or (stage / PLAN_FILE).is_symlink():
+        verified, fragments = _verified_plan(stage)
+        return {"mode": "existing_verified_plan",
+                "pages": len(pages),
+                "cues": verified["total_cues"]}
+    assisted = os.environ.get("MICROGEN_TIMED_SEMANTIC_ASSIST", "0")
+    if assisted not in ("0", "1"):
+        raise CuePlanningError("Invalid explicit timed semantic assist setting")
+    if assisted == "1":
+        raw = os.environ.get("MICROGEN_TIMED_SEMANTIC_MAX_SLIDES", "4")
+        try:
+            limit = int(raw)
+        except ValueError as exc:
+            raise CuePlanningError("Invalid bounded semantic slide limit") from exc
+        if not 1 <= limit <= 40:
+            raise CuePlanningError("Invalid bounded semantic slide limit")
+        _require_budget_preflight(stage, semantic_limit=limit,
+                                  max_cues=120)
+        return {"mode": "semantic_budget_admitted",
+                "pages": len(pages), "semantic_max_slides": limit}
+    # The semantic proposal is off; insist the source-grounded lexical
+    # planner covers all slides before starting another provider stage.
+    plan = propose_plan(stage, max_cues=120)
+    return {"mode": "offline_lexical_grounding",
+            "pages": len(pages), "cues": plan["total_cues"]}
+
+
+def enforce_offline_provider_boundary(args, stage_name:str)->None:
+    """Never run model/TTS source stages under a code-migrated paid grant."""
+    if (getattr(args,"offline_accepted_recovery_only",False)
+            and stage_name in (GEMINI_STAGES | {"tts"})):
+        raise RuntimeError(
+            "OFFLINE_ONLY_PROVIDER_STAGE_HOLD: no paid source, "
+            "scientific, acoustic or TTS operation may be retried")
+
+
 def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     if lease is not None:
         lease.assert_held()
+    if (getattr(args, "standing_private_development", False)
+            and getattr(args, "bounded_provider_scope_verified", False)
+            and getattr(args, "stop_after", None) == "acceptance"
+            and not (args.work_root / subchapter).exists()):
+        # An accepted source-PDF/slide/narration/science checkpoint must
+        # not trigger another 20-minute paid generation merely because the
+        # subsequent cue/TTS planner changed. Import only independently
+        # reverified upstream stages from an owner-authorized earlier HP
+        # campaign. No old WAV, failed TTS attempt or approval is copied.
+        from microgen_verified_upstream_reuse import (
+            maybe_import_verified_upstream,
+        )
+        import_evidence = maybe_import_verified_upstream(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, subchapter=subchapter,
+            source_file=source_for(args.source_root, subchapter),
+            dest=destination_for(args.source_root, subchapter),
+            commit=args.commit, source_wait=args.source_wait,
+            prepare_stage=prepare_stage, stage_valid=stage_valid,
+            mark_complete=mark_complete, quality=quality,
+        )
+        if import_evidence:
+            print(f"[{subchapter}] source-bound upstream resume "
+                  f"{import_evidence['stages']} from prior verified "
+                  f"private campaign {import_evidence['from']}; "
+                  "no old TTS/failed provider stage imported", flush=True)
+    # Preserve the PREVIOUS code pin for the only permitted post-acoustic
+    # reconciliation. prepare_stage legitimately updates package_commit;
+    # comparing its new value with itself would hide an unsafe code delta.
+    prior_checkpoint=args.work_root/subchapter/".microgen_checkpoint.json"
+    prior_commit=(getattr(args,"offline_prior_code_revision",None)
+                  or (load_checkpoint(prior_checkpoint).get("package_commit")
+                      if prior_checkpoint.is_file() else None))
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -901,9 +1178,74 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         args.source_wait,
         args.commit,
     )
+    # Repair any interrupted exclusive original-PCM import first; only
+    # exact known hashes can be removed, before provider stage decisions.
+    from microgen_exclusive_audio_import import (
+        recover_interrupted_audio_import,
+    )
+    recovered_import = recover_interrupted_audio_import(stage)
+    if recovered_import != "NO_PREACOUSTIC_IMPORT_PENDING":
+        print(f"[{subchapter}] offline pre-acoustic import recovery="
+              f"{recovered_import}; no provider replay",flush=True)
+    # Recover a terminated multi-asset timed-acoustic replacement BEFORE
+    # deciding which checkpointed provider or video stage may resume.
+    # Only a complete SHA-bound old/new inventory can be rolled back,
+    # without ASR, TTS, new paid authorization, or an acoustic QA waiver.
+    from microgen_timed_acoustic_transaction import (
+        recover_interrupted_timed_acoustic,
+    )
+    recovered_audio = recover_interrupted_timed_acoustic(stage)
+    if recovered_audio != "NO_TIMED_ACOUSTIC_TRANSACTION":
+        print(f"[{subchapter}] measured acoustic asset recovery="
+              f"{recovered_audio}; independent QA remains mandatory",
+              flush=True)
     dest = destination_for(args.source_root, subchapter)
     offline_mapping = bool(getattr(args, "offline_figure_mapping", False))
     log_path = args.work_root / f"{subchapter}.log"
+    pending = cp.get("inflight_provider_stage")
+    if pending is not None:
+        # A crash after a provider Send but before the stage receipt cannot
+        # safely be interpreted as an unused attempt. Preserve originals,
+        # fail before ANY further model request, and never reset the budget.
+        if (isinstance(pending, dict)
+                and pending.get("stage") == "science_qa"
+                and stage_valid(stage, "science_qa", dest)):
+            # Science QA has its own independently source-attested receipt;
+            # recover that exact saved result without another Gemini call.
+            _science_qa_update_upstream_fingerprints(cp, stage, dest)
+            mark_complete(cp, checkpoint_path, "science_qa", stage)
+            print(f"[{subchapter}] recovered independently verified science "
+                  "receipt after interrupted provider stage", flush=True)
+        elif (isinstance(pending,dict)
+              and pending.get("stage")=="acoustic_qa"):
+            from microgen_post_acoustic_reuse_resume import (
+                reconcile_verified_audio_receipt,
+            )
+            recovered_qa=reconcile_verified_audio_receipt(
+                args.repo,stage,cp,prior_commit,args.commit,
+                stage_valid,quality.dependency_fingerprint,dest)
+            if recovered_qa is None:
+                raise RuntimeError(
+                    "AMBIGUOUS_PROVIDER_STAGE_HOLD: acoustic QA not "
+                    "independently attested after an uncertain provider "
+                    "request; do not repeat Gemini or TTS")
+            cp.setdefault("dependency_fingerprints",{}).update(
+                recovered_qa["fingerprints"])
+            cp["post_acoustic_reconciliation"]={
+                key:value for key,value in recovered_qa.items()
+                if key!="fingerprints"}
+            mark_complete(cp,checkpoint_path,"acoustic_qa",stage)
+            print(f"[{subchapter}] genuine independent acoustic pass "
+                  "recovered from one-cue SHA journal; source/science/TTS "
+                  "rechecked and fingerprints safely reconciled after "
+                  "verifier-only patch; zero additional provider calls",
+                  flush=True)
+        else:
+            raise RuntimeError(
+                "AMBIGUOUS_PROVIDER_STAGE_HOLD: a previous provider stage may "
+                "have submitted a request before interruption; preserve the "
+                "checkpoint and do not replay an unaccounted paid request"
+            )
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
     bounded = getattr(args, "stop_after", None) is not None
@@ -1000,6 +1342,61 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
             print(f"[{subchapter}] recovered exact-source scientific QA receipt",flush=True)
             continue
 
+        if (stage_name == "tts"
+                and getattr(args, "standing_private_development", False)
+                and getattr(args, "bounded_provider_scope_verified", False)
+                and getattr(args, "stop_after", None) == "acceptance"):
+            # A change confined to the independent ASR reviewer should NOT
+            # rebill all previously source/voice/PCM-verified lecture WAVs.
+            # This only recovers original TTS evidence; original failed
+            # acoustic findings and old provider consent are never imported.
+            from microgen_verified_tts_reuse import maybe_reuse_verified_tts
+            reusable = maybe_reuse_verified_tts(
+                stage, work_root=args.work_root,
+                source_sha=quality.sha256(stage / "source.pdf"),
+                mark_complete=mark_complete, cp=cp,
+                checkpoint_path=checkpoint_path,
+                stage_valid=stage_valid, dest=dest)
+            if reusable:
+                print(f"[{subchapter}] verified same-source PCM resumed "
+                      f"from private campaign {reusable['from']}; "
+                      "independent two-model acoustic QA MUST rerun",
+                      flush=True)
+                continue
+            # A prior same-voice acoustic fix may have changed whole-slide WAVs
+            # without regenerating the measured cue chunks. For new private
+            # campaigns, recover byte-exact ORIGINAL PCM from retained cues
+            # under the source/PDF/math and voice proof, NOT the old ASR pass.
+            # The normal acoustic stage then performs source-bound <=2-slide
+            # TIMED cue repair and independent QA; video cannot use stale cues.
+            from microgen_preacoustic_timed_pcm_reuse import (
+                maybe_reuse_preacoustic_timed_pcm,
+            )
+            restored = maybe_reuse_preacoustic_timed_pcm(
+                stage,work_root=args.work_root,
+                source_sha=quality.sha256(stage/"source.pdf"),
+                cp=cp,checkpoint_path=checkpoint_path,
+                mark_complete=mark_complete,stage_valid=stage_valid,dest=dest)
+            if restored:
+                print(f"[{subchapter}] original measured PCM recovered "
+                      f"from {restored['from']}, "
+                      f"previous acoustic approval NOT reused; "
+                      "continuing to fresh independent acoustic QA",
+                      flush=True)
+                continue
+
+        # V6: reconcile the source-bound known-failure receipt BEFORE
+        # attempting the next provider stage. A crash may have occurred
+        # immediately after the registry receipt was atomically written but
+        # before the outer checkpoint recorded last_error.
+        if (stage / ".microgen_recovery_v6.json").exists():
+            from microgen_recovery_registry import verified_stage_hold
+            if verified_stage_hold(stage, stage_name):
+                raise RuntimeError(
+                    f"{stage_name} has an immutable registry-confirmed "
+                    "DETERMINISTIC_HOLD; cannot silently replay an unchanged "
+                    "scientific/QA failure after process restart"
+                )
         if unchanged_failure_hold(cp, stage_name, stage):
             raise RuntimeError(
                 f"{stage_name} has a verified unchanged deterministic-failure "
@@ -1007,16 +1404,73 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 "the source, relevant code, or authorized configuration "
                 "before a new bounded campaign."
             )
+        # An authenticated code-only acoustic repair continuation retains
+        # ZERO paid provider authorization. It can perform only local
+        # slicing, video and acceptance after all old scientific/model
+        # receipts verify, and must not run even one new Gemini/TTS request.
+        enforce_offline_provider_boundary(args,stage_name)
         invalidate_from(cp, stage_name)
         save_checkpoint(checkpoint_path, cp)
         print(f"[{subchapter}] START {stage_name}", flush=True)
         try:
+            if (stage_name == "narration"
+                    and getattr(args, "standing_private_development", False)
+                    and getattr(args, "bounded_provider_scope_verified", False)
+                    and getattr(args, "stop_after", None) == "acceptance"):
+                # A prior FAILED whole-lecture stage can still hold valid,
+                # individually source/prompt/model-attested provider replies.
+                # Transfer only immutable cache records, never an old paid
+                # grant, checkpoint acceptance, or raw source content.
+                # gen_script_v13.generate_batched rehashes each complete
+                # composed request BEFORE trusting any imported response.
+                from microgen_narration_cache_recovery import (
+                    reuse_verified_narration_batches,
+                )
+                reuse = reuse_verified_narration_batches(stage)
+                print(f"[{subchapter}] source-bound narration reply recovery "
+                      f"status={reuse['status']} copied={reuse['copied']}; "
+                      "complete request SHA revalidation remains mandatory",
+                      flush=True)
+            if (getattr(args, "stop_after", None) == "acceptance"
+                    and stage_name in {"science_qa", "tts"}):
+                # A private lecture cannot be accepted with static slide
+                # narration and a fabricated cue timeline. Run the same
+                # source/PDF lexical and bounded semantic budget admission
+                # BEFORE the next billable QA or TTS request. Never silently
+                # raise the semantic limit or synthesize an ungrounded cue.
+                admission = preflight_private_timed_acceptance(stage)
+                print(f"[{subchapter}] mandatory private timed grounding "
+                      f"admitted mode={admission['mode']} "
+                      f"slides={admission['pages']}", flush=True)
+                if stage_name == "tts":
+                    # The independent acoustic gate always rejects ambiguous
+                    # raw mathematical letter names even when both ASR models
+                    # appear to agree. Catch this predictable source-only
+                    # hold BEFORE spending on another doomed TTS campaign.
+                    from microgen_reviewed_math_voice import preflight_voice_sidecar
+                    speech_evidence = preflight_voice_sidecar(
+                    stage, require_policy_binding=(args.stop_after == "acceptance"))
+                    print(f"[{subchapter}] private voice source preflight "
+                          f"passed slides={speech_evidence['slide_count']}; "
+                          "independent acoustic QA still mandatory", flush=True)
             if stage_name == "published":
                 if lease is not None:
                     lease.assert_held()
                 publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
+                if (getattr(args, "bounded_provider_scope_verified", False)
+                        and stage_name in (GEMINI_STAGES | {"tts"})):
+                    # Record the *possibility* of a billed external effect
+                    # before launching the child. A kill/crash during Send
+                    # cannot silently reset the original finite campaign.
+                    cp["inflight_provider_stage"] = {
+                        "stage": stage_name,
+                        "created_utc": utc_now(),
+                        "source_sha256": quality.sha256(stage / "source.pdf"),
+                        "runner_sha256": quality.sha256(stage / "microgen_batch.py"),
+                    }
+                    save_checkpoint(checkpoint_path, cp)
                 run_subprocess(
                     py,
                     script,
@@ -1027,9 +1481,42 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                                   (offline_mapping and stage_name == "figure_mapping")),
                     retries=args.stage_retries,
                     lease=lease,
+                    stage_name=stage_name,
+                    nonrepeatable_external_stage=bool(
+                        getattr(args, "bounded_provider_scope_verified", False)
+                        and stage_name in (GEMINI_STAGES | {"tts"})
+                        and not (offline_mapping and
+                                 stage_name == "figure_mapping")),
                 )
                 if lease is not None:
                     lease.assert_held()
+                if (stage_name == "narration"
+                        and getattr(args, "stop_after", None) == "acceptance"
+                        and getattr(args, "bounded_provider_scope_verified", False)):
+                    # Repair only a literal source/PDF-verified wrapped
+                    # title after Gemini narration succeeds. A validator
+                    # remains mandatory; this is not a waiver of its gate.
+                    from microgen_narration_title_recovery import recover_title_card
+                    title_recovery = recover_title_card(stage)
+                    print(f"[{subchapter}] source title-card postflight "
+                          f"status={title_recovery['status']}; "
+                          "independent narration gate still mandatory",
+                          flush=True)
+                    # A source/WAV-identical historical two-Gemini ASR
+                    # discrepancy can make a known unsafe *spoken* x
+                    # component clearer BEFORE fresh TTS. Never touch raw
+                    # narration, printed science or old PCM. An exact-PDF
+                    # 4-slide semantic budget and independent science/ASR
+                    # review remain mandatory; no prior QA verdict reused.
+                    from microgen_source_bound_voice_recovery import (
+                        recover_disputed_component_voice,
+                    )
+                    clarity = recover_disputed_component_voice(stage)
+                    print(f"[{subchapter}] source-bound x-component speech "
+                          f"status={clarity['status']} changed="
+                          f"{len(clarity['changed_slides'])}; "
+                          "independent acoustic QA still mandatory",
+                          flush=True)
                 if not stage_valid(stage, stage_name, dest):
                     raise RuntimeError(f"{stage_name} completed but output validation failed")
             if stage_name == "science_qa":
@@ -1042,6 +1529,48 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                 "message": str(exc),
                 "utc": utc_now(),
             }
+            # V6 finite-resource decisions are generated by the PARENT
+            # runner, not necessarily by a child traceback. Classify the
+            # exact bounded outage/uncertain external-effect rule and persist
+            # it in the already durable stage checkpoint. It is NOT an
+            # independently verified QA success or a paid retry grant.
+            if (stage / "microgen_recovery_registry_v6.json").is_file():
+                try:
+                    from microgen_recovery_registry import classify_runtime_error
+                    parent_rule = classify_runtime_error(
+                        stage_name, exc, registry_folder=stage)
+                    if parent_rule:
+                        failure["recovery_id"] = parent_rule["failure_id"]
+                        failure["recovery_disposition"] = parent_rule["disposition"]
+                        failure["recovery_registry_sha256"] = (
+                            parent_rule["registry_sha256"])
+                        failure["paid_retry_authorized"] = False
+                        failure["next_eligible_operation"] = (
+                            "ADVANCE_INDEPENDENT_AUTHORIZED_WORK"
+                            if parent_rule["disposition"] ==
+                               "PAUSED_EXTERNAL_DEPENDENCY" else
+                            "RECONCILE_UNCERTAIN_PROVIDER_EFFECT"
+                        )
+                except (OSError, ValueError, RuntimeError):
+                    failure["recovery_disposition"] = "RECOVERY_EVIDENCE_HOLD"
+            # Copy only structured, source-bound registry metadata to
+            # the checkpoint. Never copy raw Gemini transcripts or log text
+            # into generic recovery history.
+            registry_receipt = stage / ".microgen_recovery_v6.json"
+            if registry_receipt.is_file():
+                try:
+                    from microgen_recovery_registry import verified_stage_hold
+                    if verified_stage_hold(stage, stage_name):
+                        saved = json.loads(
+                            registry_receipt.read_text(encoding="utf-8"))
+                        failure["recovery_id"] = saved["decision"]["failure_id"]
+                        failure["recovery_disposition"] = "DETERMINISTIC_HOLD"
+                        failure["recovery_registry_sha256"] = (
+                            saved["decision"]["registry_sha256"])
+                        failure["next_eligible_operation"] = (
+                            saved["next_eligible_operation"])
+                except (OSError, ValueError, KeyError, RuntimeError):
+                    failure["recovery_disposition"] = "RECOVERY_EVIDENCE_HOLD"
             # Only fingerprint independently identified deterministic QA
             # rejections. An external outage is not a permanent source hold.
             if "failed with non-retryable " in str(exc):
@@ -1102,7 +1631,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--stop-after", choices=STAGES[:-1],
                     help="Stage-bounded isolated campaign: stop after this verified stage, NEVER publish to source-root.")
     ap.add_argument("--authorize-provider-usage", action="store_true",
-                    help="Explicitly allow Gemini/Cloud TTS requests in a bounded --stop-after campaign.")
+                    help="Authorize a non-standing bounded provider scope. "
+                         "Owner-approved HP single-source PRIVATE G2/TTS "
+                         "development is authorized automatically with "
+                         "finite per-commit ledger and no stage prompts.")
     ap.add_argument("--rebuild-unverified", action="store_true",
                     help="Explicitly authorize rebuilding older MP4s that lack verified receipts.")
     ap.add_argument("--multi-pc", action="store_true",
@@ -1125,6 +1657,15 @@ def main() -> int:
     args.repo = args.repo.resolve()
     args.source_root = args.source_root.resolve()
     args.work_root = args.work_root.resolve()
+    if args.stop_after == "acceptance":
+        # Private G2/G3 acceptance MUST include measured, active element
+        # highlighting. The legacy static one-WAV-per-slide mode cannot
+        # satisfy the release contract. Set before provider scope is frozen,
+        # so future checkpoint resumes cannot silently turn this back off.
+        if os.environ.get("MICROGEN_TIMED_CUES") != "1":
+            print("[batch] private acceptance requires source-grounded timed "
+                  "cues; enabling mandatory timed TTS",flush=True)
+        os.environ["MICROGEN_TIMED_CUES"] = "1"
     # Unbounded normal production eventually reaches paid Gemini/TTS stages.
     # Enforce the same explicit provider authorization already required for
     # paid --stop-after campaigns; never silently rely on stored credentials.
@@ -1148,6 +1689,41 @@ def main() -> int:
     targets = split_targets(args.targets)
     if not targets:
         raise SystemExit("No targets supplied.")
+    # Owner standing instruction (12 Nov 2026): ordinary private G2/TTS
+    # development must not pause for repeated human authorizations. This
+    # only applies to one HP-local source, acceptance/TTS endpoint, clean
+    # new campaign work root, exact source/commit, and finite zero retries.
+    # It does not cover unbounded jobs, publication, or replay of a failure.
+    args.standing_private_development = False
+    if (len(targets) == 1
+            and args.stop_after in {"tts", "acceptance"}
+            and not args.authorize_provider_usage):
+        from microgen_private_dev_policy import (
+            eligible_private_development, freeze_standing_environment,
+        )
+        if eligible_private_development(
+            repo=args.repo, source_root=args.source_root,
+            work_root=args.work_root, stop_after=args.stop_after,
+            stage_retries=0, multipart=args.multipart,
+        ):
+            args.standing_private_development = True
+            args.stage_retries = 0
+            freeze_standing_environment()
+            print("[batch] autonomous HP private development scope selected; "
+                  "Gemini 3.8 Flash-Lite/Kore primary, 3.8 Flash fallback, "
+                  "Cloud fallback last and character-budgeted; no manual "
+                  "stage approval or publication", flush=True)
+    if args.standing_private_development:
+        # The single-PC private scope was already bound to exact Git HEAD by
+        # eligible_private_development/authorize_or_resume, but the legacy
+        # runner passed --commit=unknown into every checkpoint. That mismatch
+        # silently disabled verified TTS reuse, resulting in repeated paid
+        # 21-slide synthesis after every independently failed acoustic QA.
+        # Pin the SAME verified HEAD before any provider scope or checkpoint
+        # is created; a dirty/replaced checkout must fail closed.
+        pin_standing_private_revision(args)
+        print(f"[batch] private checkout revision pinned={args.commit}",
+              flush=True)
     if args.lease_bucket:
         raise SystemExit("GCS leasing is not the selected coordination strategy; use --assignments-file")
     if args.check_assignments and not args.multi_pc:
@@ -1164,9 +1740,49 @@ def main() -> int:
             raise SystemExit("--stop-after is exclusive with --figure-extraction-only/--multi-pc")
         offline_safe = (args.offline_figure_mapping and
                         args.stop_after in {"figure_mapping", "figure_merge"})
-        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping") and
-                not args.authorize_provider_usage and not offline_safe):
-            raise SystemExit("--stop-after billable stages require --authorize-provider-usage")
+        if (STAGES.index(args.stop_after) >= STAGES.index("figure_mapping")
+                and not offline_safe):
+            # A single, previously authorized *bounded* private campaign can
+            # resume from verified checkpoints without another per-stage or
+            # per-session operator approval. The exact original source,
+            # revision, endpoint stage, model settings and retry ceiling
+            # remain frozen. Never infer new paid authorization from a prompt
+            # or silently extend a one-stage campaign to another stage.
+            if len(targets) == 1:
+                from microgen_campaign_authorization import (
+                    authorize_or_resume, BoundedCampaignAuthorizationError)
+                try:
+                    authorization = authorize_or_resume(
+                        repo=args.repo,
+                        source_root=args.source_root,
+                        work_root=args.work_root,
+                        source_file=destination_for(args.source_root, targets[0])
+                                    / "source.pdf",
+                        stop_after=args.stop_after,
+                        stage_retries=args.stage_retries,
+                        multipart=args.multipart,
+                        explicit_authorization=args.authorize_provider_usage,
+                        standing_private_development=(
+                            args.standing_private_development),
+                    )
+                except BoundedCampaignAuthorizationError as exc:
+                    raise SystemExit(str(exc)) from exc
+                args.offline_accepted_recovery_only=bool(
+                    authorization.get("offline_continuation_only",False))
+                args.offline_prior_code_revision=(
+                    authorization.get("original_code_revision")
+                    if args.offline_accepted_recovery_only else None)
+                print(f"[batch] provider-scope={authorization['status']}; "
+                      "private campaign only; no publication"
+                      +("; ALL future Gemini/TTS requests prohibited"
+                         if args.offline_accepted_recovery_only else ""),
+                      flush=True)
+                args.bounded_provider_scope_verified=(
+                    not args.offline_accepted_recovery_only)
+            elif not args.authorize_provider_usage:
+                raise SystemExit(
+                    "No standing scope for additional targets: never "
+                    "expand a paid campaign without authorization")
     if args.multi_pc and (not args.campaign_id or not args.assignments_file
                           or not args.assignments_sha256):
         raise SystemExit(
