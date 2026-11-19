@@ -355,8 +355,35 @@ def verify_reuse_receipt(stage: Path) -> dict | None:
         raise VerifiedTTSReuseError("Untrusted previously recovered audio identity")
     code=receipt.get("tts_producer_sha256")
     if (not isinstance(code,dict) or set(code)!=set(PRODUCER)
-            or any(_sha(stage/name)!=digest for name,digest in code.items())):
+            or any(not isinstance(value,str)
+                   or re.fullmatch(r"[0-9a-f]{64}",value) is None
+                   for value in code.values())):
         raise VerifiedTTSReuseError("Recovered audio synthesis policy changed")
+    changed_code=[]
+    for name,digest in code.items():
+        policy=stage/name
+        if (policy.is_symlink() or not policy.is_file()
+                or stage.resolve() not in policy.resolve().parents):
+            raise VerifiedTTSReuseError("Recovered audio synthesis policy changed")
+        if _sha(policy)!=digest:
+            changed_code.append(name)
+    if changed_code:
+        # The original campaign authorization was a TTS provenance
+        # dependency, but its later OFFLINE-ONLY code revision did not
+        # authorize another paid call. Prove this one exceptional change
+        # using the old owner's code SHA and a tightly restricted Git diff.
+        # Never edit the immutable old TTS producer hashes.
+        if changed_code!=["microgen_campaign_authorization.py"]:
+            raise VerifiedTTSReuseError("Recovered audio synthesis policy changed")
+        from microgen_post_acoustic_reuse_resume import (
+            verify_original_authorization_module_delta,
+        )
+        try:
+            verify_original_authorization_module_delta(
+                stage,code["microgen_campaign_authorization.py"])
+        except Exception as exc:
+            raise VerifiedTTSReuseError(
+                "Unverified campaign authorization policy change") from exc
     files=receipt.get("file_sha256")
     if (not isinstance(files,dict) or len(files)>MAX_FILES
             or len(files)<4):

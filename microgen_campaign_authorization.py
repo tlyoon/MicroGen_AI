@@ -119,7 +119,9 @@ def _offline_verified_acoustic_continuation(
     except (OSError,UnicodeError,ValueError):
         return None
     if (not isinstance(cp,dict) or
-            cp.get("package_commit")!=old_scope.get("code_revision")):
+            cp.get("package_commit") not in (
+                old_scope.get("code_revision"),
+                proposed_scope.get("code_revision"))):
         return None
     from microgen_post_acoustic_reuse_resume import (
         reconcile_verified_audio_receipt,
@@ -137,6 +139,7 @@ def _offline_verified_acoustic_continuation(
         "publication_authorized":False,
         "stage_retries":stage_retries,
         "offline_continuation_only":True,
+        "original_code_revision":old_scope["code_revision"],
         "source_reuse_receipt_sha256":
             verified["source_accepted_reuse_receipt_sha256"],
         "independent_acoustic_receipt_sha256":

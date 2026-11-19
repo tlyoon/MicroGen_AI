@@ -1167,8 +1167,9 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     # reconciliation. prepare_stage legitimately updates package_commit;
     # comparing its new value with itself would hide an unsafe code delta.
     prior_checkpoint=args.work_root/subchapter/".microgen_checkpoint.json"
-    prior_commit=(load_checkpoint(prior_checkpoint).get("package_commit")
-                  if prior_checkpoint.is_file() else None)
+    prior_commit=(getattr(args,"offline_prior_code_revision",None)
+                  or (load_checkpoint(prior_checkpoint).get("package_commit")
+                      if prior_checkpoint.is_file() else None))
     stage, cp, checkpoint_path = prepare_stage(
         args.repo,
         args.source_root,
@@ -1768,6 +1769,9 @@ def main() -> int:
                     raise SystemExit(str(exc)) from exc
                 args.offline_accepted_recovery_only=bool(
                     authorization.get("offline_continuation_only",False))
+                args.offline_prior_code_revision=(
+                    authorization.get("original_code_revision")
+                    if args.offline_accepted_recovery_only else None)
                 print(f"[batch] provider-scope={authorization['status']}; "
                       "private campaign only; no publication"
                       +("; ALL future Gemini/TTS requests prohibited"

@@ -31,8 +31,16 @@ def genuine_accepted_hp_stage(monkeypatch):
     if not cp_path.is_file():
         pytest.skip("Private real HP G3 source unavailable")
     cp=json.loads(cp_path.read_text(encoding="utf8"))
-    if cp.get("package_commit")!=RELEASE:
-        pytest.skip("Historical pre-migration checkpoint already advanced")
+    import subprocess
+    repo=root/"G2_SERWAY24_RC_CODE_20261107"
+    if subprocess.check_output(["git","status","--porcelain"],
+                               cwd=repo,text=True).strip():
+        pytest.skip("Require frozen committed code to attest historic receipt")
+    # Earlier failed restart wrote a later commit into this still-held
+    # checkpoint. Reconcile against the independently frozen OWNER grant,
+    # never assume package_commit remained at the old synthesis revision.
+    if cp.get("last_error",{}).get("type")!="VerifiedTTSReuseError":
+        pytest.skip("Historical acoustic replay already closed")
     assert cp["completed"]["acoustic_qa"]
     monkeypatch.setenv("MICROGEN_TIMED_CUES","1")
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST","1")
@@ -175,3 +183,99 @@ def test_offline_continuation_permits_only_local_stages(stage_name):
     from microgen_batch import enforce_offline_provider_boundary
     assert enforce_offline_provider_boundary(
         SimpleNamespace(offline_accepted_recovery_only=True),stage_name) is None
+
+
+def test_authorization_policy_old_sha_and_limited_diff_are_required(
+        tmp_path,monkeypatch):
+    import hashlib
+    import shutil
+    import subprocess
+    import socket
+    from microgen_post_acoustic_reuse_resume import (
+        verify_original_authorization_module_delta,PostAcousticResumeError,
+    )
+    repo=Path(__file__).resolve().parents[1]
+    head=subprocess.check_output(
+        ["git","rev-parse","HEAD"],cwd=repo,text=True).strip()
+    root=tmp_path/"only-private"
+    stage=root/"2.7"
+    stage.mkdir(parents=True)
+    (stage/"source.pdf").write_bytes(b"synthetic, not a lecture source")
+    (stage/"microgen_campaign_authorization.py").write_bytes(
+        (repo/"microgen_campaign_authorization.py").read_bytes())
+    original=b"historical authenticated policy"
+    old_sha=hashlib.sha256(original).hexdigest()
+    old_commit="b"*40
+    scope={
+        "repo":str(repo),"work_root":str(root),
+        "source":str(stage/"source.pdf"),
+        "source_sha256":hashlib.sha256(
+            (stage/"source.pdf").read_bytes()).hexdigest(),
+        "code_revision":old_commit,"host":"hp",
+        "stop_after":"acceptance",
+    }
+    (root/".microgen_bounded_provider_authorization.json").write_text(
+        json.dumps({"schema_version":1,"publication_authorized":False,
+                    "scope":scope}),encoding="utf8")
+    cp={
+        "package_commit":head,
+        "inflight_provider_stage":{"stage":"acoustic_qa"},
+        "last_error":{"stage":"acoustic_qa",
+                      "type":"VerifiedTTSReuseError",
+                      "message":"Recovered WAV or cache integrity drift"},
+    }
+    (stage/".microgen_checkpoint.json").write_text(json.dumps(cp))
+    monkeypatch.setattr(socket,"gethostname",lambda:"hp")
+    changed=[
+        "microgen_campaign_authorization.py",
+        "microgen_verified_tts_reuse.py",
+        "microgen_batch.py",
+    ]
+    proof=verify_original_authorization_module_delta(
+        stage,old_sha,git_runner=lambda old,new,file:(original,changed))
+    assert proof["historical_authorization_sha256"]==old_sha
+    assert proof["no_provider_scope_inherited"] is True
+    for bad_blob,bad_changes in (
+        (b"forged-old-origin",changed),
+        (original,changed+["microgen_flash_tts.py"]),
+        (original,changed+["gen_script_v13.py"]),
+        (original,changed+["microgen_batch.py"]),
+        (original,["microgen_verified_tts_reuse.py"]),
+    ):
+        with pytest.raises(PostAcousticResumeError):
+            verify_original_authorization_module_delta(
+                stage,old_sha,
+                git_runner=lambda old,new,file,b=bad_blob,c=bad_changes:(b,c))
+    fake=dict(scope,source_sha256="0"*64)
+    grant=json.loads((root/".microgen_bounded_provider_authorization.json"
+                     ).read_text())
+    grant["scope"]=fake
+    (root/".microgen_bounded_provider_authorization.json").write_text(
+        json.dumps(grant))
+    with pytest.raises(PostAcousticResumeError):
+        verify_original_authorization_module_delta(
+            stage,old_sha,git_runner=lambda *_:(original,changed))
+
+
+def test_original_upstream_source_receipt_survives_only_verified_runner_migration(
+        genuine_accepted_hp_stage,monkeypatch):
+    from microgen_verified_upstream_reuse import (
+        verify_import_receipt, UpstreamReuseError,
+    )
+    import microgen_verified_upstream_reuse as up
+    repo,stage,cp,dest=genuine_accepted_hp_stage
+    import_receipt=verify_import_receipt(stage)
+    assert import_receipt["source_pdf_sha256"]
+    assert import_receipt["stages"]==[
+        "figure_extraction","figure_mapping","figure_merge","slides"]
+    before=(stage/".microgen_verified_upstream_import.json").read_bytes()
+    original=up._read_json
+    def forged(path):
+        result=original(path)
+        if Path(path).name==".microgen_verified_upstream_import.json":
+            result=dict(result,current_code_revision="a"*40)
+        return result
+    monkeypatch.setattr(up,"_read_json",forged)
+    with pytest.raises(UpstreamReuseError,match="Unverified source/runner"):
+        verify_import_receipt(stage)
+    assert (stage/".microgen_verified_upstream_import.json").read_bytes()==before

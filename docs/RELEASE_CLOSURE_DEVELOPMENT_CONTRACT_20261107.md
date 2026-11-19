@@ -59,6 +59,36 @@ must reject any new Gemini/TTS/science/acoustic provider stage in this
 mode, and may advance only to local video and private acceptance.
 Unknown scope or scientific code changes remain mandatory stops.
 
+**19 November 2026 historic producer-source reconciliation:** If an already
+accepted source-bound acoustic repair is stranded because the original
+TTS-reuse receipt includes the now-amended campaign-authorization module,
+verify the immutable old authorization-module SHA against the original Git
+blob and the original HP paid grant. Verify that the intermediate and
+current code revisions form a trusted ancestry and only preapproved
+offline recovery code changed. All eleven other TTS producer modules,
+original source and math policy, narration, TTS provenance, timed PCM,
+independent two-Gemini acoustic acceptance and paid-call journal retain
+their original strict validation. Never rewrite the original source/PCM/
+provider receipt to fit a new checkpoint; this verifier-only transition
+must resume the existing offline-only video/acceptance pipeline without
+reissuing a provider request. The original paid code SHA must be read
+from the unchanged owner grant even if an earlier aborted restart has
+updated checkpoint.package_commit.
+
+**19 November 2026 source-import follow-through:** The original
+source/slide/narration import receipt is itself pinned to the first paid
+runner revision. A later verifier-only code change cannot replace or
+delete this receipt. The normal upstream importer must continue to
+verify the exact original PDF, slides, narration cache, figure and
+kinematics-science provenance. It may recognize a newer *offline-only*
+checkpoint exclusively after the source-bound original owner grant,
+historical Git ancestry and allowed verifier-only diff, old TTS producer
+hashes, repaired timed PCM and two independently accepted Gemini
+acoustic reviews all pass. An arbitrary changed runner or any source,
+mathematical, model, voice or PCM mismatch remains a hard hold. The
+original receipts are immutable; successful verification automatically
+continues local video and private acceptance without any paid replay.
+
 ## 1. Authority, precedence, and objective
 
 This is the **controlling forward-development and closure procedure** for

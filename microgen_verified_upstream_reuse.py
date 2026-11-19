@@ -164,7 +164,38 @@ def verify_import_receipt(stage: Path, *, require_cache: bool = True) -> dict | 
     cp=_read_json(stage/".microgen_checkpoint.json")
     if cp is not None and cp.get("package_commit") != data.get(
             "current_code_revision"):
-        raise UpstreamReuseError("Current runner revision differs from import")
+        # An accepted single-cue TTS/acoustic repair may outlive one or
+        # more strictly verifier-only runner commits. The imported upstream
+        # receipt remains an immutable SOURCE and slide/narration witness.
+        # Reconcile only after attesting the *original* runner against the
+        # immutable HP provider grant, original source, actual Git ancestry
+        # and the same tightly restricted code delta used by the TTS gate.
+        # This is NOT a general relaxation of source-import code checks.
+        from microgen_post_acoustic_reuse_resume import (
+            verify_original_authorization_module_delta,
+        )
+        from microgen_verified_tts_reuse import (
+            verify_reuse_receipt, RECEIPT as TTS_REUSE_RECEIPT,
+        )
+        prior=_read_json(stage/TTS_REUSE_RECEIPT)
+        original_sha=(prior.get("tts_producer_sha256",{})
+                      .get("microgen_campaign_authorization.py")
+                      if isinstance(prior,dict) else None)
+        if (not isinstance(original_sha,str)
+                or not re.fullmatch(r"[0-9a-f]{64}",original_sha)):
+            raise UpstreamReuseError("Historical TTS code identity missing")
+        try:
+            proof=verify_original_authorization_module_delta(
+                stage,original_sha)
+            attested=verify_reuse_receipt(stage)
+        except Exception as exc:
+            raise UpstreamReuseError(
+                "Current runner revision differs from import") from exc
+        if (proof["old_commit"]!=data["current_code_revision"]
+                or not isinstance(attested,dict)
+                or attested.get("status")!=
+                   "SOURCE_BOUND_PCM_RECONCILED_WITH_ACCEPTED_ONE_CUE_REPAIR"):
+            raise UpstreamReuseError("Unverified source/runner transition")
     return {"receipt_sha256":_sha(path),
             "source_pdf_sha256":data["source_pdf_sha256"],
             "stages":data["stages"]}

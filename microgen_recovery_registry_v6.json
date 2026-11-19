@@ -3,6 +3,36 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261119-SOURCE-UPSTREAM-RUNNER-CHECKPOINT-MIGRATION",
+      "classification": "orchestration",
+      "stages": ["science_qa", "tts", "acoustic_qa", "video", "acceptance"],
+      "exception": "UpstreamReuseError",
+      "message_marker": "Current runner revision differs from import",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_verified_upstream_reuse.verify_import_receipt",
+      "preconditions": "An original source/slide/narration upstream-import receipt pins the original source-runner code revision. A genuine independently accepted source-math cue TTS/acoustic recovery and a sequence of offline-only verified code amendments have advanced the checkpoint revision without changing the source or paid synthesis.",
+      "verification": "Keep the import receipt and provider grant immutable; prove current source and slide hashes, caption/vector, kinematics graph and original narration cache; retrieve original authorization module SHA from the original TTS-reuse receipt and prove old Git blob against the original private grant and clean ancestral verifier-only Git diff; require accepted SHA-bound two-Gemini acoustic repair and exactly five source-timed PCM changes. Check that original imported code revision equals the grant's real old code, not an arbitrary new version. No additional paid requests or source regeneration, no publication.",
+      "historical_evidence": "19 Nov 2026 HP real Serway section 2.7: original imported upstream receipt FOUR_UPSTREAM_SOURCE_BOUND_STAGES_REVERIFIED_VOICE_REBUILD pinned bcf192d; a prior failed verifier restart already advanced checkpoint.package_commit to 6fb7718, and the next limited verifier commit 685165d was denied by UpstreamReuseError. The source/PCM and independently accepted acoustic result remained authentic. New mutation limited to upstream-import verifier, recovery whitelist and regression tests.",
+      "last_validated": "2026-11-19",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
+      "id": "MGA-20261119-HISTORIC-AUTHORIZATION-PRODUCER-SHA",
+      "classification": "orchestration",
+      "stages": ["acoustic_qa", "video", "acceptance"],
+      "exception": "VerifiedTTSReuseError",
+      "message_marker": "Recovered audio synthesis policy changed",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_post_acoustic_reuse_resume.verify_original_authorization_module_delta",
+      "preconditions": "The original source- and voice-bound TTS receipt records the genuine earlier Git SHA of microgen_campaign_authorization.py, and a later code-only provider authorization gate changed that one file while the other eleven TTS producer hashes and all scientific/voice inputs remained unchanged.",
+      "verification": "Verify the original receipt's authorization producer SHA against the actual original Git blob, original owner grant and source, authenticated checkpoint, staged module matching the intermediate checkpoint commit, and a clean descendant HEAD with only explicitly approved recovery/authorization/testing changes. Do not update the immutable TTS receipt, silently accept any other changed producer, bypass genuine independent acoustic review, reset paid provider budgets or start a paid request. End-to-end old-Git/SHA replay plus changed-voice/source/producer/unexpected code/fake grant faults required before normal offline-only campaign restart.",
+      "historical_evidence": "19 November 2026 HP G3 Serway 2.7: after source-bound slide-5 s5_e2 Gemini TTS and two independent Gemini ASR passes, verified TTS-reuse SHA reconciliation and offline-only provider authorization, the next restart failed with Recovered audio synthesis policy changed because microgen_campaign_authorization.py was still tracked in the old TTS-reuse producer SHA inventory. Old Git bcf192d blob matches unchanged original receipt exactly. New code is only an offline-only provider authorization transition, not a new TTS or speech-generation source.",
+      "last_validated": "2026-11-19",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261118-OFFLINE-ACCEPTED-ACOUSTIC-CODE-REVISION",
       "classification": "orchestration",
       "stages": ["acoustic_qa", "video", "acceptance"],
