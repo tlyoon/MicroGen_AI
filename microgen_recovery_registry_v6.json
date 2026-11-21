@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261122-NORMAL-PIPELINE-VECTOR-MAPPER-AUTOROUTE",
+      "classification": "orchestration",
+      "stages": ["figure_mapping", "slides"],
+      "exception": "OfflineFigureMapError",
+      "message_marker": "Vector-only source: raster mapping is inapplicable",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_batch.select_figure_mapping_command",
+      "preconditions": "Source extraction is complete; PDF pages contain original vector graph drawings and original Docling crops but no embedded raster images. The full bounded acceptance path would otherwise select Gemini raster mapper despite a verified offline vector recovery.",
+      "verification": "At normal production figure_mapping stage inspect immutable source-page/crop evidence. Select microgen_offline_pdf_figure_map.py locally, never create inflight Gemini request, and allow stage completion only with independent source-pixel/caption/composition receipts. Before paid slides recheck formal caption count/page provenance against all verified private vector images. Preserve old Gemini mapping for PDFs with embedded raster images. Fault inject missing caption, tampered image, incomplete extraction; never waive academic QA or provider authorization.",
+      "historical_evidence": "On actual HP Thomas 13e section 2.5 source SHA dbc34b5de194c3eedcfc686dfabacc903cc45d858b7a5240912a358d2f2f384b, 11 PDF pages had zero embedded raster objects, vector drawings and 20 source extraction crops. A standalone offline campaign had already successfully mapped and merged 15 figures, but normal acceptance command was still hard-wired to map_and_rename_v5.py and could duplicate paid provider mapping or fail.",
+      "last_validated": "2026-11-22",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261121-THOMAS-SOURCE-INTAKE-VECTOR-COVERAGE",
       "classification": "data",
       "stages": ["figure_mapping", "slides"],
