@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261122-FORMAL-FIGURE-AUDIT-SOURCE-REFERENCES",
+      "classification": "data",
+      "stages": ["slides", "science_qa", "acceptance"],
+      "exception": "FigureCoverageError",
+      "message_marker": "Formally captioned source figures disagree with vector mapping",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_figure_coverage.build_current_figure_coverage",
+      "preconditions": "Textbook body references to figures in other chapters or lettered panels are listed as source_labels_unmapped even when all formally captioned source figures have already been independently source-/code-/pixel-verified in a private vector figure composition.",
+      "verification": "When exact source-vector mapping exists, recompute original styled formal captions and their pages, independently verify the SHA-/code-bound technical mapping and exact mapped rows, and require all identities/pages/counts to agree. Report noncaption prose/letter-panel mentions as advisory only. Keep older conservative unmapped-reference report where no exact technical vector mapping exists. Fault-inject wrong mapping count, wrong page and tampered original technical receipt; fail closed before writing an academic coverage report. Require figure_semantics_verified=false and publication_allowed=false.",
+      "historical_evidence": "22 Nov 2026 HP Thomas 13e 2.5: old figure coverage audit found 15 valid mapped source vector figures, 7 slide image references but incorrectly labeled 1.10 and 2.40a-f as seven missing source figures. Independent source/page/crop verification correctly confirms 15 formal FIGURE 2.34-2.48 captions mapped and zero missing, preserves seven prose/panel references as advisory, 20 Docling provisional crops as unassigned, and academic approval false. Focused 12 tests incl wrong-page/count and tampered-receipt fault injection passed.",
+      "last_validated": "2026-11-22",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261122-VECTOR-PANEL-LABEL-WHITE-EDGE-OMISSION",
       "classification": "data",
       "stages": ["figure_mapping", "figure_merge", "slides"],

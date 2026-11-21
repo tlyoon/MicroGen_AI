@@ -86,7 +86,40 @@ def build_current_figure_coverage(stage,output):
         if Path(filename).name.casefold()!=mapped[figure]["filename"].casefold():
             raise FigureCoverageError("Generated TeX image does not match immutable mapping")
         referenced.append(figure)
-    missed=sorted({x["label"] for x in source_labels}-set(mapped))
+    # Prose mentions (including references to figures from another chapter
+    # and lettered subpanels) are NOT evidence of absent formally captioned
+    # figures. The technical source-vector mapper can provide a stronger,
+    # independently source/PDF/PNG/code-pinned caption inventory.
+    unmapped_mentions=sorted({x["label"] for x in source_labels}-set(mapped))
+    vector_map=s/".microgen_vector_source_mapping.json"
+    vector_caption_coverage_verified=False
+    if vector_map.exists() or vector_map.is_symlink():
+        from microgen_source_pdf_intake import _formal_source_figure_labels
+        from microgen_vector_technical_mapping import verify_vector_technical_mapping
+        try:
+            proof=verify_vector_technical_mapping(s)
+            original=[(r["label"],r["source_page"])
+                      for r in _formal_source_figure_labels(source)]
+        except (ValueError,KeyError,TypeError,OSError,RuntimeError) as exc:
+            raise FigureCoverageError(
+                "Source-vector formal caption proof missing or tampered") from exc
+        mapped_pages=[(r["figure"],r["source_page"]) for r in mapped.values()]
+        technical_pages=[(r["label"],r["source_page"])
+                         for r in proof.get("figures", [])] if proof else []
+        if (proof is None or not original
+            or len(original)!=len(mapped_pages)
+            or sorted(original)!=sorted(mapped_pages)
+            or sorted(technical_pages)!=sorted(mapped_pages)
+            or proof.get("figure_count")!=len(mapped_pages)
+            or proof.get("publication_allowed") is not False):
+            raise FigureCoverageError(
+                "Formally captioned source figures disagree with vector mapping")
+        missed=[]
+        vector_caption_coverage_verified=True
+    else:
+        # Legacy raster/unspecialized sources retain the conservative
+        # reference-mention advisory, never claiming complete caption QA.
+        missed=unmapped_mentions
     seen_crops={(x["source_page"],f["filename"]) for x in receipt["figures"]
                 for f in x.get("source_crops",[])
                 if f["filename"].startswith("fig_")}
@@ -141,6 +174,10 @@ def build_current_figure_coverage(stage,output):
                   "mapped_count":len(mapped),"slide_figure_refs":references,
                   "figure_refs_count":len(references),
                   "source_labels_unmapped":missed,
+                  "unmapped_prose_or_panel_mentions_advisory":unmapped_mentions,
+                  "recognized_vector_formal_caption_mapping_verified":
+                      vector_caption_coverage_verified,
+                  "source_figure_reference_coverage_academically_verified":False,
                   "docling_crops_unassigned":unlabeled,
                   "figure_semantics_verified":False,
                   "figure_audio_alignment_verified":False,
