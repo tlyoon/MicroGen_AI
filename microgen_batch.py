@@ -397,6 +397,8 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
                 verify_lateral_figure_receipt,
             )
             verify_lateral_figure_receipt(stage)
+            from microgen_vector_technical_mapping import verify_vector_technical_mapping
+            verify_vector_technical_mapping(stage)
             return True
         except (OSError, ValueError, RuntimeError):
             return False

@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261121-THOMAS-VECTOR-MAPPING-TAMPER-HOLD",
+      "classification": "data",
+      "stages": ["figure_mapping", "figure_merge"],
+      "exception": "OfflineFigureMapError",
+      "message_marker": "previous technical mapping failed source-bound verification",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_vector_technical_mapping.verify_vector_technical_mapping",
+      "preconditions": "An existing source-vector composition, PNG candidate, QA screen, source PDF or code revision fails immutable source-pixel, caption, hash or receipt verification.",
+      "verification": "Do not overwrite any source or publication target. Check source SHA, code-pinned proposal and QA receipts, original PDF rendering pixel equality for every figure, composed-stage hashes and restart receipt. Quarantine mismatch and do not repeat an uncertain paid request; verify fault-injected PNG, source or journal tampering causes a deterministic hold. Resume only after independent source-correct reconciliation.",
+      "historical_evidence": "HP Thomas 2.5 actual source and synthetic production-path tests with changed source candidate, forged overlapping caption, broken technical receipt, corrupted composed image and partial promotion before restart.",
+      "last_validated": "2026-11-21",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261121-THOMAS-VECTOR-RASTER-MAPPER-MISMATCH",
       "classification": "data",
       "stages": ["figure_mapping"],
@@ -11,8 +26,8 @@
       "disposition": "DETERMINISTIC_HOLD",
       "handler": "microgen_offline_pdf_figure_map.map_source_figures",
       "preconditions": "Source PDF page has vector drawing paths and Docling figure crops but no embedded raster image objects. Existing two-raster mapper is inapplicable.",
-      "verification": "On actual Thomas 2.5 preserve source SHA, collect source-page/caption/crop hashes and duplicate caption numbers into immutable or content-addressed successor offline_vector_mapping_blocker*.json; create separately hashed private vector-source region proposals and run immutable offline boundary/text-intrusion QA screen; hold any flagged figure for independent review, without mapping or academic approval; refuse unsafe figure acceptance and publication. Verify synthetic duplicate-caption, prose-reference and overwrite fault cases and original raster mapper regression. Advance only after a separately tested source-grounded vector-region mapper exists.",
-      "historical_evidence": "2026-11-21 HP Thomas 13e Section 2.5 11-page original source: 20 extracted crops with zero embedded rasters; 15 uppercase formal figure labels; two title-case prose references were initially misread by the permissive diagnostic and then excluded by a real-source regression. Real entrypoint emits bounded safe hold and 15 code-hashed source-vector PNG region proposals for the 15 formal captions without modifying the PDF, calling providers, accepting figure semantics, or allowing publication. Offline QA on actual source initially flagged figures 2.40, 2.41, 2.44, 2.47 for edge-ink boundary review. A source-bound adaptive sidebar right-padding repair safely removed 2.44 from the screen without introducing new flags, leaving 2.40, 2.41 and 2.47. No accepted mapping.",
+      "verification": "On actual Thomas 2.5 preserve source SHA, collect immutable source/crop hashes; generate code-bound vector proposals; run independent structural QA. When all source pixels, caption spans, panel bounds and 15 unique labels pass, create only a restart-safe technical figure composition in the private stage, then dispatch bounded figure_merge, leaving scientific_qa_accepted=false and publication_allowed=false. If any source/PNG/caption/receipt changes, deterministic HOLD without overwrite or API replay. Test actual source and crash-restart, duplicates, provenance tampering and both original raster and vector regressions.",
+      "historical_evidence": "2026-11-21 HP Thomas 13e 2.5: 11 vector-only source pages, 20 legacy crops, 15 formal FIGURE labels. Corrected math-inflated caption bounds, left/right/bottom source-pixel clipping, independent intrusion QA; all 15 private source-region proposals passed structural screen. Replayed real PDF SHA dbc34b5de194c3eedcfc686dfabacc903cc45d858b7a5240912a358d2f2f384b without modification; 15/15 source-rendered figures promoted to a private technical composition with scientific_qa_accepted=false, publication_allowed=false, no provider calls. Actual technical stage valid. Historical real Figure 2.40, 2.41 and 2.47 edge truncation risks closed by precise styled caption span detection plus measured padding.",
       "last_validated": "2026-11-21",
       "max_unmodified_retries": 0,
       "publication_allowed": false

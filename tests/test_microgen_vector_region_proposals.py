@@ -77,7 +77,7 @@ def test_noncolored_figure_is_explicitly_blocked(tmp_path):
     assert receipt["proposals"] == []
     assert receipt["mapping_accepted"] is False
 
-def test_production_offline_mapper_emits_candidates_but_never_accepts(monkeypatch, tmp_path):
+def test_production_offline_mapper_promotes_only_verified_private_technical_mapping(monkeypatch, tmp_path):
     import microgen_offline_pdf_figure_map as mapper
     stage = _source(tmp_path)
     page = stage / "pages" / "page_1"
@@ -88,20 +88,25 @@ def test_production_offline_mapper_emits_candidates_but_never_accepts(monkeypatc
     monkeypatch.setattr(mapper, "source_page_extraction_valid", lambda _: True)
     before = sha256(stage / "source.pdf")
     for _ in range(2):
-        with pytest.raises(mapper.OfflineFigureMapError, match="Vector-only source"):
-            mapper.map_source_figures(stage)
+        outcome = mapper.map_source_figures(stage)
+        assert outcome["source_geometry_mapping_verified"] is True
+        assert outcome["scientific_qa_accepted"] is False
+        assert outcome["publication_allowed"] is False
     assert (stage / PROPOSAL_DIR / "Figure 2.34.png").is_file()
     from microgen_vector_proposal_qa import QA_RECEIPT
     qa = json.loads((stage / QA_RECEIPT).read_text("utf-8"))
     assert qa["mapping_accepted"] is False
     assert qa["scientific_qa_accepted"] is False
     assert qa["publication_allowed"] is False
-    assert not (stage / "figure_composition_receipt.json").exists()
-    assert not (stage / "Figure 2.34.png").exists()
+    assert (stage / "figure_composition_receipt.json").is_file()
+    assert (stage / "Figure 2.34.png").is_file()
+    from microgen_batch import stage_valid
+    assert stage_valid(stage, "figure_mapping", stage.parent) is True
     assert sha256(stage / "source.pdf") == before
     (stage / PROPOSAL_DIR / "Figure 2.34.png").write_bytes(b"tampered")
-    with pytest.raises(mapper.OfflineFigureMapError, match="requires reconciliation"):
+    with pytest.raises(mapper.OfflineFigureMapError, match="failed source-bound verification"):
         mapper.map_source_figures(stage)
+    assert stage_valid(stage, "figure_mapping", stage.parent) is False
 
 def test_sidebar_right_edge_adapts_only_when_ink_touches(tmp_path):
     pdf = fitz.open()

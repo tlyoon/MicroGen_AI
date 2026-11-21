@@ -114,8 +114,34 @@ def map_source_figures(stage: Path) -> dict:
     if not source_page_extraction_valid(folder):
         raise OfflineFigureMapError("Incomplete original source/Docling evidence")
     pages_root = folder / "pages"
-    if ((pages_root / "figure_composition_receipt.json").exists() or
-            (folder / "figure_composition_receipt.json").exists()):
+    from microgen_vector_technical_mapping import (
+        RECEIPT_NAME as VECTOR_RECEIPT, STAGING as VECTOR_STAGING,
+        promote_vector_technical_mapping, verify_vector_technical_mapping,
+        VectorMappingError,
+    )
+    has_composed = ((pages_root / "figure_composition_receipt.json").exists() or
+                    (folder / "figure_composition_receipt.json").exists())
+    if has_composed:
+        if (folder / VECTOR_RECEIPT).exists() or (folder / VECTOR_STAGING).exists():
+            # Exact-source idempotent completion or crash reconciliation;
+            # never trust a previously composed image without a verified
+            # vector receipt and matched source geometry.
+            from microgen_vector_proposal_qa import VectorScreenError
+            from microgen_vector_region_proposals import VectorProposalError
+            try:
+                proof = (verify_vector_technical_mapping(folder)
+                         if (folder / VECTOR_RECEIPT).exists()
+                         else promote_vector_technical_mapping(folder))
+            except (VectorScreenError, VectorProposalError, VectorMappingError) as exc:
+                raise OfflineFigureMapError(
+                    "Vector-only source: raster mapping is inapplicable; "
+                    "previous technical mapping failed source-bound verification") from exc
+            return {
+                "status": "SOURCE_VECTOR_TECHNICAL_MAPPING_PENDING_SCIENCE_QA",
+                "figure_label": f"{proof['figure_count']} source-vector figures",
+                "source_geometry_mapping_verified": True,
+                "scientific_qa_accepted": False, "publication_allowed": False,
+            }
         raise OfflineFigureMapError("Existing mapped evidence must not be overwritten")
     extraction = json.loads((folder / "figure_extraction_receipt.json").read_text("utf-8"))
     source_sha = sha256(folder / "source.pdf")
@@ -138,9 +164,24 @@ def map_source_figures(stage: Path) -> dict:
                         )
                         record_vector_blocker(folder)
                         try:
+                            # Do not promote a partly-vector, partly-raster
+                            # document using this source-vector-only recovery.
+                            if any(pg.get_images(full=True) for pg in pdf):
+                                raise OfflineFigureMapError(
+                                    "Mixed raster/vector PDF requires separate source mapping")
                             propose_regions(folder)
-                            screen_vector_proposals(folder)
-                        except (VectorProposalError, VectorScreenError) as exc:
+                            structural = screen_vector_proposals(folder)
+                            if structural["structural_screen_passed"]:
+                                proof = promote_vector_technical_mapping(folder)
+                                return {
+                                    "status": "SOURCE_VECTOR_TECHNICAL_MAPPING_PENDING_SCIENCE_QA",
+                                    "figure_label": f"{proof['figure_count']} source-vector figures",
+                                    "source_geometry_mapping_verified": True,
+                                    "scientific_qa_accepted": False,
+                                    "publication_allowed": False,
+                                }
+                        except (VectorProposalError, VectorScreenError,
+                                VectorMappingError) as exc:
                             raise OfflineFigureMapError(
                                 "Vector-only source: raster mapping is inapplicable; "
                                 "unsafe candidate transaction requires reconciliation, "
