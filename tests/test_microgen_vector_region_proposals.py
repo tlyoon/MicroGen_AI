@@ -91,6 +91,11 @@ def test_production_offline_mapper_emits_candidates_but_never_accepts(monkeypatc
         with pytest.raises(mapper.OfflineFigureMapError, match="Vector-only source"):
             mapper.map_source_figures(stage)
     assert (stage / PROPOSAL_DIR / "Figure 2.34.png").is_file()
+    from microgen_vector_proposal_qa import QA_RECEIPT
+    qa = json.loads((stage / QA_RECEIPT).read_text("utf-8"))
+    assert qa["mapping_accepted"] is False
+    assert qa["scientific_qa_accepted"] is False
+    assert qa["publication_allowed"] is False
     assert not (stage / "figure_composition_receipt.json").exists()
     assert not (stage / "Figure 2.34.png").exists()
     assert sha256(stage / "source.pdf") == before

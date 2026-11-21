@@ -133,17 +133,21 @@ def map_source_figures(stage: Path) -> dict:
                         from microgen_vector_region_proposals import (
                             propose_regions, VectorProposalError,
                         )
+                        from microgen_vector_proposal_qa import (
+                            screen_vector_proposals, VectorScreenError,
+                        )
                         record_vector_blocker(folder)
                         try:
                             propose_regions(folder)
-                        except VectorProposalError as exc:
+                            screen_vector_proposals(folder)
+                        except (VectorProposalError, VectorScreenError) as exc:
                             raise OfflineFigureMapError(
                                 "Vector-only source: raster mapping is inapplicable; "
                                 "unsafe candidate transaction requires reconciliation, "
                                 "no mapping accepted") from exc
                         raise OfflineFigureMapError(
                             "Vector-only source: raster mapping is inapplicable; "
-                            "source-hashed diagnostic and private vector proposals saved, "
+                            "source-hashed diagnostic, private vector proposals and QA screen saved, "
                             "no figures accepted")
                     raise OfflineFigureMapError("Unexpected unmatched source images/crops")
                 crop_pages.append((n, crops, page.number))
