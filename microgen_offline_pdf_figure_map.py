@@ -130,9 +130,7 @@ def map_source_figures(stage: Path) -> dict:
                 if not (len(crops) == len(images) == 2):
                     if crops and not images and page.get_drawings():
                         from microgen_vector_source_evidence import record_vector_blocker
-                        evidence = folder / "offline_vector_mapping_blocker.json"
-                        if not evidence.exists():
-                            record_vector_blocker(folder)
+                        record_vector_blocker(folder)
                         raise OfflineFigureMapError(
                             "Vector-only source: raster mapping is inapplicable; "
                             "source-hashed diagnostic saved, no figures accepted")

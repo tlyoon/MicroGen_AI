@@ -30,8 +30,8 @@ def test_vector_source_evidence_is_diagnostic_not_approval(tmp_path):
     target = record_vector_blocker(stage)
     assert json.loads(target.read_text())["source_pdf_sha256"] == receipt["source_pdf_sha256"]
     assert (stage / "source.pdf").read_bytes() == original
-    with pytest.raises(FileExistsError):
-        record_vector_blocker(stage)
+    assert record_vector_blocker(stage) == target
+    assert sorted(stage.glob("offline_vector_mapping_blocker*.json")) == [target]
 
 def test_duplicate_caption_numbers_fail_closed(tmp_path):
     stage = _vector_stage(tmp_path)
@@ -51,8 +51,8 @@ def test_duplicate_caption_numbers_fail_closed(tmp_path):
 def test_prose_reference_is_not_formal_caption(tmp_path):
     stage = _vector_stage(tmp_path, caption="Figure 2.34 is discussed here.")
     receipt = inspect_vector_source(stage)
-    assert receipt["formal_caption_count"] == 1
-    # Caption token at start is necessary; interior references are not captions.
+    assert receipt["formal_caption_count"] == 0
+    # Only formal uppercase labels count; narrative references are not captions.
     with fitz.open(stage / "source.pdf") as old:
         doc = fitz.open()
         doc.insert_pdf(old)
@@ -62,4 +62,22 @@ def test_prose_reference_is_not_formal_caption(tmp_path):
         doc.close()
     (stage / "source.pdf").unlink()
     (stage / "modified.pdf").rename(stage / "source.pdf")
-    assert inspect_vector_source(stage)["formal_caption_count"] == 1
+    assert inspect_vector_source(stage)["formal_caption_count"] == 0
+
+def test_changed_source_creates_versioned_receipt_without_overwrite(tmp_path):
+    stage = _vector_stage(tmp_path)
+    original_path = record_vector_blocker(stage)
+    original_bytes = original_path.read_bytes()
+    with fitz.open(stage / "source.pdf") as old:
+        doc = fitz.open()
+        doc.insert_pdf(old)
+        doc[0].insert_text((30, 160), "FIGURE 2.35 another graph")
+        doc.save(stage / "changed.pdf")
+        doc.close()
+    (stage / "source.pdf").unlink()
+    (stage / "changed.pdf").rename(stage / "source.pdf")
+    successor = record_vector_blocker(stage)
+    assert successor != original_path
+    assert original_path.read_bytes() == original_bytes
+    assert json.loads(successor.read_text())["formal_caption_count"] == 2
+    assert record_vector_blocker(stage) == successor

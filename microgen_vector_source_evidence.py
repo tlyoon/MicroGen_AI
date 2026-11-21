@@ -3,6 +3,7 @@
 Only diagnoses observed PDF/crop structure; never guesses an image-to-caption mapping.
 """
 from __future__ import annotations
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -10,7 +11,7 @@ import pymupdf as fitz
 
 from microgen_figure_composition import sha256
 
-FORMAL = re.compile(r"^FIGURE\s+(\d+\.\d+)\b", re.I)
+FORMAL = re.compile(r"^FIGURE\s+(\d+\.\d+)\b")
 
 def inspect_vector_source(stage: Path) -> dict:
     stage = Path(stage).resolve(strict=True)
@@ -49,8 +50,19 @@ def inspect_vector_source(stage: Path) -> dict:
 def record_vector_blocker(stage: Path) -> Path:
     stage = Path(stage).resolve(strict=True)
     receipt = inspect_vector_source(stage)
-    # Evidence is diagnostic; never replace a previous evidence or mapping receipt.
+    # Retain historical evidence. A source or classifier change creates a
+    # content-addressed successor; identical replays reuse the existing file.
+    payload = json.dumps(receipt, sort_keys=True, indent=2)
     target = stage / "offline_vector_mapping_blocker.json"
+    if target.exists():
+        if target.read_text(encoding="utf-8") == payload:
+            return target
+        suffix = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        target = stage / f"offline_vector_mapping_blocker_{suffix}.json"
+        if target.exists():
+            if target.read_text(encoding="utf-8") != payload:
+                raise ValueError("Conflicting source-hashed vector diagnostic")
+            return target
     with target.open("x", encoding="utf-8") as handle:
-        json.dump(receipt, handle, indent=2)
+        handle.write(payload)
     return target
