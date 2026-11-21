@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 
 import pymupdf as fitz
+from PIL import Image
 
 from microgen_figure_composition import sha256
 
@@ -21,6 +22,14 @@ FORMAL_CAPTION = re.compile(r"^FIGURE\s+(\d+\.\d+)\b")
 
 class VectorProposalError(ValueError):
     pass
+
+
+def _right_edge_ink(path: Path) -> int:
+    with Image.open(path) as source:
+        image = source.convert('RGB')
+        width, height = image.size
+        return sum(min(image.getpixel((width - 1 - x, y))) < 170
+                   for x in range(min(width, 3)) for y in range(height))
 
 
 def _caption_lines(page):
@@ -138,6 +147,21 @@ def propose_regions(stage: Path) -> dict:
                     candidate = pending / filename
                     page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=clip,
                                     alpha=False).save(str(candidate))
+                    # Only widen a sidebar figure when its right edge shows
+                    # actual touching ink. Keep the original if the bounded
+                    # alternative does not improve the edge measurement.
+                    if left and _right_edge_ink(candidate) > 10:
+                        alternative = fitz.Rect(clip)
+                        alternative.x1 = min(width * .35, max_x + 40)
+                        if alternative.x1 > clip.x1 + 1:
+                            proposed = pending / (filename + ".candidate.png")
+                            page.get_pixmap(matrix=fitz.Matrix(2, 2),
+                                            clip=alternative, alpha=False).save(str(proposed))
+                            if _right_edge_ink(proposed) < _right_edge_ink(candidate):
+                                proposed.replace(candidate)
+                                clip = alternative
+                            else:
+                                proposed.unlink()
                     proposals.append({
                         "label": label, "page": page_no, "filename": filename,
                         "caption_bbox": [round(v, 2) for v in caption],

@@ -102,3 +102,19 @@ def test_production_offline_mapper_emits_candidates_but_never_accepts(monkeypatc
     (stage / PROPOSAL_DIR / "Figure 2.34.png").write_bytes(b"tampered")
     with pytest.raises(mapper.OfflineFigureMapError, match="requires reconciliation"):
         mapper.map_source_figures(stage)
+
+def test_sidebar_right_edge_adapts_only_when_ink_touches(tmp_path):
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.draw_line((40, 40), (140, 80), color=(0, .68, .94), width=2)
+    page.draw_line((165, 48), (165, 112), color=(0, 0, 0), width=2)
+    page.insert_text((30, 160), "FIGURE 2.34  Sidebar axis")
+    pdf.save(tmp_path / "source.pdf")
+    pdf.close()
+    report = propose_regions(tmp_path)
+    assert len(report["proposals"]) == 1
+    clip = report["proposals"][0]["source_clip_bbox"]
+    assert clip[2] > 175, "Right-hand axis was not recovered within sidebar"
+    assert report["mapping_accepted"] is False
+    assert report["publication_allowed"] is False
+    assert propose_regions(tmp_path) == report
