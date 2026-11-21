@@ -74,7 +74,10 @@ def test_actual_thomas_private_source_selects_local_mapper_and_preserves_mapping
         stage, "python", offline_requested=False)
     assert result[1] == "microgen_offline_pdf_figure_map.py"
     assert result[3] is True
-    assert batch.stage_valid(stage, "figure_mapping", stage.parent)
+    # This historical mapping was sealed under the PREVIOUS exact proposer
+    # code SHA. New, repaired code must not re-accept the old crop implicitly:
+    # the next private campaign regenerates source pixels from scratch.
+    assert batch.stage_valid(stage, "figure_mapping", stage.parent) is False
     assert sha256(stage / "source.pdf") == before
 
 

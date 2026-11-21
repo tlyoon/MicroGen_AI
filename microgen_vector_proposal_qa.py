@@ -14,6 +14,8 @@ QA_CODE_SHA256 = sha256(Path(__file__))
 QA_RECEIPT = ("vector_qa_screen_unapproved_" +
               PROPOSAL_CODE_SHA256[:12] + "_" + QA_CODE_SHA256[:12] + ".json")
 FORMAL = re.compile(r"^FIGURE\s+\d+\.\d+\b")
+CAPTION_ID = re.compile(r"^FIGURE\s+(\d+\.\d+)\b")
+PANEL_KEY = re.compile(r"^\([a-h]\)$", re.I)
 
 
 class VectorScreenError(ValueError):
@@ -60,6 +62,8 @@ def screen_vector_proposals(stage: Path) -> dict:
             region = fitz.Rect(item["source_clip_bbox"])
             text_leakage = []
             caption_leakage = []
+            caption_origins = []
+            panel_keys = []
             for block in page.get_text("dict")["blocks"]:
                 if block.get("type") != 0:
                     continue
@@ -75,6 +79,9 @@ def screen_vector_proposals(stage: Path) -> dict:
                         if len(labels) != 1:
                             raise VectorScreenError("Ambiguous caption-label span")
                         label_box = fitz.Rect(labels[0]["bbox"])
+                        match = CAPTION_ID.match(text)
+                        if match and match.group(1) == item["label"]:
+                            caption_origins.append(label_box.y0)
                         # A caption elsewhere on the same page is not
                         # an intrusion. Require spatial overlap of both
                         # horizontal bands and the caption's vertical zone.
@@ -93,15 +100,37 @@ def screen_vector_proposals(stage: Path) -> dict:
                             fitz.Rect(span["bbox"]).intersects(region)
                             for span in line["spans"]):
                         text_leakage.append(text[:100])
+                    # An absent panel label may leave perfectly white
+                    # crop edges. Recompute from the original PDF text,
+                    # independently of the cropper's label expansion.
+                    for span in line["spans"]:
+                        token = span.get("text", "").strip()
+                        if PANEL_KEY.fullmatch(token):
+                            panel = fitz.Rect(span["bbox"])
+                            if (region.x0 - 4 <= panel.x0 and
+                                panel.x1 <= region.x1 + 4 and
+                                region.y0 - 4 <= panel.y0):
+                                panel_keys.append((token, panel))
+            if len(caption_origins) != 1:
+                raise VectorScreenError("Unique original figure caption missing")
+            caption_start = caption_origins[0]
+            missing_panels = [
+                {"label": token,
+                 "source_bbox": [round(v, 2) for v in rect]}
+                for token, rect in panel_keys
+                if rect.y0 < caption_start - 1
+                and rect.y1 > region.y1 - 1
+            ]
             counts = _ink_edge_counts(candidate)
             flagged = bool(caption_leakage or text_leakage or
-                           max(counts.values()) > 10)
+                           missing_panels or max(counts.values()) > 10)
             findings.append({
                 "label": item["label"], "page": item["page"],
                 "png_sha256": item["png_sha256"],
                 "edge_ink_counts": counts,
                 "caption_intrusion": caption_leakage,
                 "long_text_intrusion": text_leakage,
+                "missing_source_panel_labels": missing_panels,
                 "boundary_review_required": flagged
             })
     if sha256(source) != before:

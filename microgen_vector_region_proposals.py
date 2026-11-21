@@ -47,6 +47,30 @@ def _edge_ink(path: Path, edge: str) -> int:
         raise VectorProposalError("Unknown candidate edge")
 
 
+PANEL_LETTER = re.compile(r"^\([a-h]\)$", re.IGNORECASE)
+
+
+def _figure_panel_labels(page, clip: fitz.Rect, caption: fitz.Rect):
+    """Locate printed panel keys beneath source art, before its formal caption."""
+    found = []
+    for block in page.get_text("dict")["blocks"]:
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            content = "".join(s.get("text", "") for s in line["spans"]).strip()
+            if FORMAL_CAPTION.match(content):
+                continue
+            for span in line.get("spans", []):
+                token = span.get("text", "").strip()
+                if not PANEL_LETTER.fullmatch(token):
+                    continue
+                box = fitz.Rect(span["bbox"])
+                if (clip.x0 - 4 <= box.x0 and box.x1 <= clip.x1 + 4
+                    and clip.y0 - 4 <= box.y0 < caption.y0 - 1):
+                    found.append(box)
+    return found
+
+
 def _caption_lines(page):
     for block in page.get_text("dict")["blocks"]:
         if block.get("type") != 0:
@@ -216,6 +240,27 @@ def propose_regions(stage: Path) -> dict:
                                 clip = alternative
                             else:
                                 temp.unlink()
+                    # A crop can have ZERO dark pixels on its bottom edge
+                    # and still omit a printed panel key beneath the graph.
+                    # Figure 2.48(b) is a real source example. Inspect the
+                    # actual PDF text spans, not just edge pixels.
+                    panel_labels = _figure_panel_labels(page, clip, caption)
+                    if any(key.y1 + 3 > caption.y0 - 3 + 0.03
+                           for key in panel_labels):
+                        candidate.unlink()
+                        blocked.append({"label": label, "page": page_no,
+                                        "reason": "PANEL_LABEL_CAPTION_COLLISION"})
+                        continue
+                    if panel_labels:
+                        required_bottom = max(key.y1 + 3 for key in panel_labels)
+                        if required_bottom > clip.y1 + 0.5:
+                            alternative = fitz.Rect(clip)
+                            alternative.y1 = min(caption.y0 - 3, required_bottom)
+                            newer = pending / (filename + ".panel-key-candidate.png")
+                            page.get_pixmap(matrix=fitz.Matrix(2, 2),
+                                            clip=alternative, alpha=False).save(str(newer))
+                            newer.replace(candidate)
+                            clip = alternative
                     proposals.append({
                         "label": label, "page": page_no, "filename": filename,
                         "caption_bbox": [round(v, 2) for v in caption],
