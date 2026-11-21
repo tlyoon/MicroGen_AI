@@ -383,6 +383,58 @@ def source_page_extraction_valid(stage: Path) -> bool:
         return False
 
 
+def source_vector_only_mapping_candidate(stage: Path) -> bool:
+    """Select a deterministic local mapper for an extracted vector-only PDF.
+
+    This is a routing decision, NOT geometric/scientific acceptance.
+    The offline mapper enforces all source-pixel, caption and receipt gates
+    before creating private figures; ambiguous vector evidence fails closed.
+    """
+    if not source_page_extraction_valid(stage):
+        return False
+    from microgen_vector_source_evidence import inspect_vector_source
+    evidence = inspect_vector_source(stage)
+    pages = evidence.get("pages", [])
+    return bool(
+        pages
+        and evidence.get("cropped_region_count", 0) > 0
+        and sum(page["vector_drawing_count"] for page in pages) > 0
+        and all(page["embedded_raster_count"] == 0 for page in pages)
+        and evidence["source_pdf_sha256"] == quality.sha256(stage / "source.pdf")
+    )
+
+
+def select_figure_mapping_command(stage: Path, main_py, *, offline_requested: bool):
+    """Choose the exact mapper and whether it may cause a provider effect."""
+    if offline_requested:
+        return (main_py, "microgen_offline_pdf_figure_map.py",
+                "offline source figure mapping", True)
+    if source_vector_only_mapping_candidate(stage):
+        return (main_py, "microgen_offline_pdf_figure_map.py",
+                "source-verified local vector figure mapping", True)
+    return (main_py, "map_and_rename_v5.py", "Gemini raster figure mapping", False)
+
+
+def verify_vector_source_coverage_before_slides(stage: Path) -> dict | None:
+    """Mandatory source-caption mapping proof when a vector receipt exists.
+
+    This verifies technical coverage only; independent scientific QA,
+    visual/voice QA and publication gates remain separate.
+    """
+    stage = Path(stage)
+    if not (stage / ".microgen_vector_source_mapping.json").exists():
+        return None
+    from microgen_source_pdf_intake import (
+        _formal_source_figure_labels, _verified_vector_coverage,
+    )
+    source = stage / "source.pdf"
+    formal = _formal_source_figure_labels(source)
+    proof = _verified_vector_coverage(stage, quality.sha256(source), formal)
+    if proof is None or proof["figure_count"] < 1:
+        raise ValueError("Missing independently verified vector figure coverage")
+    return proof
+
+
 def stage_valid(stage: Path, name: str, dest: Path) -> bool:
     if name == "figure_extraction":
         return source_page_extraction_valid(stage)
@@ -409,6 +461,7 @@ def stage_valid(stage: Path, name: str, dest: Path) -> bool:
             if name == "slides":
                 quality.check_slide_pdf(stage / "slides.pdf", require_footer=True)
                 quality.check_graphics(stage / "slides.tex")
+                verify_vector_source_coverage_before_slides(stage)
                 from microgen_source_kinematics_graph_guard import (
                     require_graph_source_evidence,
                 )
@@ -1461,14 +1514,32 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     print(f"[{subchapter}] private voice source preflight "
                           f"passed slides={speech_evidence['slide_count']}; "
                           "independent acoustic QA still mandatory", flush=True)
+            if stage_name == "slides":
+                coverage = verify_vector_source_coverage_before_slides(stage)
+                if coverage is not None:
+                    print(f"[{subchapter}] vector figures independently "
+                          f"source-verified before slides={coverage['figure_count']}; "
+                          "scientific and visual QA still required", flush=True)
             if stage_name == "published":
                 if lease is not None:
                     lease.assert_held()
                 publish(stage, dest, lease=lease)
             else:
                 py, script, label = commands[stage_name]
+                local_source_mapping = False
+                if stage_name == "figure_mapping":
+                    py, script, label, local_source_mapping = (
+                        select_figure_mapping_command(
+                            stage, args.main_py,
+                            offline_requested=offline_mapping))
+                    if local_source_mapping:
+                        print(f"[{subchapter}] source-vector mapping selected "
+                              "automatically; provider call not required; "
+                              "independent scientific QA remains mandatory",
+                              flush=True)
                 if (getattr(args, "bounded_provider_scope_verified", False)
-                        and stage_name in (GEMINI_STAGES | {"tts"})):
+                        and stage_name in (GEMINI_STAGES | {"tts"})
+                        and not local_source_mapping):
                     # Record the *possibility* of a billed external effect
                     # before launching the child. A kill/crash during Send
                     # cannot silently reset the original finite campaign.
@@ -1485,16 +1556,15 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
                     stage,
                     log_path,
                     label,
-                    gemini_stage=(stage_name in GEMINI_STAGES and not
-                                  (offline_mapping and stage_name == "figure_mapping")),
+                    gemini_stage=(stage_name in GEMINI_STAGES
+                                  and not local_source_mapping),
                     retries=args.stage_retries,
                     lease=lease,
                     stage_name=stage_name,
                     nonrepeatable_external_stage=bool(
                         getattr(args, "bounded_provider_scope_verified", False)
                         and stage_name in (GEMINI_STAGES | {"tts"})
-                        and not (offline_mapping and
-                                 stage_name == "figure_mapping")),
+                        and not local_source_mapping),
                 )
                 if lease is not None:
                     lease.assert_held()
