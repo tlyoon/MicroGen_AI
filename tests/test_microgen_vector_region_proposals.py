@@ -118,3 +118,53 @@ def test_sidebar_right_edge_adapts_only_when_ink_touches(tmp_path):
     assert report["mapping_accepted"] is False
     assert report["publication_allowed"] is False
     assert propose_regions(tmp_path) == report
+
+def test_formal_caption_uses_label_span_not_math_expanded_line_bbox():
+    from microgen_vector_region_proposals import _caption_lines
+    class Page:
+        def get_text(self, kind):
+            assert kind == "dict"
+            return {"blocks": [{"type": 0, "lines": [{
+                "bbox": [20, 40, 500, 250],
+                "spans": [
+                    {"text": "FIGURE 2.47", "bbox": [220, 200, 275, 212]},
+                    {"text": " with fraction", "bbox": [275, 201, 380, 212]},
+                    {"text": ">", "bbox": [380, 40, 385, 250]},
+                ],
+            }]}]}
+    label, rect = list(_caption_lines(Page()))[0]
+    assert label == "2.47"
+    assert tuple(rect) == (220., 200., 275., 212.)
+
+
+def test_adaptive_left_crop_keeps_full_axis_without_caption(tmp_path):
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.draw_line((240, 70), (300, 100), color=(0, .68, .94), width=2)
+    page.draw_line((200, 120), (335, 120), color=(0, 0, 0), width=2)
+    page.insert_text((230, 160), "FIGURE 2.40  Continuous curve")
+    pdf.save(tmp_path / "source.pdf")
+    pdf.close()
+    receipt = propose_regions(tmp_path)
+    assert len(receipt["proposals"]) == 1
+    proposal = receipt["proposals"][0]
+    assert proposal["source_clip_bbox"][0] <= 191
+    assert proposal["source_clip_bbox"][-1] <= proposal["caption_bbox"][1]-2.9
+    assert receipt["mapping_accepted"] is False
+
+
+def test_adaptive_bottom_crop_keeps_panel_label_before_caption(tmp_path):
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.draw_line((240, 70), (340, 90), color=(0, .68, .94), width=2)
+    page.draw_line((210, 123), (350, 123), color=(0, 0, 0), width=2)
+    page.insert_text((265, 138), "(a)")
+    page.insert_text((230, 170), "FIGURE 2.47  Two graph panels")
+    pdf.save(tmp_path / "source.pdf")
+    pdf.close()
+    receipt = propose_regions(tmp_path)
+    assert len(receipt["proposals"]) == 1
+    proposal = receipt["proposals"][0]
+    assert proposal["source_clip_bbox"][-1] >= 138
+    assert proposal["source_clip_bbox"][-1] <= proposal["caption_bbox"][1]-2.9
+    assert receipt["publication_allowed"] is False

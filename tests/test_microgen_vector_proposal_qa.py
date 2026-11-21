@@ -65,3 +65,16 @@ def test_existing_qa_receipt_cannot_be_overwritten(tmp_path):
     (stage / QA_RECEIPT).write_text("{}", encoding="utf-8")
     with pytest.raises(VectorScreenError, match="differs"):
         screen_vector_proposals(stage)
+
+def test_qa_rejects_forged_caption_overlap_in_candidate_manifest(tmp_path):
+    stage = _stage(tmp_path)
+    receipt = propose_regions(stage)
+    manifest_path = stage / PROPOSAL_DIR / "proposal_receipt.json"
+    assert receipt["proposals"][0]["caption_bbox"][1] > 140
+    receipt["proposals"][0]["source_clip_bbox"][3] = receipt["proposals"][0]["caption_bbox"][1]
+    manifest_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    qa = screen_vector_proposals(stage)
+    assert qa["figures_flagged"] == ["2.34"]
+    assert qa["findings"][0]["caption_intrusion"]
+    assert qa["mapping_accepted"] is False
+    assert qa["publication_allowed"] is False

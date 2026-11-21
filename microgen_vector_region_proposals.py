@@ -32,6 +32,21 @@ def _right_edge_ink(path: Path) -> int:
                    for x in range(min(width, 3)) for y in range(height))
 
 
+def _edge_ink(path: Path, edge: str) -> int:
+    with Image.open(path) as source:
+        image = source.convert("RGB")
+        w, h = image.size
+        if min(w, h) < 20:
+            raise VectorProposalError("Proposed source region too small")
+        def dark(x, y):
+            return min(image.getpixel((x, y))) < 170
+        if edge == "left":
+            return sum(dark(x, y) for x in range(3) for y in range(h))
+        if edge == "bottom":
+            return sum(dark(x, h - 1 - y) for y in range(3) for x in range(w))
+        raise VectorProposalError("Unknown candidate edge")
+
+
 def _caption_lines(page):
     for block in page.get_text("dict")["blocks"]:
         if block.get("type") != 0:
@@ -40,7 +55,14 @@ def _caption_lines(page):
             content = "".join(s.get("text", "") for s in line["spans"]).strip()
             m = FORMAL_CAPTION.match(content)
             if m:
-                yield m.group(1), fitz.Rect(line["bbox"])
+                # Use the visibly rendered formal FIGURE label's own bbox.
+                # Whole-line bounds can be huge due to mathematical glyphs
+                # such as fractions, falsely clipping graph axis labels.
+                label_spans = [s for s in line["spans"]
+                               if FORMAL_CAPTION.match(s.get("text", "").strip())]
+                if len(label_spans) != 1:
+                    raise VectorProposalError("Ambiguous formal caption label span")
+                yield m.group(1), fitz.Rect(label_spans[0]["bbox"])
 
 
 def _anchors_and_rules(page):
@@ -162,6 +184,38 @@ def propose_regions(stage: Path) -> dict:
                                 clip = alternative
                             else:
                                 proposed.unlink()
+                    # Restore drawing endpoints when ink touches the *left*
+                    # edge of a right-column candidate. Stay inside its
+                    # caption column and accept the change only if measured
+                    # edge contact falls (never expand blindly).
+                    if not left and _edge_ink(candidate, "left") > 10:
+                        alternative = fitz.Rect(clip)
+                        alternative.x0 = max(width*.31, clip.x0-24)
+                        if alternative.x0 < clip.x0 - 1:
+                            temp = pending / (filename + ".left-candidate.png")
+                            page.get_pixmap(matrix=fitz.Matrix(2, 2),
+                                            clip=alternative, alpha=False).save(str(temp))
+                            if _edge_ink(temp, "left") < _edge_ink(candidate, "left"):
+                                temp.replace(candidate)
+                                clip = alternative
+                            else:
+                                temp.unlink()
+                    # Some axes and panel-letter glyphs extend beneath the
+                    # colored curve. The *actual* FIGURE-label span provides
+                    # a safe lower boundary even when equation fonts inflate
+                    # the entire caption line's reported rectangle.
+                    if _edge_ink(candidate, "bottom") > 10:
+                        alternative = fitz.Rect(clip)
+                        alternative.y1 = min(caption.y0-3, clip.y1+22)
+                        if alternative.y1 > clip.y1 + 1:
+                            temp = pending / (filename + ".bottom-candidate.png")
+                            page.get_pixmap(matrix=fitz.Matrix(2, 2),
+                                            clip=alternative, alpha=False).save(str(temp))
+                            if _edge_ink(temp, "bottom") < _edge_ink(candidate, "bottom"):
+                                temp.replace(candidate)
+                                clip = alternative
+                            else:
+                                temp.unlink()
                     proposals.append({
                         "label": label, "page": page_no, "filename": filename,
                         "caption_bbox": [round(v, 2) for v in caption],

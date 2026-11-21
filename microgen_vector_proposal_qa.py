@@ -65,11 +65,33 @@ def screen_vector_proposals(stage: Path) -> dict:
                     continue
                 for line in block.get("lines", []):
                     text = "".join(span.get("text", "") for span in line["spans"]).strip()
-                    if not fitz.Rect(line["bbox"]).intersects(region):
-                        continue
                     if FORMAL.match(text):
-                        caption_leakage.append(text[:100])
-                    if len(text) > 75:
+                        # PDF math fonts can report a caption-line bbox 5x
+                        # taller than its visible glyphs. Recompute the
+                        # visible formal label position independently of the
+                        # geometry proposer; require an actual 3pt gap.
+                        labels = [span for span in line["spans"]
+                                  if FORMAL.match(span.get("text", "").strip())]
+                        if len(labels) != 1:
+                            raise VectorScreenError("Ambiguous caption-label span")
+                        label_box = fitz.Rect(labels[0]["bbox"])
+                        # A caption elsewhere on the same page is not
+                        # an intrusion. Require spatial overlap of both
+                        # horizontal bands and the caption's vertical zone.
+                        near_label = (
+                            region.x0 < label_box.x1 and
+                            region.x1 > label_box.x0 and
+                            region.y0 < label_box.y1 and
+                            # Stored geometry is rounded to 0.01 pt;
+                            # tolerate 0.05 pt only, not caption overlap.
+                            region.y1 > label_box.y0 - 3 + 0.05
+                        )
+                        if near_label:
+                            caption_leakage.append(text[:100])
+                        continue
+                    if len(text) > 75 and any(
+                            fitz.Rect(span["bbox"]).intersects(region)
+                            for span in line["spans"]):
                         text_leakage.append(text[:100])
             counts = _ink_edge_counts(candidate)
             flagged = bool(caption_leakage or text_leakage or
