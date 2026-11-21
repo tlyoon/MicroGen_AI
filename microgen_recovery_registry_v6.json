@@ -3,6 +3,23 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261121-THOMAS-SOURCEONLY-LEGACY-MP4",
+      "classification": "orchestration",
+      "stages": [
+        "figure_extraction"
+      ],
+      "exception": "RuntimeError",
+      "message_marker": "An existing MP4 has no current verified completion receipt",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_batch.process_one",
+      "preconditions": "Source-adjacent old MP4 has no valid present-release receipt; a requested figure-extraction-only run must be private, source-only, and never publish, unlike normal production where existing output remains protected.",
+      "verification": "In ordinary non-bounded production, preserve and hold on an unverified old MP4. For explicit figure_extraction_only requests, bypass ONLY the old-media publication and refusal shortcuts, run complete local source-page extraction and SHA-bound page/figure validation, keep the original old MP4 byte-identical, make zero Gemini/TTS requests, and stop before downstream stages. Test both valid/invalid old publication receipts and the normal-mode refusal; verify a real Thomas 2.5 run without publication.",
+      "historical_evidence": "21 Nov 2026 HP original MicroGen_AI real Thomas Calculus 13th ed section 2.5: --figure-extraction-only incorrectly stopped before extraction because source folder had an older slides.mp4 without the new completion receipt. Existing --stop-after figure_extraction safe bounded mode reproduced the intended source-only continuation without bypassing overwrite protections.",
+      "last_validated": "2026-11-21",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261119-SOURCE-UPSTREAM-RUNNER-CHECKPOINT-MIGRATION",
       "classification": "orchestration",
       "stages": ["science_qa", "tts", "acoustic_qa", "video", "acceptance"],
