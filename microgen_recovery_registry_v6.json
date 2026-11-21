@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261121-THOMAS-VECTOR-RASTER-MAPPER-MISMATCH",
+      "classification": "data",
+      "stages": ["figure_mapping"],
+      "exception": "OfflineFigureMapError",
+      "message_marker": "Vector-only source: raster mapping is inapplicable",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_offline_pdf_figure_map.map_source_figures",
+      "preconditions": "Source PDF page has vector drawing paths and Docling figure crops but no embedded raster image objects. Existing two-raster mapper is inapplicable.",
+      "verification": "On actual Thomas 2.5 preserve source SHA, collect source-page/caption/crop hashes and duplicate caption numbers into exclusive offline_vector_mapping_blocker.json; refuse unsafe figure acceptance and publication. Verify synthetic duplicate-caption, prose-reference and overwrite fault cases and original raster mapper regression. Advance only after a separately tested source-grounded vector-region mapper exists.",
+      "historical_evidence": "2026-11-21 HP Thomas 13e Section 2.5 11-page original source: 20 extracted crops with zero embedded rasters; 17 formal caption occurrences for 15 figure numbers. Real entrypoint emits bounded safe hold without modifying PDF or calling providers.",
+      "last_validated": "2026-11-21",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261121-THOMAS-SOURCEONLY-LEGACY-MP4",
       "classification": "orchestration",
       "stages": [
