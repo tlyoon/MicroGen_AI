@@ -1249,7 +1249,12 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
     # Existing source-adjacent MP4s are protected unless a user explicitly
     # authorizes revalidation/rebuild under the upgraded quality contract.
     bounded = getattr(args, "stop_after", None) is not None
-    verified = False if bounded else quality.published_manifest_valid(dest)
+    # Offline source extraction must inspect the genuine PDF independently of
+    # any legacy source-adjacent MP4 or previous publication receipt.
+    verified = (
+        False if (bounded or getattr(args, "figure_extraction_only", False))
+        else quality.published_manifest_valid(dest)
+    )
     published_mode_ready = not args.multipart
     if verified and args.multipart:
         final_receipt = json.loads(
@@ -1261,7 +1266,8 @@ def process_one(args, subchapter: str, report: list[dict], lease=None) -> None:
         report.append({"subchapter": subchapter, "status": "success",
                        "resumed": True, "verified": True})
         return
-    if (not bounded and nonempty(dest / "slides.mp4") and
+    if (not bounded and not getattr(args, "figure_extraction_only", False) and
+            nonempty(dest / "slides.mp4") and
             not verified and not args.rebuild_unverified):
         raise RuntimeError(
             "An existing MP4 has no current verified completion receipt. "
