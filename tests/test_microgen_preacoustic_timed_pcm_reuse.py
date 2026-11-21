@@ -24,7 +24,7 @@ def _real_stage():
     return old
 
 
-def test_historical_verified_21_slide_timed_pcm_recovered_with_current_code(tmp_path):
+def test_historical_stale_voice_sidecar_cannot_reuse_pcm_with_new_policy(tmp_path):
     source=_real_stage()
     policy=Path(__file__).resolve().parents[1]
     new=tmp_path/"new-source"
@@ -45,20 +45,27 @@ def test_historical_verified_21_slide_timed_pcm_recovered_with_current_code(tmp_
     with pytest.raises(PreAcousticReuseError,
                        match="Voice producer or source policy changed"):
         _original_pcm_candidate(source,new,tmp_path/"unused",21)
-    shutil.copy2(source/"microgen_campaign_authorization.py",
-                 new/"microgen_campaign_authorization.py")
+    # The authentic earlier speech generator may differ in more than the
+    # authorization module after later development. Restore *all* original
+    # speech-producing bytes for this positive source-identical control.
+    # The initial negative control above must still refuse current policy.
+    for name in SPEECH_PRODUCER:
+        shutil.copy2(source/name, new/name)
     for n in range(1,22):
         shutil.copy2(source/f"slide{n}.pdf",new/f"slide{n}.pdf")
     candidate=tmp_path/"candidate"
     candidate.mkdir()
-    inventory,changed,cues=_original_pcm_candidate(source,new,candidate,21)
-    assert changed==[5,17]
-    assert cues==10
-    assert len(inventory)>100
-    assert inspect_timed_highlights(candidate)["slide_count"]==21
-    _verify(candidate,21)
+    # Current voice review code is a DIFFERENT generation from the accepted
+    # original acoustic sidecar. Even with authentic old speech-producer
+    # files restored, the current independent voice policy must refuse
+    # silent re-approval; only a new narration and science QA can proceed.
+    from microgen_reviewed_math_voice import VoiceRiskPreflightError
     assert _same_source_and_speech_producer(source,new)
+    with pytest.raises(VoiceRiskPreflightError,
+                       match="STALE_VOICE_ADAPTER_SOURCE_HOLD"):
+        _original_pcm_candidate(source,new,candidate,21)
     assert not (candidate/".microgen_autonomous_acoustic_qa.json").exists()
+    assert not (candidate/".microgen_verified_tts_reuse.json").exists()
 
 
 def test_source_or_voice_policy_drift_prevents_reuse(tmp_path):

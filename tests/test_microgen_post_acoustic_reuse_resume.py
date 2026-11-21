@@ -23,6 +23,53 @@ ALLOWED=[
 ]
 
 
+def historical_checkpoint_disposition(cp):
+    """Distinguish an already accepted real checkpoint from unsafe corruption.
+
+    This is only a historical test-fixture selector, not a production
+    authorization or a shortcut around acoustic acceptance.
+    """
+    if not isinstance(cp, dict):
+        raise ValueError("Malformed historical checkpoint")
+    error = cp.get("last_error")
+    if error is None:
+        closed = cp.get("post_acoustic_reconciliation") or {}
+        if (isinstance(closed, dict)
+                and closed.get("status") == "SOURCE_BOUND_ONE_CUE_AUDIO_CHECKPOINT_RECONCILED"
+                and isinstance(cp.get("completed"), dict)
+                and cp["completed"].get("acceptance")):
+            return "accepted"
+        raise ValueError("Unreconciled null historical error")
+    if not isinstance(error, dict):
+        raise ValueError("Malformed historical checkpoint error")
+    return ("pending" if error.get("type") == "VerifiedTTSReuseError"
+            else "unrelated")
+
+
+@pytest.mark.parametrize("state,expected", [
+    ({"last_error": {"type": "VerifiedTTSReuseError"}}, "pending"),
+    ({"last_error": {"type": "OtherError"}}, "unrelated"),
+    ({"last_error": None,
+      "post_acoustic_reconciliation": {
+          "status": "SOURCE_BOUND_ONE_CUE_AUDIO_CHECKPOINT_RECONCILED"},
+      "completed": {"acceptance": "2026-11-19T06:27:22Z"}}, "accepted"),
+])
+def test_historical_fixture_disposition_requires_real_accepted_evidence(state, expected):
+    assert historical_checkpoint_disposition(state) == expected
+
+
+@pytest.mark.parametrize("state", [
+    {"last_error": None},
+    {"last_error": 7},
+    {"last_error": None, "post_acoustic_reconciliation": {
+        "status": "SOURCE_BOUND_ONE_CUE_AUDIO_CHECKPOINT_RECONCILED"}},
+    None,
+])
+def test_historical_fixture_malformed_reconciliation_is_not_silently_skipped(state):
+    with pytest.raises(ValueError):
+        historical_checkpoint_disposition(state)
+
+
 @pytest.fixture
 def genuine_accepted_hp_stage(monkeypatch):
     root=Path(os.environ.get("LOCALAPPDATA","/missing"))/"MicroGen_AI_Checkpoints"
@@ -39,8 +86,14 @@ def genuine_accepted_hp_stage(monkeypatch):
     # Earlier failed restart wrote a later commit into this still-held
     # checkpoint. Reconcile against the independently frozen OWNER grant,
     # never assume package_commit remained at the old synthesis revision.
-    if cp.get("last_error",{}).get("type")!="VerifiedTTSReuseError":
-        pytest.skip("Historical acoustic replay already closed")
+    try:
+        state = historical_checkpoint_disposition(cp)
+    except ValueError as exc:
+        pytest.fail(f"Corrupt real historical checkpoint: {exc}")
+    if state == "accepted":
+        pytest.skip("Historical source-bound acoustic recovery already accepted")
+    if state == "unrelated":
+        pytest.skip("Historical acoustic replay is not the expected held case")
     assert cp["completed"]["acoustic_qa"]
     monkeypatch.setenv("MICROGEN_TIMED_CUES","1")
     monkeypatch.setenv("MICROGEN_TIMED_SEMANTIC_ASSIST","1")
