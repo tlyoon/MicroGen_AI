@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261121-THOMAS-SOURCE-INTAKE-VECTOR-COVERAGE",
+      "classification": "data",
+      "stages": ["figure_mapping", "slides"],
+      "exception": "SourcePDFIntakeError",
+      "message_marker": "Untrusted source-vector technical mapping",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_source_pdf_intake._verified_vector_coverage",
+      "preconditions": "Formal source FIGURE captions exist but a source-/code-hashed private vector mapping is missing, stale, incomplete or altered. Generic drawing inventory undercounts vector textbook figures.",
+      "verification": "Reconcile formal styled FIGURE identities and original source-page numbers with the verified private vector technical mapping, independently re-check source PNG and receipt hashes, and refuse slide intake if mappings differ. Prove real Thomas section 2.5 generic detector reports 4 while 15 source figures map exactly. Test missing mapping, duplicate captions and tampered receipts with no provider calls or source modifications.",
+      "historical_evidence": "21 Nov 2026 HP original MicroGen_AI Thomas Calculus section 2.5: source_intake figure_region_inventory found 4 generic geometry candidates but actual PDF had 15 numbered styled FIGURE captions and 15 source-rendered verified vector figures. Revised source intake read back 11 searchable pages, 335 math-line candidates, 15 formal and 15 verified technical maps, no scientific acceptance or publication.",
+      "last_validated": "2026-11-21",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261121-THOMAS-VECTOR-MAPPING-TAMPER-HOLD",
       "classification": "data",
       "stages": ["figure_mapping", "figure_merge"],

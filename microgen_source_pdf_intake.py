@@ -22,6 +22,61 @@ class SourcePDFIntakeError(ValueError):
     pass
 
 
+FORMAL_FIGURE = re.compile(r"^FIGURE\s+(\d+\.\d+[a-z]?)\b")
+
+
+def _formal_source_figure_labels(source: Path) -> list[dict]:
+    """Find actual formal caption glyphs, not body references to figures.
+
+    This is a technical inventory, never permission to accept the diagrams.
+    """
+    rows = []
+    with fitz.open(source) as pdf:
+        for page_no, page in enumerate(pdf, 1):
+            for block in page.get_text("dict")["blocks"]:
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []):
+                    content = "".join(s.get("text", "") for s in line["spans"]).strip()
+                    match = FORMAL_FIGURE.match(content)
+                    if not match:
+                        continue
+                    spans = [s for s in line["spans"]
+                             if FORMAL_FIGURE.match(s.get("text", "").strip())]
+                    if len(spans) != 1:
+                        raise SourcePDFIntakeError("Ambiguous formal figure caption span")
+                    rows.append({"label": match.group(1), "source_page": page_no})
+    numbers = [item["label"] for item in rows]
+    if len(set(numbers)) != len(numbers):
+        raise SourcePDFIntakeError("Duplicate formal figure caption label")
+    return rows
+
+
+def _verified_vector_coverage(source_dir: Path, source_sha: str, formal: list[dict]):
+    """Reconcile independently mapped vector figures or hold downstream slides."""
+    mapping = source_dir / ".microgen_vector_source_mapping.json"
+    if not mapping.exists():
+        return None
+    if mapping.is_symlink() or not mapping.is_file():
+        raise SourcePDFIntakeError("Unsafe vector source map")
+    from microgen_vector_technical_mapping import verify_vector_technical_mapping
+    try:
+        verified = verify_vector_technical_mapping(source_dir)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+        raise SourcePDFIntakeError("Untrusted source-vector technical mapping") from exc
+    if (not isinstance(verified, dict)
+        or verified.get("source_pdf_sha256") != source_sha
+        or verified.get("publication_allowed") is not False
+        or verified.get("scientific_qa_accepted") is not False):
+        raise SourcePDFIntakeError("Vector mapping cannot authorize slide intake")
+    mapped = [{"label": x["label"], "source_page": x["source_page"]}
+              for x in verified.get("figures", [])]
+    if sorted(mapped, key=lambda x:(x["source_page"],x["label"])) != sorted(
+            formal, key=lambda x:(x["source_page"],x["label"])):
+        raise SourcePDFIntakeError("Formal captions and verified source mapping disagree")
+    return {"figure_count": len(mapped), "receipt_sha256": digest(mapping)}
+
+
 def inspect_source_pdf(source_dir: Path) -> dict:
     """Inspect an *original source.pdf*, without touching its parent tree."""
     root = Path(source_dir)
@@ -108,15 +163,33 @@ def create_intake_receipt(source_dir: Path, destination: Path) -> dict:
                 mdata.get("slide_count") != summary["page_count"] or
                 digest(source / "source.pdf") != summary["source_pdf_sha256"]):
             raise SourcePDFIntakeError("Geometry and original source mismatch")
+        formal = _formal_source_figure_labels(source / "source.pdf")
+        vector = _verified_vector_coverage(
+            source, summary["source_pdf_sha256"], formal)
+        if digest(source / "source.pdf") != summary["source_pdf_sha256"]:
+            raise SourcePDFIntakeError("Source PDF changed during caption reconciliation")
         summary.update({
+            # The generic drawing detector is advisory and often misses
+            # entirely vector-drawn textbook figures. Never equate it with
+            # the true set of styled source FIGURE captions.
             "source_figure_candidates": figures["figure_candidates"],
+            "formal_source_figure_captions": formal,
+            "formal_source_figure_count": len(formal),
+            "verified_private_vector_figure_count": (
+                vector["figure_count"] if vector else 0),
+            "private_vector_mapping_receipt_sha256": (
+                vector["receipt_sha256"] if vector else None),
+            "technical_figure_mapping_complete": (
+                vector is not None if formal else None),
             "source_math_line_candidates": equations["regions"],
             "figure_evidence_sha256": digest(figure_file),
             "math_evidence_sha256": digest(math_file),
             "next_action": (
                 "RESTORE_SEARCHABLE_PDF_TEXT" if
                 summary["source_text_readiness"] == "SOURCE_TEXT_EXTRACTION_REQUIRED"
-                else "PROCEED_TO_GROUNDED_SLIDES_AND_NARRATION"),
+                else ("VERIFY_SOURCE_FIGURE_MAPPING_BEFORE_SLIDES"
+                      if formal and vector is None
+                      else "PROCEED_TO_GROUNDED_SLIDES_AND_NARRATION")),
             "source_math_correctness_verified": False,
             "figure_caption_semantics_verified": False,
             "narrated_element_sync_verified": False,
