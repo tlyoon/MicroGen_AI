@@ -17,6 +17,28 @@ from gemini_lane import (
 T = TypeVar("T")
 
 
+class GeminiUncertainRequestOutcome(RuntimeError):
+    """The provider may have processed the request before transport failed.
+
+    A new key or attempt is NOT an idempotency mechanism. Preserve the
+    original campaign's in-flight checkpoint and reconcile without replay.
+    """
+
+
+def _possibly_consumed_transport_failure(exc: BaseException) -> bool:
+    """Conservative post-send transport failure classifier; no raw secrets.
+
+    ConnectTimeout/PoolTimeout happen before the request has been sent and
+    remain eligible for existing bounded failure handling. ReadTimeout and
+    WriteTimeout can occur after a partial/full request and response.
+    """
+    name = type(exc).__name__.casefold()
+    return (name in {"readtimeout", "writetimeout", "readerror",
+                     "remoteprotocolerror", "timeoutexception"}
+            or (isinstance(exc, TimeoutError)
+                and name not in {"connecttimeout", "pooltimeout"}))
+
+
 class GeminiProviderPoolUnavailable(RuntimeError):
     """Known mixed transient/billing exhaustion; no automatic paid replay.
 
@@ -215,6 +237,17 @@ def call_with_key_failover(
             try:
                 return operation_for_key(key)
             except Exception as exc:
+                if _possibly_consumed_transport_failure(exc):
+                    # NEVER try another key after a post-send timeout:
+                    # the first call may already have been billed/accepted.
+                    # This exact typed error is recognized by the recovery
+                    # registry; the parent preserves in-flight state.
+                    raise GeminiUncertainRequestOutcome(
+                        "GEMINI_UNCERTAIN_EXTERNAL_RESULT_HOLD: "
+                        "provider response unavailable after possible request "
+                        "consumption; reconcile the existing request before "
+                        "any further paid send"
+                    ) from None
                 if is_key_failover_error(exc):
                     last_key_error = exc
                     if is_billing_gemini_error(exc):
