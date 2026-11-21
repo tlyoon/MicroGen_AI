@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261122-VECTOR-PANEL-LABEL-WHITE-EDGE-OMISSION",
+      "classification": "data",
+      "stages": ["figure_mapping", "figure_merge", "slides"],
+      "exception": "VectorScreenError",
+      "message_marker": "missing_source_panel_labels",
+      "disposition": "DETERMINISTIC_HOLD",
+      "handler": "microgen_vector_region_proposals._figure_panel_labels",
+      "preconditions": "A vector textbook graph's illustrated panel key (a)-(h) lies below all colored/black source strokes, leaving the proposed crop's last pixel rows white. Edge-only truncation QA cannot detect that the key is missing.",
+      "verification": "Independently detect original PDF panel-letter text spans near the formal styled caption; expand the source crop by the exact missing key's rendered bbox plus 3pt where it fits before the caption, otherwise hold PANEL_LABEL_CAPTION_COLLISION. Independently re-evaluate every private source proposal against all source panel spans and require zero missing_source_panel_labels, zero clipped edges and zero caption intrusion before technical composition. Preserve old source/code-hashed receipts, regenerate into new code-hashed private directory; never infer academic or publishing acceptance.",
+      "historical_evidence": "22 Nov 2026 HP original Thomas 13e §2.5 Figure 2.48: old private source crop y1=612.17 omitted visible bottom panel key (b) with glyph bbox y613.6-622.6 despite zero bottom-edge ink. Original formal FIGURE label starts y630.21. New private source crop y1=625.57 includes both (a) and (b), source PDF unchanged SHA dbc34b5de194c3eedcfc686dfabacc903cc45d858b7a5240912a358d2f2f384b. All 15 revised private vector proposals clear independent structural and missing-panel QA. Fault injection of old y1=612.17 flags missing (b).",
+      "last_validated": "2026-11-22",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261122-NORMAL-PIPELINE-VECTOR-MAPPER-AUTOROUTE",
       "classification": "orchestration",
       "stages": ["figure_mapping", "slides"],
