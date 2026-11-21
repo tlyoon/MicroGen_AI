@@ -3,6 +3,21 @@
   "registry_id": "MICROGEN_AI_ORIGINAL_API_V6",
   "entries": [
     {
+      "id": "MGA-20261122-GEMINI-POSTSEND-UNCERTAIN-RESULT",
+      "classification": "infrastructure",
+      "stages": ["figure_mapping", "slides", "narration", "science_qa", "acoustic_qa"],
+      "exception": "GeminiUncertainRequestOutcome",
+      "message_marker": "GEMINI_UNCERTAIN_EXTERNAL_RESULT_HOLD",
+      "disposition": "PAUSED_EXTERNAL_DEPENDENCY",
+      "handler": "gemini_keys.call_with_key_failover",
+      "preconditions": "An HTTP ReadTimeout, WriteTimeout, RemoteProtocolError or unqualified TimeoutError occurs after provider send may have been accepted, billed or completed but its response was not received.",
+      "verification": "Never retry the same Gemini prompt, rotate to another key, or replay on a later process restart without independently reconciling the possibly consumed original external request. Raise typed non-secret hold before the existing transient failover code; parent retains the source-/revision-/stage-pinned in-flight provider checkpoint. Verify real failure signature from 22 Nov HP Thomas 2.5 narration slides 9-16, synthetic ReadTimeout/WriteTimeout/RemoteProtocolError/TimeoutError with zero or several configured retries, and that no second key, delay, or duplicate provider operation occurs. Explicit credit-denied 402 may still safely change keys; legacy 503 retry policy remains separate. Resume other independent eligible work, not this uncertain paid stage.",
+      "historical_evidence": "22 Nov 2026 HP original Thomas Calculus 13e §2.5 private narration: Gemini 3.8 Flash request for slides 9-16 on configured key #1 produced ReadTimeout (read operation timed out), and legacy code automatically rotated to key #2. Because a read timeout does not prove non-consumption of the first request, the new handler must stop future sessions safely without replay; historical active campaign pinned to f78c956 remains unchanged. Offline fault injection 47 tests passed, 1 historical fixture skipped.",
+      "last_validated": "2026-11-22",
+      "max_unmodified_retries": 0,
+      "publication_allowed": false
+    },
+    {
       "id": "MGA-20261122-FORMAL-FIGURE-AUDIT-SOURCE-REFERENCES",
       "classification": "data",
       "stages": ["slides", "science_qa", "acceptance"],
